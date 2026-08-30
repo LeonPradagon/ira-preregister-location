@@ -1,0 +1,321 @@
+export type AdminRole = 'SUPER_ADMIN' | 'ADMIN' | 'REVIEWER' | 'VIEWER';
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: AdminRole;
+  department: string;
+  avatarUrl?: string;
+}
+
+export type CustomerStatus = 'ACTIVE' | 'PENDING_INSTALLATION' | 'SUSPENDED' | 'VERIFIED';
+
+export interface Customer {
+  id: string;
+  externalId: string;
+  name: string;
+  phoneE164: string;
+  status: CustomerStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AddressType = 'MASTER' | 'PROPOSED' | 'VERIFIED_INSTALLATION' | 'HISTORICAL';
+export type AddressStatus = 'ACTIVE' | 'PROPOSED' | 'SUPERSEDED' | 'VERIFIED';
+export type ReferenceSource = 'MASTER_COORDINATE' | 'GEOCODED' | 'CUSTOMER_PROPOSED';
+export type ReferencePrecision =
+  | 'EXACT_MASTER'
+  | 'ROOFTOP'
+  | 'HOUSE'
+  | 'STREET'
+  | 'AREA'
+  | 'DISTRICT'
+  | 'CITY';
+
+export interface Coordinate {
+  latitude: number;
+  longitude: number;
+}
+
+export interface CustomerAddress {
+  id: string;
+  customerId: string;
+  addressType: AddressType;
+  addressStatus: AddressStatus;
+  rawAddress: string;
+  province: string;
+  city: string;
+  district: string;
+  subdistrict: string;
+  postalCode: string;
+  street: string;
+  houseNumber: string;
+  rt?: string;
+  rw?: string;
+  building?: string;
+  block?: string;
+  unit?: string;
+  addressDetail?: string;
+  landmark?: string;
+  referenceLocation: Coordinate;
+  referenceSource: ReferenceSource;
+  referencePrecision: ReferencePrecision;
+  referenceConfidence: number; // 0.0 - 1.0
+  geocodingProvider?: string;
+  providerPlaceId?: string;
+  isActive: boolean;
+  isVerified: boolean;
+  validFrom: string;
+  validTo?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GpsSample {
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number;
+  capturedAt: string;
+}
+
+export interface LocationCapture {
+  id: string;
+  sessionId: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number;
+  sampleCount: number;
+  bestAccuracyMeters: number;
+  samples: GpsSample[];
+  deviceTimestamp: string;
+  serverTimestamp: string;
+  userAgent?: string;
+  createdAt: string;
+}
+
+export type LocationValidationResult =
+  | 'LOCATION_VALID'
+  | 'LOW_GPS_ACCURACY'
+  | 'LOCATION_MISMATCH'
+  | 'WAITING_FOR_HOME'
+  | 'REFERENCE_LOCATION_NOT_PRECISE'
+  | 'ADDRESS_CHANGE_PENDING_VERIFICATION'
+  | 'CUSTOMER_DATA_MISMATCH'
+  | 'MANUAL_REVIEW';
+
+export interface ValidationResult {
+  id: string;
+  sessionId: string;
+  captureId: string;
+  addressId: string;
+  provinceMatch: boolean;
+  cityMatch: boolean;
+  districtMatch: boolean;
+  subdistrictMatch: boolean;
+  streetScore: number; // 0.0 - 1.0
+  houseNumberMatch?: boolean;
+  gpsAccuracyM: number;
+  distanceToReferenceM: number;
+  addressScore: number; // 0.0 - 1.0
+  reverseGeocode?: {
+    province: string;
+    city: string;
+    district: string;
+    subdistrict: string;
+    street: string;
+    houseNumber?: string;
+    postalCode?: string;
+    formattedAddress: string;
+  };
+  result: LocationValidationResult;
+  reasonCodes: string[];
+  referencePrecision: ReferencePrecision;
+  engineVersion: string;
+  configVersion: string;
+  capturedLocation: {
+    latitude: number;
+    longitude: number;
+    accuracyMeters: number;
+    capturedAt: string;
+    coordinateText: string;
+    googleMapsUrl: string;
+  };
+  referenceLocation: {
+    latitude: number;
+    longitude: number;
+    precision: ReferencePrecision;
+  };
+  distanceFromReferenceMeters: number;
+  createdAt: string;
+}
+
+export type VerificationStatus =
+  | 'CREATED'
+  | 'MESSAGE_SENT'
+  | 'LINK_OPENED'
+  | 'CUSTOMER_CONFIRMATION'
+  | 'CONSENTED'
+  | 'GPS_CAPTURING'
+  | 'LOW_GPS_ACCURACY'
+  | 'VALIDATING'
+  | 'LOCATION_VALID'
+  | 'LOCATION_MISMATCH'
+  | 'WAITING_FOR_HOME'
+  | 'REMINDER_SCHEDULED'
+  | 'REMINDER_LIMIT_REACHED'
+  | 'ADDRESS_EDITING'
+  | 'ADDRESS_PROPOSED'
+  | 'MANUAL_REVIEW'
+  | 'CUSTOMER_DATA_MISMATCH'
+  | 'COMPLETED'
+  | 'EXPIRED';
+
+export type CustomerConfirmationStatus = 'UNCONFIRMED' | 'CONFIRMED' | 'MISMATCH';
+
+export interface VerificationSession {
+  id: string;
+  customerId: string;
+  currentAddressId: string;
+  token: string;
+  tokenHash: string;
+  expiresAt: string;
+  revokedAt?: string;
+  verificationStatus: VerificationStatus;
+  customerConfirmationStatus: CustomerConfirmationStatus;
+  attemptCount: number;
+  reminderCount: number; // max 3
+  registeredPhoneSnapshot: string;
+  openedAt?: string;
+  customerConfirmedAt?: string;
+  consentAt?: string;
+  locationVerifiedAt?: string;
+  completedAt?: string;
+  lastValidationResult?: ValidationResult;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ReviewDecision = 'APPROVE' | 'REJECT' | 'REQUEST_RETRY' | 'REQUEST_ADDRESS_UPDATE';
+
+export interface VerificationReview {
+  id: string;
+  sessionId: string;
+  reviewerUserId: string;
+  reviewerName: string;
+  decision: ReviewDecision;
+  reasonCode: string;
+  reviewNote: string;
+  engineResultSnapshot?: Record<string, unknown>;
+  beforeStatus: VerificationStatus;
+  afterStatus: VerificationStatus;
+  reviewedAt: string;
+  createdAt: string;
+}
+
+export type ReminderStatus = 'SCHEDULED' | 'SENT' | 'CANCELLED' | 'LIMIT_REACHED';
+export type ReminderPreference = 'IN_1_HOUR' | 'TONIGHT' | 'TOMORROW_MORNING' | 'DEFAULT';
+
+export interface Reminder {
+  id: string;
+  sessionId: string;
+  reminderNumber: number; // 1, 2, 3
+  channel: 'WHATSAPP';
+  scheduledAt: string;
+  sentAt?: string;
+  status: ReminderStatus;
+  messageText: string;
+  providerMessageId?: string;
+  retryCount: number;
+  createdAt: string;
+}
+
+export interface IntegrationOutboxEvent {
+  id: string;
+  eventId: string;
+  eventType: 'location.verified.v1';
+  aggregateType: 'VERIFICATION_SESSION';
+  aggregateId: string;
+  correlationId: string;
+  idempotencyKey: string;
+  payload: {
+    eventId: string;
+    eventType: string;
+    occurredAt: string;
+    correlationId: string;
+    idempotencyKey: string;
+    customer: {
+      externalId: string;
+      name?: string;
+    };
+    verifiedAddress: {
+      addressId: string;
+      fullAddress?: string;
+    };
+    verifiedLocation: {
+      latitude: number;
+      longitude: number;
+      accuracyMeters: number;
+      verifiedAt: string;
+    };
+  };
+  status: 'PENDING' | 'PUBLISHED' | 'FAILED';
+  attemptCount: number;
+  nextRetryAt?: string;
+  sentAt?: string;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ValidationConfig {
+  GPS_MAX_ACCURACY_METERS: number;
+  HOME_RADIUS_METERS: number;
+  STREET_MATCH_THRESHOLD: number;
+  ADDRESS_SCORE_THRESHOLD: number;
+  MAX_LOCATION_ATTEMPTS: number;
+  MAX_REMINDERS_PER_SESSION: number;
+  COORDINATE_DISPLAY_DECIMALS: number;
+  VERIFICATION_TOKEN_TTL_DAYS: number;
+  REMINDER_DEFAULT_1_HOURS: number;
+  REMINDER_DEFAULT_2_HOURS: number;
+  REMINDER_DEFAULT_3_HOURS: number;
+  ENABLE_CUSTOMER_OTP: boolean;
+  ENABLE_IRA_COVERAGE: boolean;
+  ENABLE_TICKETING: boolean;
+  ENABLE_MANUAL_REVIEW: boolean;
+  ENABLE_ADDRESS_EDIT: boolean;
+  ENABLE_REMINDERS: boolean;
+}
+
+export interface AuditLog {
+  id: string;
+  actorUserId: string;
+  actorName: string;
+  action: string;
+  entityType: 'CUSTOMER' | 'ADDRESS' | 'VERIFICATION_SESSION' | 'VALIDATION' | 'REVIEW' | 'REMINDER' | 'CONFIG' | 'AUTH';
+  entityId: string;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+  reason?: string;
+  timestamp: string;
+}
+
+export type AuditLogEntry = AuditLog;
+
+export interface IntegrationConfigs {
+  IRA_COVERAGE: {
+    enabled: boolean;
+    name: string;
+    description: string;
+    status: string;
+  };
+  TICKETING: {
+    enabled: boolean;
+    name: string;
+    description: string;
+    status: string;
+  };
+}
+
+export type ThemeMode = 'light' | 'dark' | 'system';

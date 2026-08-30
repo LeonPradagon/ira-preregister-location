@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: exact_location
+      POSTGRES_USER: exact_location
+      POSTGRES_PASSWORD: exact_location
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exact_location -d exact_location"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  worker:
+    build:
+      context: .
+      dockerfile: app/server/Dockerfile
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://exact_location:exact_location@postgres:5432/exact_location
+      REDIS_URL: redis://redis:6379
+      ENABLE_IRA_COVERAGE: "false"
+      ENABLE_TICKETING: "false"
+    command: ["node", "dist/worker.js"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

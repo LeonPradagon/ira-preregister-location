@@ -1,0 +1,80 @@
+# Exact Location Customer Validation - implementation tracker
+
+Tracker ini mengikuti dependency dan priority scale pada PRD v0.6.
+
+- **P0 - blocking:** tanpa ini platform tidak aman atau tidak dapat dijalankan.
+- **P1 - core MVP:** alur verifikasi customer dan operasi Admin harus selesai.
+- **P2 - hardening:** production operations dan integrasi lanjutan.
+
+Status checklist menunjukkan kondisi repository saat ini. Item provider/infrastruktur sengaja tetap unchecked sampai environment nyata tersedia.
+
+## P0 - platform foundation
+
+- [x] Monorepo boundary: `app/web`, `app/server`, dan `packages` workspace.
+- [x] Environment validation, safe error boundary, correlation ID, dan `/v1/health`.
+- [x] Drizzle schema untuk Better Auth, customer, address, verification session, GPS capture, result, review, reminder, audit, outbox, dan integration config.
+- [x] Idempotent SQL migration yang membuat seluruh tabel, PostGIS/pgcrypto extension, spatial index, unique key, dan core constraints.
+- [x] Docker Compose hybrid untuk PostgreSQL/PostGIS, Redis, dan worker; web/API dijalankan langsung dari host.
+- [x] Deployment Compose dipisah menjadi backend stack dan frontend static web stack.
+- [x] Better Auth boundary, database session, HttpOnly-cookie boundary, authentication guard, dan RBAC guard.
+- [x] Local seed command untuk Super Admin, customer, address master, dan integration config demo.
+- [x] Jalankan migration pada PostgreSQL/PostGIS Docker development dan simpan hasil smoke check `/v1/health`.
+
+## P1 - core MVP
+
+- [x] Server-side coordinate validation: range, accuracy, timestamp, 3-5 samples, dan sample spread consistency.
+- [x] Public token API: context/status, customer confirmation, consent, GPS submit, wait-for-home, address change, dan reminder.
+- [x] Admin API: me, customer, verification, resend/rotate token, manual review, reminders, audit, settings, dan integrations.
+- [x] Verification state machine dengan transition policy dan invalid-transition response.
+- [x] Reminder policy maksimal 3 per session, unique session/number, schedule state, dan cancellation rules.
+- [x] Transactional verification flow: capture + result + session + verified address/customer + audit + outbox.
+- [x] Integration ports: geocoding, WhatsApp, dan safe disabled/console adapters.
+- [x] Frontend API client boundary dengan `VITE_API_URL` dan public `/v/:token` route compatibility.
+- [x] Public customer page API mode dengan `VITE_API_MODE=true`: confirmation, consent, 3 GPS samples, wait/retry, dan server result.
+- [x] Sambungkan seluruh React UI ke API server pada `VITE_API_MODE=true`; localStorage hanya demo fallback/fixture.
+- [x] Tambahkan executable local HTTP integration smoke public/admin terhadap PostgreSQL/PostGIS dan Redis (`scripts/local-smoke.ps1`).
+- [ ] Tambahkan Playwright critical scenarios: confirmation, consent, 3 GPS samples, mismatch, retry, reminder #4 blocked, proposed address, dan manual review.
+
+## P2 - production hardening and future integrations
+
+- [x] Durable Redis/BullMQ workers: pending outbox polling, idempotent event job ID, due-reminder queue, WhatsApp adapter dispatch, retry boundary, dan status update.
+- [x] `location.verified.v1` event contract dengan event ID, correlation ID, dan idempotency key.
+- [x] Safe operational hooks: structured health response, correlation header, domain error code, dan no raw token audit.
+- [x] IRA coverage dan ticketing ports beserta disabled adapters.
+- [ ] Konfigurasikan provider geocoding nyata, timeout/retry, quota handling, dan precision/confidence mapping.
+- [ ] Konfigurasikan WhatsApp provider nyata, approved template, callback delivery, retry, dan dead-letter handling.
+- [ ] Tambahkan OpenTelemetry/Sentry/metrics exporter dan dashboard operasional.
+- [ ] Tambahkan Testcontainers suite untuk PostgreSQL/PostGIS dan Redis/BullMQ.
+
+## Current progress
+
+**24 / 29 tasks complete (83%)**
+
+Kode P0/P1/P2 yang dapat divalidasi lokal sudah dibuat dan typed. Migration, seed, worker, dan smoke API sudah lulus pada PostgreSQL/PostGIS + Redis Docker development. Sisa pekerjaan berada pada Playwright browser E2E, provider credential nyata, observability production, dan Testcontainers CI.
+
+## Validation commands
+
+```bash
+npm install
+npm run lint
+npm test
+npm run build
+docker compose config
+docker compose --env-file deploy/.env.example -f deploy/docker-compose.backend.yml config
+docker compose --env-file deploy/.env.example -f deploy/docker-compose.frontend.yml config
+npm run infra:up
+npm run db:migrate
+npm run db:seed
+npm run infra:worker
+./scripts/local-smoke.ps1
+```
+
+Hasil smoke terakhir: PostgreSQL healthy di `localhost:5433`, Redis `PONG`, worker `Up`, `/v1/health` `200`, Better Auth/Admin API lulus, public verification lulus, dan reminder ke-4 ditolak.
+
+## Definition of done per priority
+
+P0 selesai ketika database fresh berhasil migrate dan `/v1/health` merespons `ok`.
+
+P1 selesai ketika UI memakai API, seluruh critical scenarios lulus integration/E2E, dan tidak ada localStorage sebagai source of truth.
+
+P2 selesai ketika provider nyata, monitoring, retry/dead-letter, dan Testcontainers CI sudah dikonfigurasi.

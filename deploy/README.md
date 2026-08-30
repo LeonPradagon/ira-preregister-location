@@ -1,0 +1,27 @@
+# Deployment Compose
+
+Deployment sengaja dipisah menjadi dua Compose project:
+
+- `docker-compose.backend.yml`: API NestJS, worker, PostgreSQL/PostGIS, Redis, dan migration runner.
+- `docker-compose.frontend.yml`: static React build melalui Nginx.
+
+Gunakan file `.env` deployment yang tidak di-commit. Contoh variabel tersedia di `.env.example`.
+
+## Backend
+
+```powershell
+Copy-Item deploy/.env.example deploy/.env
+# Edit deploy/.env: replace database, Better Auth, and seed credentials first.
+docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yml up --build -d
+docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yml run --rm api node dist/db/seed.js
+```
+
+Migration dijalankan oleh service `migrate` sebelum API dan worker menjadi healthy. Seed hanya dijalankan eksplisit setelah secret dan akun admin production ditentukan.
+
+## Frontend
+
+```powershell
+docker compose --env-file deploy/.env -f deploy/docker-compose.frontend.yml up --build -d
+```
+
+`VITE_API_URL` harus menggunakan URL API publik yang dapat diakses browser. Frontend dan backend dapat berada di host atau cluster berbeda; integrasinya melalui URL tersebut dan CORS `WEB_ORIGIN`.

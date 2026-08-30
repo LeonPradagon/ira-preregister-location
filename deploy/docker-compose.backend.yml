@@ -1,0 +1,101 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-exact_location}
+      POSTGRES_USER: ${POSTGRES_USER:-exact_location}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - backend_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-exact_location} -d ${POSTGRES_DB:-exact_location}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - backend_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: app/server/Dockerfile
+    environment: &server_environment
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-exact_location}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-exact_location}
+      REDIS_URL: redis://redis:6379
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL must be set}
+      WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN must be set}
+      GPS_MAX_ACCURACY_METERS: ${GPS_MAX_ACCURACY_METERS:-30}
+      HOME_RADIUS_METERS: ${HOME_RADIUS_METERS:-50}
+      MAX_LOCATION_ATTEMPTS: ${MAX_LOCATION_ATTEMPTS:-5}
+      MAX_REMINDERS_PER_SESSION: ${MAX_REMINDERS_PER_SESSION:-3}
+      ADDRESS_SCORE_THRESHOLD: ${ADDRESS_SCORE_THRESHOLD:-0.90}
+      STREET_MATCH_THRESHOLD: ${STREET_MATCH_THRESHOLD:-0.90}
+      ENABLE_CUSTOMER_OTP: ${ENABLE_CUSTOMER_OTP:-false}
+      ENABLE_IRA_COVERAGE: ${ENABLE_IRA_COVERAGE:-false}
+      ENABLE_TICKETING: ${ENABLE_TICKETING:-false}
+      ENABLE_MANUAL_REVIEW: ${ENABLE_MANUAL_REVIEW:-true}
+      ENABLE_ADDRESS_EDIT: ${ENABLE_ADDRESS_EDIT:-true}
+      ENABLE_REMINDERS: ${ENABLE_REMINDERS:-true}
+      GEOCODING_BASE_URL: ${GEOCODING_BASE_URL:-}
+      GEOCODING_API_KEY: ${GEOCODING_API_KEY:-}
+      WHATSAPP_BASE_URL: ${WHATSAPP_BASE_URL:-}
+      WHATSAPP_API_KEY: ${WHATSAPP_API_KEY:-}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:?SEED_ADMIN_EMAIL must be set}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?SEED_ADMIN_PASSWORD must be set}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Production Super Admin}
+    command: ["node", "dist/db/migrate.js"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ..
+      dockerfile: app/server/Dockerfile
+    environment: *server_environment
+    ports:
+      - "${API_PORT:-3000}:3000"
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/v1/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  worker:
+    build:
+      context: ..
+      dockerfile: app/server/Dockerfile
+    environment: *server_environment
+    command: ["node", "dist/worker.js"]
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+volumes:
+  backend_postgres_data:
+  backend_redis_data:

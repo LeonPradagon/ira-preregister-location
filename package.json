@@ -1,0 +1,20 @@
+{
+  "name": "exact-location-customer-validation",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["app/*"],
+  "scripts": {
+    "dev": "npm --workspace app/web run dev",
+    "dev:server": "npm --workspace app/server run dev",
+    "dev:worker": "npm --workspace app/server run worker",
+    "infra:up": "docker compose up -d postgres redis",
+    "infra:worker": "docker compose up --build -d worker",
+    "infra:ps": "docker compose ps",
+    "build": "npm --workspace app/web run build && npm --workspace app/server run build",
+    "lint": "npm --workspace app/web run lint && npm --workspace app/server run lint",
+    "test": "npm --workspace app/web run test && npm --workspace app/server run test",
+    "db:generate": "npm --workspace app/server run db:generate",
+    "db:migrate": "npm --workspace app/server run db:migrate",
+    "db:seed": "npm --workspace app/server run db:seed"
+  }
+}

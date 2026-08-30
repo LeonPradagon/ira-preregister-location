@@ -1,0 +1,27 @@
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { WhatsAppMessage, WhatsAppPort, WhatsAppSendResult } from './whatsapp.port.js';
+
+@Injectable()
+export class HttpWhatsAppAdapter extends WhatsAppPort {
+  private readonly baseUrl = (process.env.WHATSAPP_BASE_URL ?? '').replace(/\/$/, '');
+  private readonly timeoutMs = Number(process.env.WHATSAPP_TIMEOUT_MS ?? 5000);
+
+  async send(message: WhatsAppMessage): Promise<WhatsAppSendResult> {
+    if (!this.baseUrl) throw new ServiceUnavailableException('WhatsApp provider is not configured');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await fetch(`${this.baseUrl}/messages`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(process.env.WHATSAPP_API_KEY ? { authorization: `Bearer ${process.env.WHATSAPP_API_KEY}` } : {}) },
+        body: JSON.stringify(message),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new ServiceUnavailableException(`WhatsApp provider returned HTTP ${response.status}`);
+      const body = await response.json() as { providerMessageId?: string; id?: string; acceptedAt?: string };
+      return { providerMessageId: body.providerMessageId || body.id || message.idempotencyKey, acceptedAt: body.acceptedAt || new Date().toISOString() };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
