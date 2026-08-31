@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hashPhone, isOptOutMessage, nextAllowedSendAt, nextUtcMidnight } from './whatsapp.policy.js';
+import { hashPhone, isOptOutMessage, nextAllowedSendAt, nextUtcMidnight } from '../../../src/integrations/whatsapp/whatsapp.policy.js';
 
 describe('WhatsApp safety policy', () => {
   it('recognizes explicit opt-out keywords and hashes phone numbers', () => {

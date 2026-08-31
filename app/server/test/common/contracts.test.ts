@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { campaignCreateSchema, customerCreateSchema, locationSamplesSchema } from './contracts.js';
+import { campaignCreateSchema, customerCreateSchema, locationSamplesSchema } from '../../src/common/contracts.js';
 
 describe('API contracts', () => {
   it('accepts a master customer address with E.164 phone and coordinates', () => {

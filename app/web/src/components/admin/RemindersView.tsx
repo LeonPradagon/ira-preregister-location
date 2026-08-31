@@ -12,7 +12,7 @@ import {
   Search,
 } from 'lucide-react';
 import { mapApiCustomer, mapApiSession, useApp } from '../../context/AppContext';
-import { adminApi } from '../../lib/apiClient';
+import { api } from '../../lib/apiClient';
 import { Customer, Reminder, VerificationSession } from '../../types';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 
@@ -39,7 +39,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
   const load = async () => {
     setLoading(true); setError(null);
     try {
-      const response = await adminApi.reminders({ page, pageSize, search: searchTerm, status: statusFilter });
+      const response = await api.reminders({ page, pageSize, search: searchTerm, status: statusFilter });
       setRows(response.items.map((raw) => ({ reminder: raw as unknown as Reminder, session: mapApiSession(raw.session as Record<string, unknown>), customer: mapApiCustomer(raw.customer as Record<string, unknown>) })));
       setTotal(response.total);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Daftar pengingat gagal dimuat.'); }

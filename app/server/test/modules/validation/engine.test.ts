@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { decideValidation, AddressEvidence, ReverseGeocodeEvidence } from './engine.js';
-import { GpsSample } from '../../common/contracts.js';
+import { decideValidation, AddressEvidence, ReverseGeocodeEvidence } from '../../../src/modules/validation/engine.js';
+import { GpsSample } from '../../../src/common/contracts.js';
 
 const address: AddressEvidence = {
   id: 'address-1', province: 'Jawa Barat', city: 'Bandung', district: 'Coblong', subdistrict: 'Dago',

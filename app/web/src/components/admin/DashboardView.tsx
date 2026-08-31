@@ -353,7 +353,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Sesi Verifikasi Terbaru
             </h2>
             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-              Klik pada baris pelanggan untuk membuka detail verifikasi, peta visual, dan koordinat GPS.
+              Gunakan tombol aksi untuk membuka detail verifikasi, peta visual, dan koordinat GPS.
             </p>
           </div>
         </div>
@@ -378,11 +378,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 const lastVal = session.lastValidationResult;
 
                 return (
-                  <tr
-                    key={session.id}
-                    className="hover:bg-gray-50/70 dark:hover:bg-gray-800/50 transition-colors cursor-pointer"
-                    onClick={() => onSelectVerification(session.id)}
-                  >
+                  <tr key={session.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/50 transition-colors">
                     <td className="px-4 py-3">
                       <div className="font-semibold text-gray-900 dark:text-white">{customer?.name || 'Pelanggan'}</div>
                       <div className="text-[10px] font-mono text-gray-500 dark:text-gray-400">{customer?.externalId}</div>
@@ -415,7 +411,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </span>
                     </td>
 
-                    <td className="px-4 py-3 text-right space-x-2" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-4 py-3 text-right space-x-2">
                       <button
                         type="button"
                         onClick={() => onSelectVerification(session.id)}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { envSchema } from './configuration.js';
+import { envSchema } from '../../src/config/configuration.js';
 
 const required = {
   DATABASE_URL: 'postgresql://localhost/exact_location',

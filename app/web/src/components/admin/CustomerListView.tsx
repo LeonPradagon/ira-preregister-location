@@ -3,13 +3,15 @@ import {
   CheckCircle2,
   Clock,
   Compass,
+  AlertTriangle,
+  Eye,
   Filter,
   MapPin,
-  MoreHorizontal,
+  Pencil,
   Plus,
   Search,
   Upload,
-  User,
+  Trash2,
   Users,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -37,16 +39,43 @@ const statusBadgeClass = (status: CustomerStatus) => {
   return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800';
 };
 
+const CustomerTableSkeleton: React.FC = () => (
+  <>
+    {Array.from({ length: 6 }, (_, index) => (
+      <tr key={`customer-skeleton-${index}`} className="animate-pulse">
+        {Array.from({ length: 8 }, (_, cellIndex) => (
+          <td key={`customer-skeleton-${index}-${cellIndex}`} className="px-4 py-4 align-top">
+            <div className={`h-3 rounded bg-gray-200 dark:bg-gray-700 ${cellIndex === 3 ? 'w-full' : cellIndex === 7 ? 'w-24' : 'w-3/4'}`} />
+            {cellIndex !== 4 && cellIndex !== 5 && <div className="mt-2 h-2 w-1/2 rounded bg-gray-100 dark:bg-gray-800" />}
+          </td>
+        ))}
+        <td className="px-4 py-4">
+          <div className="flex justify-end gap-1.5">
+            <div className="h-8 w-8 rounded-lg bg-gray-200 dark:bg-gray-700" />
+            <div className="h-8 w-8 rounded-lg bg-gray-200 dark:bg-gray-700" />
+            <div className="h-8 w-8 rounded-lg bg-gray-200 dark:bg-gray-700" />
+          </div>
+        </td>
+      </tr>
+    ))}
+  </>
+);
+
 export const CustomerListView: React.FC<CustomerListViewProps> = ({
   onSelectCustomer,
   onCreateVerificationForCustomer,
 }) => {
-  const { customers, customerPage, loadCustomerPage, addCustomer, refreshDashboard, currentAdmin } = useApp();
+  const { customers, customerPage, loadCustomerPage, addCustomer, updateCustomer, deleteCustomer, refreshDashboard, currentAdmin } = useApp();
   const canCreateVerification = hasCapability(currentAdmin?.role, 'createVerification');
+  const canManageCustomers = hasCapability(currentAdmin?.role, 'manageCustomers');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
+  const [isDeletingCustomer, setIsDeletingCustomer] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   // New Customer Form State
   const [newCustName, setNewCustName] = useState('');
@@ -61,6 +90,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
   const [newCustPostalCode, setNewCustPostalCode] = useState('');
   const [newCustLat, setNewCustLat] = useState('');
   const [newCustLng, setNewCustLng] = useState('');
+  const [newCustStatus, setNewCustStatus] = useState<CustomerStatus>('PENDING_INSTALLATION');
   const [formError, setFormError] = useState('');
 
   const [isLoading, setIsLoading] = useState(false);
@@ -88,17 +118,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
     setFormError('');
     const rawAddr = `${newCustStreet} No. ${newCustHouseNo}, ${newCustSubdistrict}, ${newCustDistrict}, ${newCustCity}, ${newCustProvince}`;
 
-    const created = await addCustomer(
-      {
-        name: newCustName,
-        phoneE164: newCustPhone,
-        externalId: newCustExtId,
-        status: 'PENDING_INSTALLATION',
-      },
-      {
-        addressType: 'MASTER',
-        addressStatus: 'ACTIVE',
-        rawAddress: rawAddr,
+    try {
+      const address = {
         province: newCustProvince,
         city: newCustCity,
         district: newCustDistrict,
@@ -106,18 +127,69 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
         postalCode: newCustPostalCode,
         street: newCustStreet,
         houseNumber: newCustHouseNo,
-        referenceLocation: {
-          latitude,
-          longitude,
-        },
-        referenceSource: 'MASTER_COORDINATE',
-        referencePrecision: 'ROOFTOP',
+        referenceLocation: { latitude, longitude },
+        referenceSource: 'MASTER_COORDINATE' as const,
+        referencePrecision: 'ROOFTOP' as const,
         referenceConfidence: 0.98,
+      };
+      if (editingCustomer) {
+        await updateCustomer(editingCustomer.id, { externalId: newCustExtId, name: newCustName, phoneE164: newCustPhone, status: newCustStatus, address });
+        setEditingCustomer(null);
+      } else {
+        const created = await addCustomer(
+          { name: newCustName, phoneE164: newCustPhone, externalId: newCustExtId, status: 'PENDING_INSTALLATION' },
+          { ...address, addressType: 'MASTER', addressStatus: 'ACTIVE', rawAddress: rawAddr, validFrom: new Date().toISOString() },
+        );
+        onSelectCustomer(created.id);
       }
-    );
+      setIsAddModalOpen(false);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Data pelanggan gagal disimpan.');
+    }
+  };
 
-    setIsAddModalOpen(false);
-    onSelectCustomer(created.id);
+  const openEditCustomer = (customer: Customer) => {
+    const address = customer.activeAddress;
+    if (!address?.referenceLocation) {
+      setFormError('Pelanggan ini belum memiliki alamat aktif dengan koordinat referensi.');
+      return;
+    }
+    setEditingCustomer(customer);
+    setNewCustName(customer.name);
+    setNewCustPhone(customer.phoneE164);
+    setNewCustExtId(customer.externalId);
+    setNewCustStreet(address.street);
+    setNewCustHouseNo(address.houseNumber);
+    setNewCustDistrict(address.district);
+    setNewCustSubdistrict(address.subdistrict);
+    setNewCustCity(address.city);
+    setNewCustProvince(address.province);
+    setNewCustPostalCode(address.postalCode);
+    setNewCustLat(String(address.referenceLocation.latitude));
+    setNewCustLng(String(address.referenceLocation.longitude));
+    setNewCustStatus(customer.status);
+    setFormError('');
+    setIsAddModalOpen(true);
+  };
+
+  const handleDeleteCustomer = (customer: Customer) => {
+    setDeleteError('');
+    setCustomerToDelete(customer);
+  };
+
+  const confirmDeleteCustomer = async () => {
+    if (!customerToDelete) return;
+
+    setIsDeletingCustomer(true);
+    setDeleteError('');
+    try {
+      await deleteCustomer(customerToDelete.id);
+      setCustomerToDelete(null);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Pelanggan gagal dinonaktifkan.');
+    } finally {
+      setIsDeletingCustomer(false);
+    }
   };
 
   return (
@@ -146,6 +218,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
           <button
             type="button"
             onClick={() => setIsAddModalOpen(true)}
+            disabled={!canManageCustomers}
             className="inline-flex items-center justify-center gap-2 px-3.5 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg text-xs font-medium transition-colors shadow-xs"
           >
             <Plus className="w-4 h-4" />
@@ -167,14 +240,14 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
           <Filter className="w-4 h-4 text-gray-400 dark:text-gray-500" />
           <label htmlFor="customer-status-filter" className="text-gray-600 dark:text-gray-300 font-medium">Status pelanggan:</label>
           <select
             id="customer-status-filter"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400"
+            className="min-w-0 max-w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400 sm:flex-none"
           >
             <option value="ALL">Semua Status</option>
             <option value="PENDING_INSTALLATION">Menunggu pemasangan</option>
@@ -204,16 +277,12 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {customers.map((cust) => {
+              {isLoading ? <CustomerTableSkeleton /> : customers.map((cust) => {
                 const masterAddr = cust.activeAddress;
                 const latestSession = cust.latestVerification;
 
                 return (
-                  <tr
-                    key={cust.id}
-                    className="hover:bg-gray-50/80 dark:hover:bg-gray-800/50 transition-colors cursor-pointer"
-                    onClick={() => onSelectCustomer(cust.id)}
-                  >
+                  <tr key={cust.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/50 transition-colors">
                     <td className="px-4 py-3.5 align-top">
                       <div className="font-mono text-[11px] text-gray-700 dark:text-gray-300 break-words whitespace-normal leading-4">{cust.externalId}</div>
                       <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">ID sistem</div>
@@ -262,25 +331,49 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
                       <div className={`mt-1 text-[10px] font-medium break-words whitespace-normal leading-4 ${masterAddr?.isVerified ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-500 dark:text-gray-400'}`}>Status lokasi GPS: {masterAddr?.isVerified || latestSession?.verificationStatus === 'LOCATION_VALID' ? 'Terverifikasi' : 'Belum diverifikasi'}</div>
                     </td>
 
-                    <td className="px-4 py-3.5 align-top text-right space-x-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-4 py-3.5 align-top">
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
                       <button
                         type="button"
                         onClick={() => onCreateVerificationForCustomer(cust.id, masterAddr?.id)}
                         disabled={!canCreateVerification}
-                        title={!canCreateVerification ? 'Role ini tidak dapat membuat sesi' : undefined}
-                        className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-[11px] font-medium transition-colors inline-flex items-center gap-1"
+                        title={!canCreateVerification ? 'Role ini tidak dapat membuat sesi' : 'Buat sesi verifikasi baru'}
+                        aria-label="Buat sesi verifikasi baru"
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-40 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/50"
                       >
-                        <Compass className="w-3 h-3" />
-                        <span>Sesi Baru</span>
+                        <Compass className="h-3.5 w-3.5" />
                       </button>
 
                       <button
                         type="button"
                         onClick={() => onSelectCustomer(cust.id)}
-                        className="px-2.5 py-1 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg text-[11px] font-medium transition-colors"
+                        title="Lihat detail pelanggan"
+                        aria-label="Lihat detail pelanggan"
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                       >
-                        Detail
+                        <Eye className="h-3.5 w-3.5" />
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => openEditCustomer(cust)}
+                        disabled={!canManageCustomers}
+                        title="Edit pelanggan"
+                        aria-label="Edit pelanggan"
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteCustomer(cust)}
+                        disabled={!canManageCustomers || cust.status === 'SUSPENDED'}
+                        title="Nonaktifkan pelanggan"
+                        aria-label="Hapus pelanggan"
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-700 transition-colors hover:bg-rose-50 disabled:opacity-40 dark:border-rose-800 dark:bg-gray-800 dark:text-rose-300 dark:hover:bg-rose-950/30"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -288,16 +381,15 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
               {!isLoading && customers.length === 0 && (
                 <tr><td colSpan={9} className="px-4 py-10 text-center text-xs text-gray-400 dark:text-gray-500">{loadError || 'Tidak ada pelanggan pada halaman ini.'}</td></tr>
               )}
-              {isLoading && <tr><td colSpan={9} className="px-4 py-10 text-center text-xs text-gray-500 dark:text-gray-400">Memuat data pelanggan...</td></tr>}
             </tbody>
       </AdminTable>
 
-      {/* ADD CUSTOMER MODAL */}
+      {/* ADD / EDIT CUSTOMER MODAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 max-w-lg w-full rounded-2xl shadow-xl overflow-hidden">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
             <div className="p-4 bg-gray-50/80 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Tambah Pelanggan Baru &amp; Alamat Master</h3>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{editingCustomer ? 'Edit Pelanggan & Alamat Master' : 'Tambah Pelanggan Baru & Alamat Master'}</h3>
               <button
                 type="button"
                 onClick={() => setIsAddModalOpen(false)}
@@ -321,6 +413,10 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
                   />
                 </div>
                 <div>
+                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">ID Eksternal</label>
+                  <input type="text" required value={newCustExtId} onChange={(e) => setNewCustExtId(e.target.value)} className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-mono" />
+                </div>
+                <div>
                   <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">No. WhatsApp</label>
                   <input
                     type="text"
@@ -332,6 +428,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
                   />
                 </div>
               </div>
+
+              {editingCustomer && <div><label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">Status</label><select value={newCustStatus} onChange={(e) => setNewCustStatus(e.target.value as CustomerStatus)} className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-xs"><option value="ACTIVE">Aktif</option><option value="PENDING_INSTALLATION">Menunggu pemasangan</option><option value="VERIFIED">Terverifikasi</option><option value="SUSPENDED">Ditangguhkan</option></select></div>}
 
               <div>
                 <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">Nama Jalan / Perumahan</label>
@@ -424,7 +522,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
                   type="submit"
                   className="px-4 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white font-medium rounded-lg shadow-xs"
                 >
-                  Simpan Pelanggan
+                  {editingCustomer ? 'Simpan Perubahan' : 'Simpan Pelanggan'}
                 </button>
               </div>
             </form>
@@ -442,6 +540,58 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
             ]);
           }}
         />
+      )}
+
+      {customerToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4 backdrop-blur-xs" role="presentation">
+          <div
+            className="w-full max-w-md rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-customer-title"
+            aria-describedby="delete-customer-description"
+          >
+            <div className="flex items-start gap-3 border-b border-gray-200 p-5 dark:border-gray-800">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 id="delete-customer-title" className="text-sm font-semibold text-gray-900 dark:text-white">Nonaktifkan pelanggan?</h3>
+                <p id="delete-customer-description" className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-400">
+                  Anda akan menonaktifkan <span className="font-semibold text-gray-900 dark:text-white">{customerToDelete.name}</span>. Data tidak dihapus permanen dan tetap tersedia untuk riwayat audit.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 p-5">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+                Pastikan pelanggan yang dipilih sudah benar sebelum melanjutkan.
+              </div>
+
+              {deleteError && <p className="text-xs text-rose-600 dark:text-rose-400">{deleteError}</p>}
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setCustomerToDelete(null)}
+                  disabled={isDeletingCustomer}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void confirmDeleteCustomer()}
+                  disabled={isDeletingCustomer}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isDeletingCustomer && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />}
+                  {isDeletingCustomer ? 'Memproses...' : 'Ya, nonaktifkan'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

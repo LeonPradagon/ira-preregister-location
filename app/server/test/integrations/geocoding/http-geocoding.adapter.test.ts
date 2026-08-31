@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HttpGeocodingAdapter } from './http-geocoding.adapter.js';
+import { HttpGeocodingAdapter } from '../../../src/integrations/geocoding/http-geocoding.adapter.js';
 
 describe('HTTP geocoding adapter', () => {
   it('maps the normalized reverse geocode provider contract', async () => {

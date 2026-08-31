@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, gt, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { auditLogs, customerAddresses, customers, integrationConfigs, integrationOutbox, locationCaptures, reminders, validationResults, verificationReviews, verificationSessions, whatsappDeliveryLogs } from '../../db/schema/index.js';
-import { AddressChangeInput, AdminListQueryInput, CustomerCreateInput, CustomerListQueryInput, ReviewInput, ValidationConfigInput } from '../../common/contracts.js';
+import { AddressChangeInput, AdminListQueryInput, CustomerCreateInput, CustomerListQueryInput, CustomerUpdateInput, ReviewInput, ValidationConfigInput } from '../../common/contracts.js';
 import { DomainError, NotFoundError } from '../../common/errors.js';
 import { RequestAdmin } from '../../common/request-user.js';
 import { WhatsAppPort } from '../../integrations/whatsapp/whatsapp.port.js';
@@ -13,6 +13,19 @@ import { hashPhone, nextAllowedSendAt } from '../../integrations/whatsapp/whatsa
 import { createVerificationToken } from '../verification/verification-token.js';
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
+
+function formatRawAddress(address: CustomerCreateInput['address']) {
+  return [
+    address.street,
+    `No. ${address.houseNumber}`,
+    address.block && `Blok ${address.block}`,
+    address.subdistrict,
+    address.district,
+    address.city,
+    address.province,
+    address.postalCode,
+  ].filter(Boolean).join(', ');
+}
 
 function sanitizeSession(session: typeof verificationSessions.$inferSelect) {
   const { tokenId: _tokenId, tokenHash: _tokenHash, ...safeSession } = session;
@@ -139,16 +152,7 @@ export class AdminService {
     const customerId = randomUUID();
     const addressId = randomUUID();
     const address = input.address;
-    const rawAddress = [
-      address.street,
-      `No. ${address.houseNumber}`,
-      address.block && `Blok ${address.block}`,
-      address.subdistrict,
-      address.district,
-      address.city,
-      address.province,
-      address.postalCode,
-    ].filter(Boolean).join(', ');
+    const rawAddress = formatRawAddress(address);
 
     const result = await db.transaction(async (tx) => {
       const [customer] = await tx.insert(customers).values({
@@ -222,6 +226,92 @@ export class AdminService {
     }));
     const sessions = await db.select().from(verificationSessions).where(eq(verificationSessions.customerId, id)).orderBy(desc(verificationSessions.createdAt));
     return { customer, addresses, sessions: sessions.map(sanitizeSession) };
+  }
+
+  async updateCustomer(admin: RequestAdmin, id: string, input: CustomerUpdateInput) {
+    if (!canManage(admin.role)) throw new DomainError('Role cannot update a customer', 403, 'FORBIDDEN');
+    const [existing] = await db.select().from(customers).where(eq(customers.id, id));
+    if (!existing) throw new NotFoundError('Customer not found');
+    const [activeAddress] = await db.select().from(customerAddresses).where(and(eq(customerAddresses.customerId, id), eq(customerAddresses.isActive, true))).orderBy(desc(customerAddresses.updatedAt)).limit(1);
+    const updatedAt = timestamp();
+
+    const result = await db.transaction(async (tx) => {
+      const [customer] = await tx.update(customers).set({
+        externalId: input.externalId ?? existing.externalId,
+        name: input.name ?? existing.name,
+        phoneE164: input.phoneE164 ?? existing.phoneE164,
+        whatsappOptInAt: input.whatsappOptInAt === undefined ? existing.whatsappOptInAt : input.whatsappOptInAt ? new Date(input.whatsappOptInAt) : null,
+        whatsappOptInSource: input.whatsappOptInSource === undefined ? existing.whatsappOptInSource : input.whatsappOptInSource,
+        status: input.status ?? existing.status,
+        updatedAt,
+      }).where(eq(customers.id, id)).returning();
+
+      let address = activeAddress;
+      if (input.address && activeAddress) {
+        const nextAddress = input.address;
+        [address] = await tx.update(customerAddresses).set({
+          addressStatus: 'ACTIVE',
+          addressType: 'MASTER',
+          rawAddress: formatRawAddress(nextAddress),
+          province: nextAddress.province,
+          city: nextAddress.city,
+          district: nextAddress.district,
+          subdistrict: nextAddress.subdistrict,
+          postalCode: nextAddress.postalCode,
+          street: nextAddress.street,
+          houseNumber: nextAddress.houseNumber,
+          rt: nextAddress.rt,
+          rw: nextAddress.rw,
+          building: nextAddress.building,
+          block: nextAddress.block,
+          unit: nextAddress.unit,
+          addressDetail: nextAddress.addressDetail,
+          landmark: nextAddress.landmark,
+          referenceLocation: nextAddress.referenceLocation,
+          referenceSource: nextAddress.referenceSource,
+          referencePrecision: nextAddress.referencePrecision,
+          referenceConfidence: nextAddress.referenceConfidence.toFixed(3),
+          isVerified: false,
+          validTo: null,
+          updatedAt,
+        }).where(eq(customerAddresses.id, activeAddress.id)).returning();
+      }
+      await tx.insert(auditLogs).values({
+        actorUserId: admin.id,
+        actorName: admin.name,
+        action: 'CUSTOMER_UPDATED',
+        entityType: 'CUSTOMER',
+        entityId: id,
+        before: { externalId: existing.externalId, name: existing.name, phoneE164: existing.phoneE164, status: existing.status },
+        after: { externalId: customer.externalId, name: customer.name, phoneE164: customer.phoneE164, status: customer.status, addressUpdated: Boolean(input.address) },
+        timestamp: updatedAt,
+      });
+      return { customer, address };
+    });
+
+    return result;
+  }
+
+  async deleteCustomer(admin: RequestAdmin, id: string) {
+    if (!canManage(admin.role)) throw new DomainError('Role cannot delete a customer', 403, 'FORBIDDEN');
+    const [existing] = await db.select().from(customers).where(eq(customers.id, id));
+    if (!existing) throw new NotFoundError('Customer not found');
+    const updatedAt = timestamp();
+    await db.transaction(async (tx) => {
+      await tx.update(customers).set({ status: 'SUSPENDED', updatedAt }).where(eq(customers.id, id));
+      await tx.insert(auditLogs).values({
+        actorUserId: admin.id,
+        actorName: admin.name,
+        action: 'CUSTOMER_DEACTIVATED',
+        entityType: 'CUSTOMER',
+        entityId: id,
+        before: { status: existing.status },
+        after: { status: 'SUSPENDED' },
+        reason: 'Soft delete dari panel admin',
+        timestamp: updatedAt,
+      });
+    });
+    return { id, status: 'SUSPENDED' as const };
   }
 
   async createVerification(admin: RequestAdmin, customerId: string, addressId: string) {

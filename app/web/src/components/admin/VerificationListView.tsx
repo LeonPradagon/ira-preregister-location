@@ -14,7 +14,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { mapApiCustomer, mapApiSession, mapApiValidationResult, useApp } from '../../context/AppContext';
-import { adminApi } from '../../lib/apiClient';
+import { api } from '../../lib/apiClient';
 import { Customer } from '../../types';
 import { VerificationSession, VerificationStatus } from '../../types';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
@@ -40,11 +40,11 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
   const load = async () => {
     setLoading(true); setError(null);
     try {
-      const response = await adminApi.verifications({ page, pageSize, search: searchTerm, status: statusFilter });
+      const response = await api.verifications({ page, pageSize, search: searchTerm, status: statusFilter });
       const mapped = await Promise.all(response.items.map(async (row) => {
         const session = mapApiSession(row.session);
         try {
-          const detail = await adminApi.verification(session.id);
+                  const detail = await api.verification(session.id);
           const results = Array.isArray(detail.results) ? detail.results : [];
           if (results[0]) session.lastValidationResult = mapApiValidationResult(results[0] as Record<string, unknown>);
         } catch { /* detail loads when the row is opened */ }
@@ -178,11 +178,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
                 const lastVal = session.lastValidationResult;
 
                 return (
-                  <tr
-                    key={session.id}
-                    className="hover:bg-gray-50/70 dark:hover:bg-gray-800/50 transition-colors cursor-pointer"
-                    onClick={() => onSelectVerification(session.id)}
-                  >
+                  <tr key={session.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/50 transition-colors">
                     <td className="px-4 py-3">
                       <div className="font-semibold text-gray-900 dark:text-white">{customer?.name || 'Pelanggan'}</div>
                       <div className="text-[10px] font-mono text-gray-500 dark:text-gray-400">
@@ -219,7 +215,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
                       </span>
                     </td>
 
-                    <td className="px-4 py-3 text-right space-x-2" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-4 py-3 text-right space-x-2">
                       <button
                         type="button"
                         onClick={() => onSelectVerification(session.id)}

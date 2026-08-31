@@ -11,7 +11,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { adminApi } from '../../lib/apiClient';
+import { api } from '../../lib/apiClient';
 import { IntegrationOutboxEvent } from '../../types';
 import { TablePagination, TablePageSize } from '../common/AdminTable';
 
@@ -28,7 +28,7 @@ export const IntegrationsView: React.FC = () => {
   const load = async () => {
     setLoading(true); setError(null);
     try {
-      const response = await adminApi.outbox({ page, pageSize, search: searchTerm, status: statusFilter });
+      const response = await api.outbox({ page, pageSize, search: searchTerm, status: statusFilter });
       setOutboxEvents(response.items as unknown as IntegrationOutboxEvent[]); setTotal(response.total);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Outbox gagal dimuat.'); }
     finally { setLoading(false); }

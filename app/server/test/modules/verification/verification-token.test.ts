@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createVerificationToken, parseVerificationToken, verifyVerificationToken } from './verification-token.js';
+import { createVerificationToken, parseVerificationToken, verifyVerificationToken } from '../../../src/modules/verification/verification-token.js';
 
 describe('verification token', () => {
   it('creates a token that can be verified without storing the raw secret', async () => {

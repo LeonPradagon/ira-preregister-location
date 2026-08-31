@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HttpWhatsAppAdapter } from './http-whatsapp.adapter.js';
+import { HttpWhatsAppAdapter } from '../../../src/integrations/whatsapp/http-whatsapp.adapter.js';
 
 describe('HTTP WhatsApp adapter', () => {
   it('returns a stable provider message id', async () => {

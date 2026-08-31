@@ -1,6 +1,7 @@
 import { AdminRole } from '../types';
 
 export type AdminCapability =
+  | 'manageCustomers'
   | 'createVerification'
   | 'sendVerification'
   | 'manualReview'
@@ -8,6 +9,7 @@ export type AdminCapability =
   | 'view';
 
 const CAPABILITIES: Record<AdminCapability, readonly AdminRole[]> = {
+  manageCustomers: ['SUPER_ADMIN', 'ADMIN'],
   view: ['SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER'],
   createVerification: ['SUPER_ADMIN', 'ADMIN'],
   sendVerification: ['SUPER_ADMIN', 'ADMIN'],

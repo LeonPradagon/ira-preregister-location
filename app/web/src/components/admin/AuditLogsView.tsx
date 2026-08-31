@@ -12,7 +12,7 @@ import {
   User,
   RefreshCw,
 } from 'lucide-react';
-import { adminApi } from '../../lib/apiClient';
+import { api } from '../../lib/apiClient';
 import { AuditLog } from '../../types';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 
@@ -32,7 +32,7 @@ export const AuditLogsView: React.FC = () => {
   const load = async () => {
     setLoading(true); setError(null);
     try {
-      const response = await adminApi.auditLogs({ page, pageSize, search: searchTerm, status: entityFilter, actor: actorFilter });
+      const response = await api.auditLogs({ page, pageSize, search: searchTerm, status: entityFilter, actor: actorFilter });
       setAuditLogs(response.items as unknown as AuditLog[]); setTotal(response.total);
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Audit trail gagal dimuat.'); }
     finally { setLoading(false); }

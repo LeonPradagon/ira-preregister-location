@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AlertCircle, CheckCircle2, FileSpreadsheet, Loader2, Upload, X } from 'lucide-react';
-import { CustomerImportApiResult, adminApi } from '../../lib/apiClient';
+import { CustomerImportApiResult, api } from '../../lib/apiClient';
 
 interface CustomerImportModalProps {
   onClose: () => void;
@@ -48,7 +48,7 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
     setError('');
     setIsUploading(true);
     try {
-      const imported = await adminApi.importCustomers(file);
+      const imported = await api.importCustomers(file);
       setResult(imported);
       await onImported();
     } catch (uploadError) {

@@ -1,7 +1,22 @@
+import axios from 'axios';
+
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000/v1').replace(/\/$/, '');
+const API_TIMEOUT_MS = 15_000;
 
 export interface ApiErrorBody {
   error?: { code?: string; message?: string };
+}
+
+export class ApiClientError extends Error {
+  constructor(
+    message: string,
+    public readonly status?: number,
+    public readonly code?: string,
+    public readonly correlationId?: string,
+  ) {
+    super(message);
+    this.name = 'ApiClientError';
+  }
 }
 
 export interface PublicVerificationContextApi {
@@ -28,22 +43,51 @@ function correlationId(): string {
   return globalThis.crypto?.randomUUID?.() || `web-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: {
-      ...(isFormData ? {} : { 'content-type': 'application/json' }),
-      'x-correlation-id': correlationId(),
-      ...(init.headers || {}),
-    },
-  });
-  if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as ApiErrorBody;
-    throw new Error(body.error?.message || `API request failed (${response.status})`);
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: API_TIMEOUT_MS,
+  withCredentials: true,
+  headers: { Accept: 'application/json' },
+});
+
+apiClient.interceptors.request.use((config) => {
+  const headers = config.headers;
+  if (headers) {
+    headers.set('Accept', 'application/json');
+    headers.set('x-correlation-id', correlationId());
+    const isFormData = typeof FormData !== 'undefined' && config.data instanceof FormData;
+    if (!isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   }
-  return response.status === 204 ? (undefined as T) : (await response.json() as T);
+  return config;
+});
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    if (!axios.isAxiosError(error)) return Promise.reject(error);
+    const body = error.response?.data as ApiErrorBody | undefined;
+    const responseHeaders = error.response?.headers;
+    const responseCorrelationId = typeof responseHeaders?.get === 'function'
+      ? responseHeaders.get('x-correlation-id')
+      : responseHeaders?.['x-correlation-id'];
+    return Promise.reject(new ApiClientError(
+      body?.error?.message || `API request failed (${error.response?.status ?? 'network error'})`,
+      error.response?.status,
+      body?.error?.code,
+      typeof responseCorrelationId === 'string' ? responseCorrelationId : undefined,
+    ));
+  },
+);
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (!path.startsWith('/')) throw new Error('API path must be relative to the configured API base URL');
+  const response = await apiClient.request<T>({
+    url: path,
+    method: init.method || 'GET',
+    data: init.body,
+    headers: init.headers ? Object.fromEntries(new Headers(init.headers).entries()) : undefined,
+  });
+  return response.status === 204 ? (undefined as T) : response.data;
 }
 
 export interface AuthAdminApiUser {
@@ -144,7 +188,7 @@ function queryString(query: AdminListQuery): string {
   return value ? `?${value}` : '';
 }
 
-export const authApi = {
+const authApi = {
   signInEmail: (email: string, password: string) => request<AuthSessionResponse>('/api/auth/sign-in/email', {
     method: 'POST',
     body: JSON.stringify({ email, password, rememberMe: false }),
@@ -153,7 +197,7 @@ export const authApi = {
   signOut: () => request<void>('/api/auth/sign-out', { method: 'POST' }),
 };
 
-export const publicVerificationApi = {
+const publicVerificationApi = {
   context: (token: string) => request<PublicVerificationContextApi>(`/public/verifications/${encodeURIComponent(token)}`),
   confirm: (token: string, confirmed: boolean) => request<{ status: string }>(`/public/verifications/${encodeURIComponent(token)}/customer-confirmation`, { method: 'POST', body: JSON.stringify({ confirmed }) }),
   consent: (token: string) => request<{ status: string }>(`/public/verifications/${encodeURIComponent(token)}/consent`, { method: 'POST' }),
@@ -163,7 +207,7 @@ export const publicVerificationApi = {
   addressStatus: (token: string, sameAddress: boolean) => request<{ status: string; sameAddress: boolean }>(`/public/verifications/${encodeURIComponent(token)}/address-status`, { method: 'POST', body: JSON.stringify({ sameAddress }) }),
 };
 
-export const adminApi = {
+const adminApi = {
   me: () => request<AuthAdminApiUser>('/admin/me'),
   dashboard: () => request<AdminDashboardApi>('/admin/dashboard'),
   customers: (query: { page?: number; pageSize?: number; search?: string; status?: string; locationStatus?: 'UNVERIFIED' | 'VERIFIED'; cursor?: string } = {}) => {
@@ -179,6 +223,8 @@ export const adminApi = {
   },
   customer: (id: string) => request<Record<string, unknown>>(`/admin/customers/${encodeURIComponent(id)}`),
   createCustomer: (body: unknown) => request<Record<string, unknown>>('/admin/customers', { method: 'POST', body: JSON.stringify(body) }),
+  updateCustomer: (id: string, body: unknown) => request<{ customer: Record<string, unknown>; address?: Record<string, unknown> }>(`/admin/customers/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteCustomer: (id: string) => request<{ id: string; status: string }>(`/admin/customers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   importCustomers: (file: File) => {
     const body = new FormData();
     body.append('file', file);
@@ -203,4 +249,14 @@ export const adminApi = {
   createCampaign: (body: unknown) => request<Record<string, unknown>>('/admin/campaigns', { method: 'POST', body: JSON.stringify(body) }),
   startCampaign: (id: string) => request<{ id: string; status: string }>(`/admin/campaigns/${encodeURIComponent(id)}/start`, { method: 'POST' }),
   optOutCustomer: (id: string) => request<{ customerId: string; status: string }>(`/admin/customers/${encodeURIComponent(id)}/whatsapp-opt-out`, { method: 'POST' }),
+};
+
+/**
+ * Public API facade. Import `api` from this file instead of maintaining a
+ * separate client per screen.
+ */
+export const api = {
+  ...authApi,
+  ...publicVerificationApi,
+  ...adminApi,
 };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGoogleMapsDeepLink, calculateGeodesicDistanceMeters, evaluateBestGpsSample, isValidCoordinate } from './validationEngine';
+import { buildGoogleMapsDeepLink, calculateGeodesicDistanceMeters, evaluateBestGpsSample, isValidCoordinate } from '../../src/lib/validationEngine';
 
 const samples = [
   { latitude: -6.233812, longitude: 106.809599, accuracyMeters: 12, capturedAt: '2026-08-29T04:25:00Z' },

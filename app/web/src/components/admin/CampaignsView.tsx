@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Megaphone, Play, RefreshCw, Search, Send, Users } from 'lucide-react';
 import { mapApiCustomer, useApp } from '../../context/AppContext';
-import { adminApi } from '../../lib/apiClient';
+import { api } from '../../lib/apiClient';
 import { Customer, VerificationCampaign } from '../../types';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 
@@ -54,7 +54,7 @@ export const CampaignsView: React.FC = () => {
   const loadCampaigns = async () => {
     setLoading(true);
     try {
-      const response = await adminApi.campaigns({ page, pageSize, search: searchTerm });
+      const response = await api.campaigns({ page, pageSize, search: searchTerm });
       setCampaigns(response.items.map(mapCampaign));
       setTotal(response.total);
     } catch (error) {
@@ -68,7 +68,7 @@ export const CampaignsView: React.FC = () => {
   const loadCandidates = async () => {
     setCandidateLoading(true);
     try {
-      const response = await adminApi.customers({ page: candidatePage, pageSize: candidatePageSize, search: customerSearch, locationStatus: 'UNVERIFIED' });
+      const response = await api.customers({ page: candidatePage, pageSize: candidatePageSize, search: customerSearch, locationStatus: 'UNVERIFIED' });
       setCandidateCustomers(response.items.map(mapApiCustomer));
       setCandidateTotal(response.total);
     } catch (error) {
@@ -97,7 +97,7 @@ export const CampaignsView: React.FC = () => {
   const showItems = async (campaignId: string, nextPage = 1, nextPageSize = itemPageSize) => {
     setSelectedCampaignId(campaignId); setItemPage(nextPage); setItemPageSize(nextPageSize);
     try {
-      const response = await adminApi.campaignItems(campaignId, { page: nextPage, pageSize: nextPageSize });
+      const response = await api.campaignItems(campaignId, { page: nextPage, pageSize: nextPageSize });
       setItems(response.items); setItemTotal(response.total);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Status item tidak dapat dimuat.'); }
   };
@@ -109,7 +109,8 @@ export const CampaignsView: React.FC = () => {
         <input value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs dark:border-gray-700 dark:bg-gray-950" placeholder="Nama campaign" />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3"><label className="text-xs text-gray-600 dark:text-gray-300">Ukuran batch worker<input type="number" min={100} max={10000} step={100} value={batchSize} onChange={(event) => setBatchSize(Math.min(10000, Math.max(100, Number(event.target.value) || 100)))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs dark:border-gray-700 dark:bg-gray-950" /></label><label className="text-xs text-gray-600 dark:text-gray-300">Window blast (hari)<input type="number" min={1} max={30} value={sendWindowDays} onChange={(event) => setSendWindowDays(Math.min(30, Math.max(1, Number(event.target.value) || 1)))} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs dark:border-gray-700 dark:bg-gray-950" /></label><div className="col-span-2 flex items-end text-[11px] text-gray-500 sm:col-span-1">Default 7 hari; rate limit provider tetap berlaku.</div></div>
         <div className="flex flex-col gap-2 sm:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /><input value={customerSearch} onChange={(event) => { setCustomerSearch(event.target.value); setCandidatePage(1); }} className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-xs dark:border-gray-700 dark:bg-gray-950" placeholder="Cari nama, ID, atau nomor HP customer..." /></div><button type="button" onClick={() => setCandidatePage(1)} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium dark:border-gray-700">Cari customer</button></div>
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={allSelected} onChange={toggleAll} /> Pilih semua pada halaman ini</label><button type="button" onClick={() => { setSelectAllEligible((value) => !value); setSelected([]); }} className={`rounded-lg border px-2 py-1 font-medium ${selectAllEligible ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-gray-300 text-gray-600'}`}>{selectAllEligible ? 'Semua eligible dipilih' : 'Pilih semua eligible'}</button><span className="font-mono text-gray-500">Terpilih: {selectAllEligible ? candidateTotal.toLocaleString('id-ID') : selected.length} / {candidateTotal.toLocaleString('id-ID')} eligible</span></div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={allSelected} onChange={toggleAll} /> Pilih semua pada halaman ini</label>
+          <span className="font-mono text-gray-500">Terpilih: {selectAllEligible ? candidateTotal.toLocaleString('id-ID') : selected.length} / {candidateTotal.toLocaleString('id-ID')} eligible</span></div>
         <div className="max-h-64 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">{candidateLoading && <p className="p-6 text-center text-xs text-gray-500">Memuat target yang belum terverifikasi...</p>}{!candidateLoading && selectableCustomers.map((customer) => <label key={customer.id} className="flex items-center gap-3 border-b border-gray-100 px-3 py-2 text-xs last:border-0 dark:border-gray-800"><input type="checkbox" checked={selected.includes(customer.id)} disabled={selectAllEligible} onChange={() => setSelected((current) => current.includes(customer.id) ? current.filter((id) => id !== customer.id) : [...current, customer.id])} /><span className="font-medium break-words">{customer.name}</span><span className="ml-auto font-mono text-gray-500 break-all">{customer.externalId}</span></label>)}</div>
         {!candidateLoading && !selectableCustomers.length && <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">Tidak ada customer yang belum terverifikasi GPS pada halaman ini.</p>}
         <TablePagination page={candidatePage} pageSize={candidatePageSize} total={candidateTotal} onPageChange={setCandidatePage} onPageSizeChange={(size) => { setCandidatePageSize(size); setCandidatePage(1); }} disabled={candidateLoading} />

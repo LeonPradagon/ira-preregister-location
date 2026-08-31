@@ -73,6 +73,16 @@ export const customerCreateSchema = z.object({
   }),
 });
 
+export const customerUpdateSchema = z.object({
+  externalId: z.string().trim().min(1).max(128).optional(),
+  name: z.string().trim().min(2).max(255).optional(),
+  phoneE164: z.string().regex(/^\+[1-9]\d{7,14}$/, 'phoneE164 must use E.164 format').optional(),
+  whatsappOptInAt: z.string().datetime().nullable().optional(),
+  whatsappOptInSource: z.string().trim().min(1).max(128).nullable().optional(),
+  status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
+  address: customerCreateSchema.shape.address.optional(),
+});
+
 export const customerListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
@@ -127,6 +137,7 @@ export const validationConfigSchema = z.object({
 export type GpsSample = z.infer<typeof coordinateSchema>;
 export type AddressChangeInput = z.infer<typeof addressChangeSchema>;
 export type CustomerCreateInput = z.infer<typeof customerCreateSchema>;
+export type CustomerUpdateInput = z.infer<typeof customerUpdateSchema>;
 export type CustomerListQueryInput = z.infer<typeof customerListQuerySchema>;
 export type AdminListQueryInput = z.infer<typeof adminListQuerySchema>;
 export type ReviewInput = z.infer<typeof reviewSchema>;

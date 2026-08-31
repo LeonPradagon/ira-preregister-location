@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertTransition } from './state-machine.js';
+import { assertTransition } from '../../../src/modules/verification/state-machine.js';
 
 describe('verification state machine', () => {
   it('allows the customer happy path', () => {

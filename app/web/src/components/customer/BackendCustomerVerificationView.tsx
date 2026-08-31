@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, Compass, Edit3, Loader2, MapPin, ShieldCheck, XCircle } from 'lucide-react';
-import { publicVerificationApi, PublicVerificationContextApi, ServerValidationDecision } from '../../lib/apiClient';
+import { api, PublicVerificationContextApi, ServerValidationDecision } from '../../lib/apiClient';
 
 interface Props { token: string }
 type AddressForm = Record<string, string>;
@@ -16,7 +16,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token }) => {
   const [reminderPreference, setReminderPreference] = useState<'IN_1_HOUR' | 'TONIGHT' | 'TOMORROW_MORNING'>('IN_1_HOUR');
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = async () => setContext(await publicVerificationApi.context(token));
+  const refresh = async () => setContext(await api.context(token));
   useEffect(() => { void refresh().catch((cause) => setError(cause instanceof Error ? cause.message : 'Tautan tidak dapat dibuka.')); }, [token]);
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true); setError(null);
@@ -33,7 +33,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token }) => {
         samples.push({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy, capturedAt: new Date().toISOString() });
         if (index < 2) await new Promise((resolve) => window.setTimeout(resolve, 500));
       }
-      setDecision(await publicVerificationApi.submitLocation(token, samples)); await refresh();
+      setDecision(await api.submitLocation(token, samples)); await refresh();
     } catch (cause) {
       const code = typeof cause === 'object' && cause !== null && 'code' in cause ? Number((cause as { code?: unknown }).code) : undefined;
       if (code === 1) {
@@ -47,10 +47,10 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token }) => {
     event.preventDefault();
     const required = ['province', 'city', 'district', 'subdistrict', 'street', 'houseNumber'];
     if (required.some((field) => !addressForm[field]?.trim())) { setError('Provinsi, kota, kecamatan, kelurahan, jalan, dan nomor rumah wajib diisi.'); return; }
-    await run(() => publicVerificationApi.changeAddress(token, addressForm)); setEditingAddress(false);
+    await run(() => api.changeAddress(token, addressForm)); setEditingAddress(false);
   };
 
-  const scheduleReminder = () => run(() => publicVerificationApi.waitForHome(token, reminderPreference));
+  const scheduleReminder = () => run(() => api.waitForHome(token, reminderPreference));
 
   if (error && !context) return <Panel><XCircle className="mx-auto mb-3 h-12 w-12 text-rose-500" /><h2 className="text-base font-semibold">Tautan tidak valid</h2><p className="mt-2 text-xs text-gray-600">{error}</p></Panel>;
   if (!context) return <Panel><Loader2 className="mx-auto h-8 w-8 animate-spin text-gray-500" /><p className="mt-3 text-xs text-gray-600">Memuat verifikasi...</p></Panel>;
@@ -68,10 +68,10 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token }) => {
       <div><p className="text-xs text-gray-500">Halo, {context.customer.name}</p><h1 className="mt-1 text-lg font-semibold text-gray-900">Konfirmasi lokasi pemasangan</h1></div>
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-xs"><p className="font-medium text-gray-500">Alamat terdaftar</p><p className="mt-2 font-semibold leading-relaxed text-gray-900">{context.address.rawAddress}</p><p className="mt-2 text-gray-500">Telepon: {context.customer.phoneE164}</p></div>
       {error && <div className="space-y-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"><div className="flex gap-2"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>{gpsPermissionDenied && <button type="button" disabled={busy} onClick={() => void captureGps()} className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-medium text-rose-800">Coba minta izin GPS lagi</button>}</div>}
-      {showConfirmation && <div className="space-y-3"><p className="text-sm text-gray-700">Apakah data dan alamat di atas benar milik Anda?</p><div className="grid grid-cols-2 gap-2"><button disabled={busy} onClick={() => void run(() => publicVerificationApi.confirm(token, false))} className="rounded-lg border border-gray-300 px-3 py-3 text-xs font-medium">Bukan data saya</button><button disabled={busy} onClick={() => void run(() => publicVerificationApi.confirm(token, true))} className="rounded-lg bg-gray-900 px-3 py-3 text-xs font-medium text-white">Ya, benar</button></div></div>}
+      {showConfirmation && <div className="space-y-3"><p className="text-sm text-gray-700">Apakah data dan alamat di atas benar milik Anda?</p><div className="grid grid-cols-2 gap-2"><button disabled={busy} onClick={() => void run(() => api.confirm(token, false))} className="rounded-lg border border-gray-300 px-3 py-3 text-xs font-medium">Bukan data saya</button><button disabled={busy} onClick={() => void run(() => api.confirm(token, true))} className="rounded-lg bg-gray-900 px-3 py-3 text-xs font-medium text-white">Ya, benar</button></div></div>}
       {status === 'CUSTOMER_DATA_MISMATCH' && <ResultPanel icon={<XCircle className="h-7 w-7 text-rose-600" />} title="Data perlu diperbarui" text="Silakan ajukan alamat terbaru atau hubungi customer service." />}
-      {status === 'CONSENTED' && <div className="space-y-3"><div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">Kami membutuhkan izin lokasi browser untuk memvalidasi Anda berada di alamat tersebut.</div><button disabled={busy} onClick={() => void run(() => publicVerificationApi.consent(token))} className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-3 text-xs font-medium text-white"><ShieldCheck className="h-4 w-4" />Izinkan dan mulai verifikasi GPS</button></div>}
-      {reminderLinkFlow && <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4"><p className="text-xs font-semibold text-blue-900">Sebelum melanjutkan, apakah Anda masih tinggal di alamat ini?</p><button disabled={busy} onClick={() => void run(() => publicVerificationApi.addressStatus(token, true))} className="w-full rounded-lg bg-gray-900 px-3 py-3 text-xs font-medium text-white">Ya, masih di alamat ini</button><button disabled={busy} onClick={() => { setEditingAddress(true); void run(() => publicVerificationApi.addressStatus(token, false)); }} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-xs font-medium text-gray-800"><Edit3 className="mr-1 inline h-4 w-4" />Tidak, alamat saya berubah</button></div>}
+      {status === 'CONSENTED' && <div className="space-y-3"><div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">Kami membutuhkan izin lokasi browser untuk memvalidasi Anda berada di alamat tersebut.</div><button disabled={busy} onClick={() => void run(() => api.consent(token))} className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-3 text-xs font-medium text-white"><ShieldCheck className="h-4 w-4" />Izinkan dan mulai verifikasi GPS</button></div>}
+      {reminderLinkFlow && <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4"><p className="text-xs font-semibold text-blue-900">Sebelum melanjutkan, apakah Anda masih tinggal di alamat ini?</p><button disabled={busy} onClick={() => void run(() => api.addressStatus(token, true))} className="w-full rounded-lg bg-gray-900 px-3 py-3 text-xs font-medium text-white">Ya, masih di alamat ini</button><button disabled={busy} onClick={() => { setEditingAddress(true); void run(() => api.addressStatus(token, false)); }} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-xs font-medium text-gray-800"><Edit3 className="mr-1 inline h-4 w-4" />Tidak, alamat saya berubah</button></div>}
       {mismatch && !reminderLinkFlow && <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-semibold text-amber-900">Hasil sebelumnya belum sesuai</p><button disabled={busy} onClick={() => void captureGps()} className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-3 text-xs font-medium text-white"><Compass className="h-4 w-4" />Saya sudah di rumah, coba GPS ulang</button><ReminderPicker value={reminderPreference} onChange={setReminderPreference} disabled={busy || context.session.reminderCount >= 3} onSubmit={scheduleReminder} /><button disabled={busy} onClick={() => { setEditingAddress(true); setAddressForm({}); }} className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-3 text-xs font-medium"><Edit3 className="h-4 w-4" />Alamat saya berubah</button></div>}
       {canCapture && !mismatch && !reminderLinkFlow && <div className="space-y-3"><p className="text-xs text-gray-600">Ambil 3 sampel GPS. Sistem akan memilih sampel dengan akurasi terbaik di backend.</p><button disabled={busy} onClick={() => void captureGps()} className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-3 text-xs font-medium text-white">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Compass className="h-4 w-4" />}Ambil 3 sampel lokasi</button><ReminderPicker value={reminderPreference} onChange={setReminderPreference} disabled={busy || context.session.reminderCount >= 3} onSubmit={scheduleReminder} /></div>}
       {editingAddress && <form onSubmit={(event) => void submitAddress(event)} className="space-y-2 rounded-xl border border-gray-200 p-4"><p className="text-sm font-semibold">Ajukan alamat baru</p>{fields.map((field) => <input key={field} required={['province', 'city', 'district', 'subdistrict', 'street', 'houseNumber'].includes(field)} value={addressForm[field] || ''} onChange={(event) => setAddressForm((prev) => ({ ...prev, [field]: event.target.value }))} placeholder={field} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs" />)}<button disabled={busy} className="w-full rounded-lg bg-gray-900 px-3 py-3 text-xs font-medium text-white">Ajukan alamat untuk verifikasi ulang</button></form>}

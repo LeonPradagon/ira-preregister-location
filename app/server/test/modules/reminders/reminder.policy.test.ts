@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextReminderNumber, scheduleReminder, scheduleReminderInTimezone } from './reminder.policy.js';
+import { nextReminderNumber, scheduleReminder, scheduleReminderInTimezone } from '../../../src/modules/reminders/reminder.policy.js';
 
 describe('reminder policy', () => {
   it('caps reminders at three per session', () => {

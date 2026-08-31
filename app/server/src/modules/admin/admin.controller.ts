@@ -1,9 +1,9 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { adminListQuerySchema, customerCreateSchema, customerListQuerySchema, reviewSchema, validationConfigSchema } from '../../common/contracts.js';
+import { adminListQuerySchema, customerCreateSchema, customerListQuerySchema, customerUpdateSchema, reviewSchema, validationConfigSchema } from '../../common/contracts.js';
 import { CurrentAdmin, RequestAdmin } from '../../common/request-user.js';
 import { BetterAuthGuard } from '../../auth/auth.guard.js';
 import { RolesGuard } from '../../auth/roles.guard.js';
@@ -56,6 +56,20 @@ export class AdminController {
   @Get('customers/:id')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
   customer(@Param('id') id: string) { return this.admin.customer(id); }
+
+  @Put('customers/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  async updateCustomer(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string, @Body() body: unknown) {
+    const parsed = customerUpdateSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.admin.updateCustomer(currentAdmin, id, parsed.data);
+  }
+
+  @Delete('customers/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  deleteCustomer(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) {
+    return this.admin.deleteCustomer(currentAdmin, id);
+  }
 
   @Post('customers/:id/whatsapp-opt-out')
   @Roles('SUPER_ADMIN', 'ADMIN')
