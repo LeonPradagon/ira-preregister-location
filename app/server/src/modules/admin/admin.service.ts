@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { auditLogs, customerAddresses, customers, integrationConfigs, integrationOutbox, locationCaptures, reminders, validationResults, verificationReviews, verificationSessions, whatsappDeliveryLogs } from '../../db/schema/index.js';
 import { AddressChangeInput, AdminListQueryInput, CustomerCreateInput, CustomerListQueryInput, ReviewInput, ValidationConfigInput } from '../../common/contracts.js';
@@ -104,10 +104,11 @@ export class AdminService {
     }
     const where = and(...filters);
     const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(customers).where(where);
-    const offset = (query.page - 1) * query.pageSize;
-    const customerRows = await db.select().from(customers).where(where).orderBy(desc(customers.updatedAt), desc(customers.id)).limit(query.pageSize).offset(offset);
+    const customerRows = query.cursor
+      ? await db.select().from(customers).where(and(where, gt(customers.id, query.cursor))).orderBy(asc(customers.id)).limit(query.pageSize)
+      : await db.select().from(customers).where(where).orderBy(desc(customers.updatedAt), desc(customers.id)).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
     const customerIds = customerRows.map((customer) => customer.id);
-    if (!customerIds.length) return { items: [], page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize) };
+    if (!customerIds.length) return { items: [], page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize), nextCursor: null };
 
     const addressRows = await db.select({
       address: customerAddresses,
@@ -128,6 +129,7 @@ export class AdminService {
       pageSize: query.pageSize,
       total: Number(total),
       totalPages: Math.ceil(Number(total) / query.pageSize),
+      nextCursor: query.cursor ? customerRows[customerRows.length - 1]?.id ?? null : null,
     };
   }
 

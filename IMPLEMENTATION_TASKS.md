@@ -26,13 +26,16 @@ Status checklist menunjukkan kondisi repository saat ini. Item provider/infrastr
 - [x] Public token API: context/status, customer confirmation, consent, GPS submit, wait-for-home, address change, dan reminder.
 - [x] Public reminder address check: customer mengonfirmasi alamat masih sama atau memulai address editing sebelum re-verifikasi.
 - [x] Admin API: me, customer, verification, resend/rotate token, manual review, reminders, audit, settings, dan integrations.
-- [x] Campaign API: create/start/list/detail/items dengan batch limit dan delivery status per customer.
+- [x] Campaign API: create/start/list/detail/items dengan batch limit, delivery status per customer, dan validasi target tanpa opt-out aktif.
+- [x] Campaign target discovery: filter server-side untuk alamat `UNVERIFIED`, pagination kandidat, serta seleksi lintas halaman tanpa memuat seluruh dataset ke browser.
+- [x] Campaign scale path: target filter, materialisasi asynchronous berbasis cursor, batch schedule window, dan pagination campaign items.
 - [x] Verification state machine dengan transition policy dan invalid-transition response.
 - [x] Reminder policy maksimal 3 per session, unique session/number, schedule state, dan cancellation rules.
 - [x] Transactional verification flow: capture + result + session + verified address/customer + audit + outbox.
 - [x] Integration ports: geocoding, WhatsApp, dan safe disabled/console adapters.
-- [x] Frontend API client boundary dengan `VITE_API_URL` dan public `/v/:token` route compatibility.
+- [x] Frontend API client boundary dengan `VITE_API_URL`, pagination server-side, filter target campaign, dan public `/v/:token` route compatibility.
 - [x] Public customer page API-only pada `/v/:token`: confirmation, consent, 3 GPS samples, mismatch, wait/retry, proposed address, dan server result.
+- [x] Tampilkan status verifikasi GPS pada daftar customer dan detail alamat berdasarkan `isVerified`/`LOCATION_VALID`.
 - [x] Sambungkan seluruh React UI ke API server; localStorage hanya menyimpan preferensi tema.
 - [x] Tambahkan executable local HTTP integration smoke public/admin terhadap PostgreSQL/PostGIS dan Redis (`scripts/local-smoke.ps1`).
 - [ ] Tambahkan Playwright critical scenarios: confirmation, consent, 3 GPS samples, mismatch, retry, reminder #4 blocked, proposed address, dan manual review.
@@ -41,6 +44,8 @@ Status checklist menunjukkan kondisi repository saat ini. Item provider/infrastr
 
 - [x] Durable Redis/BullMQ workers: pending outbox polling, idempotent event job ID, due-reminder queue, WhatsApp adapter dispatch, retry boundary, dan status update.
 - [x] Campaign invitation worker: asynchronous batch dispatch, rate limit, retry, idempotent claim, dan counter campaign.
+- [x] Delivery status webhook contract, status `DELIVERED`/`READ`/`PROVIDER_UNAVAILABLE`, dan provider message ID tanpa fallback idempotency sebagai sukses.
+- [x] Large-file upload path: disk temporary upload dan streaming row ingestion untuk XLSX/CSV.
 - [x] WhatsApp safety guardrails: opt-out suppression, approved-template payload, per-number cooldown, daily quota, dan provider-error circuit breaker. Gate opt-in aplikasi dinonaktifkan sesuai kebijakan bisnis; dasar persetujuan tetap menjadi tanggung jawab proses bisnis/provider.
 - [x] `location.verified.v1` event contract dengan event ID, correlation ID, dan idempotency key.
 - [x] Safe operational hooks: structured health response, correlation header, domain error code, dan no raw token audit.
@@ -53,9 +58,9 @@ Status checklist menunjukkan kondisi repository saat ini. Item provider/infrastr
 
 ## Current progress
 
-**27 / 32 tasks complete (84%); remaining items are explicitly external/pending**
+**33 / 39 tasks complete (85%); remaining items are explicitly external/pending**
 
-Kode P0/P1/P2 yang dapat divalidasi lokal sudah dibuat dan typed. Migration, seed login-only, worker, bcrypt token hashing, dan smoke API sudah lulus pada PostgreSQL/PostGIS + Redis Docker development. Sisa pekerjaan berada pada Playwright browser E2E, provider credential/contract nyata, observability production, dan Testcontainers CI.
+Kode P0/P1/P2 yang dapat divalidasi lokal sudah dibuat dan typed. Campaign filter/materialization, keyset customer path, disk/stream import, delivery status contract, migration, seed login-only, worker, dan bcrypt token hashing sudah typed serta diuji lokal. Sisa pekerjaan berada pada Playwright browser E2E, provider Mekari/credential/contract nyata, observability production, load test 5–10 juta, dan Testcontainers CI.
 
 ## Validation commands
 

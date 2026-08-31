@@ -32,7 +32,12 @@ import { CustomerImportService } from './modules/imports/customer-import.service
     ValidationConfigService,
     RolesGuard,
     { provide: GeocodingPort, useFactory: () => process.env.GEOCODING_BASE_URL ? new HttpGeocodingAdapter() : new DisabledGeocodingAdapter() },
-    { provide: WhatsAppPort, useFactory: () => process.env.WHATSAPP_BASE_URL && process.env.WHATSAPP_TEMPLATE_NAME ? new HttpWhatsAppAdapter() : process.env.NODE_ENV === 'production' ? new DisabledWhatsAppAdapter() : new ConsoleWhatsAppAdapter() },
+    { provide: WhatsAppPort, useFactory: () => {
+      const provider = process.env.WHATSAPP_PROVIDER ?? (process.env.NODE_ENV === 'production' ? 'disabled' : 'generic');
+      if (provider === 'disabled' || provider === 'mekari') return new DisabledWhatsAppAdapter();
+      if (process.env.WHATSAPP_BASE_URL && process.env.WHATSAPP_TEMPLATE_NAME) return new HttpWhatsAppAdapter();
+      return process.env.NODE_ENV === 'production' ? new DisabledWhatsAppAdapter() : new ConsoleWhatsAppAdapter();
+    } },
   ],
 })
 export class AppModule {}

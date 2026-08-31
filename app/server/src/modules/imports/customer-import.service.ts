@@ -16,7 +16,8 @@ export interface UploadedCustomerFile {
   originalname: string;
   mimetype?: string;
   size: number;
-  buffer: Buffer;
+  buffer?: Buffer;
+  path?: string;
 }
 
 interface ImportScriptResult {
@@ -42,11 +43,11 @@ export class CustomerImportService {
     if (!file.size || !file.buffer?.length) throw new BadRequestException('File upload kosong.');
     if (file.size > MAX_UPLOAD_SIZE_BYTES) throw new BadRequestException('Ukuran file maksimal 50 MB. Gunakan beberapa file batch jika data lebih besar.');
 
-    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'exact-location-customer-import-'));
-    const temporaryPath = join(temporaryDirectory, `customers${extension}`);
+    let temporaryDirectory: string | null = null;
+    const temporaryPath = file.path || join(temporaryDirectory = await mkdtemp(join(tmpdir(), 'exact-location-customer-import-')), `customers${extension}`);
     const scriptPath = resolve(import.meta.dirname, '../../../scripts/import-prereg-xlsx.mjs');
     try {
-      await writeFile(temporaryPath, file.buffer);
+      if (!file.path) await writeFile(temporaryPath, file.buffer!);
       const { stdout } = await execFileAsync(process.execPath, [scriptPath, temporaryPath], {
         cwd: resolve(import.meta.dirname, '../../..'),
         env: process.env,
@@ -75,7 +76,8 @@ export class CustomerImportService {
       const message = childError.stderr?.trim() || childError.message || 'File gagal diproses.';
       throw new BadRequestException(message.replace(/\s+/g, ' ').slice(0, 500));
     } finally {
-      await rm(temporaryDirectory, { recursive: true, force: true });
+      if (file.path) await rm(file.path, { force: true });
+      if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true });
     }
   }
 }

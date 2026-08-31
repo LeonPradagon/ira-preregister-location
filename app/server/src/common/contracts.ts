@@ -19,11 +19,23 @@ export const reminderSchema = z.object({
 
 export const addressStatusSchema = z.object({ sameAddress: z.boolean() });
 
+export const campaignTargetFilterSchema = z.object({
+  locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).default('UNVERIFIED'),
+  status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
+  search: z.string().trim().max(128).default(''),
+});
+
 export const campaignCreateSchema = z.object({
   name: z.string().trim().min(1).max(255),
-  customerIds: z.array(z.string().uuid()).min(1).max(10000).transform((ids) => [...new Set(ids)]),
+  customerIds: z.array(z.string().uuid()).min(1).max(10000).transform((ids) => [...new Set(ids)]).optional(),
+  targetFilter: campaignTargetFilterSchema.optional(),
+  batchSize: z.coerce.number().int().min(100).max(10000).optional(),
+  sendWindowDays: z.coerce.number().int().min(1).max(30).optional(),
   scheduledAt: z.string().datetime().optional(),
   timezone: z.string().trim().min(1).max(64).default('Asia/Jakarta'),
+}).refine((input) => Boolean(input.customerIds?.length) !== Boolean(input.targetFilter), {
+  message: 'Provide either customerIds or targetFilter',
+  path: ['customerIds'],
 });
 
 export const addressChangeSchema = z.object({
@@ -67,6 +79,7 @@ export const customerListQuerySchema = z.object({
   search: z.string().trim().max(128).default(''),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
+  cursor: z.string().uuid().optional(),
 });
 
 export const adminListQuerySchema = z.object({
@@ -75,6 +88,14 @@ export const adminListQuerySchema = z.object({
   search: z.string().trim().max(128).default(''),
   status: z.string().trim().max(64).optional(),
   actor: z.enum(['CUSTOMER', 'SYSTEM', 'ADMIN']).optional(),
+  cursor: z.string().max(255).optional(),
+});
+
+export const whatsappDeliveryStatusSchema = z.object({
+  providerMessageId: z.string().trim().min(1).max(255),
+  status: z.enum(['SENT', 'DELIVERED', 'READ', 'FAILED']),
+  error: z.string().trim().max(500).optional(),
+  occurredAt: z.string().datetime().optional(),
 });
 
 export const reviewSchema = z.object({
@@ -112,6 +133,8 @@ export type ReviewInput = z.infer<typeof reviewSchema>;
 export type ValidationConfigInput = z.infer<typeof validationConfigSchema>;
 export type AddressStatusInput = z.infer<typeof addressStatusSchema>;
 export type CampaignCreateInput = z.infer<typeof campaignCreateSchema>;
+export type CampaignTargetFilterInput = z.infer<typeof campaignTargetFilterSchema>;
+export type WhatsAppDeliveryStatusInput = z.infer<typeof whatsappDeliveryStatusSchema>;
 
 export interface PublicVerificationContext {
   session: {

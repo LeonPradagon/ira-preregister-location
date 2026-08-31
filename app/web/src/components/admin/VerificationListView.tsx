@@ -200,7 +200,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
                             {lastVal.capturedLocation.longitude.toFixed(6)}
                           </div>
                           <div className="text-[10px] text-gray-500 dark:text-gray-400">
-                            Jarak: {lastVal.distanceFromReferenceMeters.toFixed(1)}m • Akurasi: &plusmn;
+                            Jarak: {lastVal.distanceFromReferenceMeters == null ? 'Belum ada referensi' : `${lastVal.distanceFromReferenceMeters.toFixed(1)}m`} • Akurasi: &plusmn;
                             {lastVal.gpsAccuracyM}m
                           </div>
                         </div>

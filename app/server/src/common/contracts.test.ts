@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { customerCreateSchema, locationSamplesSchema } from './contracts.js';
+import { campaignCreateSchema, customerCreateSchema, locationSamplesSchema } from './contracts.js';
 
 describe('API contracts', () => {
   it('accepts a master customer address with E.164 phone and coordinates', () => {
@@ -46,5 +46,16 @@ describe('API contracts', () => {
 
     expect(customer.success).toBe(false);
     expect(samples.success).toBe(false);
+  });
+
+  it('accepts a filter campaign without sending customer IDs to the API', () => {
+    const result = campaignCreateSchema.safeParse({ name: 'All unverified', targetFilter: { locationStatus: 'UNVERIFIED' } });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.targetFilter?.locationStatus).toBe('UNVERIFIED');
+  });
+
+  it('requires exactly one campaign target source', () => {
+    expect(campaignCreateSchema.safeParse({ name: 'Invalid' }).success).toBe(false);
+    expect(campaignCreateSchema.safeParse({ name: 'Invalid', customerIds: [], targetFilter: { locationStatus: 'UNVERIFIED' } }).success).toBe(false);
   });
 });

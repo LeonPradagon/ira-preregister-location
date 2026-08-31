@@ -32,7 +32,9 @@ export class HttpWhatsAppAdapter extends WhatsAppPort {
       });
       if (!response.ok) throw new ServiceUnavailableException(`WhatsApp provider returned HTTP ${response.status}`);
       const body = await response.json() as { providerMessageId?: string; id?: string; acceptedAt?: string };
-      return { providerMessageId: body.providerMessageId || body.id || message.idempotencyKey, acceptedAt: body.acceptedAt || new Date().toISOString() };
+      const providerMessageId = body.providerMessageId || body.id;
+      if (!providerMessageId) throw new ServiceUnavailableException('WhatsApp provider did not return a message id');
+      return { providerMessageId, acceptedAt: body.acceptedAt || new Date().toISOString() };
     } finally {
       clearTimeout(timeout);
     }

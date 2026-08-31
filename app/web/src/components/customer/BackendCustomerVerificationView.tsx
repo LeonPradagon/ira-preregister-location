@@ -12,6 +12,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token }) => {
   const [addressForm, setAddressForm] = useState<AddressForm>({});
   const [editingAddress, setEditingAddress] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [gpsPermissionDenied, setGpsPermissionDenied] = useState(false);
   const [reminderPreference, setReminderPreference] = useState<'IN_1_HOUR' | 'TONIGHT' | 'TOMORROW_MORNING'>('IN_1_HOUR');
   const [error, setError] = useState<string | null>(null);
 
@@ -24,7 +25,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token }) => {
 
   const captureGps = async () => {
     if (!navigator.geolocation) { setError('Browser tidak mendukung pengambilan lokasi.'); return; }
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setGpsPermissionDenied(false);
     try {
       const samples: Array<{ latitude: number; longitude: number; accuracyMeters: number; capturedAt: string }> = [];
       for (let index = 0; index < 3; index += 1) {
@@ -33,7 +34,13 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token }) => {
         if (index < 2) await new Promise((resolve) => window.setTimeout(resolve, 500));
       }
       setDecision(await publicVerificationApi.submitLocation(token, samples)); await refresh();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Sampel GPS tidak dapat diproses.'); } finally { setBusy(false); }
+    } catch (cause) {
+      const code = typeof cause === 'object' && cause !== null && 'code' in cause ? Number((cause as { code?: unknown }).code) : undefined;
+      if (code === 1) {
+        setGpsPermissionDenied(true);
+        setError('Izin lokasi ditolak. Tekan coba lagi. Jika browser tidak menampilkan permintaan izin, buka pengaturan izin lokasi untuk situs ini lalu aktifkan kembali.');
+      } else setError(cause instanceof Error ? cause.message : 'Sampel GPS tidak dapat diproses.');
+    } finally { setBusy(false); }
   };
 
   const submitAddress = async (event: React.FormEvent) => {
@@ -60,7 +67,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token }) => {
     <div className="flex-1 space-y-4 p-5">
       <div><p className="text-xs text-gray-500">Halo, {context.customer.name}</p><h1 className="mt-1 text-lg font-semibold text-gray-900">Konfirmasi lokasi pemasangan</h1></div>
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-xs"><p className="font-medium text-gray-500">Alamat terdaftar</p><p className="mt-2 font-semibold leading-relaxed text-gray-900">{context.address.rawAddress}</p><p className="mt-2 text-gray-500">Telepon: {context.customer.phoneE164}</p></div>
-      {error && <div className="flex gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>}
+      {error && <div className="space-y-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"><div className="flex gap-2"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</div>{gpsPermissionDenied && <button type="button" disabled={busy} onClick={() => void captureGps()} className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-medium text-rose-800">Coba minta izin GPS lagi</button>}</div>}
       {showConfirmation && <div className="space-y-3"><p className="text-sm text-gray-700">Apakah data dan alamat di atas benar milik Anda?</p><div className="grid grid-cols-2 gap-2"><button disabled={busy} onClick={() => void run(() => publicVerificationApi.confirm(token, false))} className="rounded-lg border border-gray-300 px-3 py-3 text-xs font-medium">Bukan data saya</button><button disabled={busy} onClick={() => void run(() => publicVerificationApi.confirm(token, true))} className="rounded-lg bg-gray-900 px-3 py-3 text-xs font-medium text-white">Ya, benar</button></div></div>}
       {status === 'CUSTOMER_DATA_MISMATCH' && <ResultPanel icon={<XCircle className="h-7 w-7 text-rose-600" />} title="Data perlu diperbarui" text="Silakan ajukan alamat terbaru atau hubungi customer service." />}
       {status === 'CONSENTED' && <div className="space-y-3"><div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">Kami membutuhkan izin lokasi browser untuk memvalidasi Anda berada di alamat tersebut.</div><button disabled={busy} onClick={() => void run(() => publicVerificationApi.consent(token))} className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-3 text-xs font-medium text-white"><ShieldCheck className="h-4 w-4" />Izinkan dan mulai verifikasi GPS</button></div>}
@@ -72,7 +79,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token }) => {
       {status === 'REMINDER_LIMIT_REACHED' && !reminderLinkFlow && <ResultPanel icon={<Clock3 className="h-7 w-7 text-amber-600" />} title="Batas pengingat tercapai" text="Silakan kembali ke link ini saat sudah berada di lokasi." />}
       {status === 'ADDRESS_PROPOSED' && <ResultPanel icon={<MapPin className="h-7 w-7 text-blue-600" />} title="Alamat baru diajukan" text="Alamat baru tetap menunggu verifikasi GPS." />}
       {status === 'MANUAL_REVIEW' && <ResultPanel icon={<ShieldCheck className="h-7 w-7 text-amber-600" />} title="Sedang ditinjau tim Ops" text="Data GPS sudah diterima dan membutuhkan pemeriksaan manual." />}
-      {status === 'LOCATION_VALID' && <><ResultPanel icon={<CheckCircle2 className="h-7 w-7 text-emerald-600" />} title="Lokasi berhasil diverifikasi" text="Alamat dan titik lokasi pemasangan telah tervalidasi." />{decision?.capturedLocation && <div className="rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800">Koordinat: <span className="font-mono font-semibold">{decision.capturedLocation.coordinateText}</span><br />Jarak: {decision.distanceFromReferenceMeters.toFixed(1)} meter</div>}</>}
+      {status === 'LOCATION_VALID' && <><ResultPanel icon={<CheckCircle2 className="h-7 w-7 text-emerald-600" />} title="Lokasi berhasil diverifikasi" text="Alamat dan titik lokasi pemasangan telah tervalidasi." />{decision?.capturedLocation && <div className="rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800">Koordinat: <span className="font-mono font-semibold">{decision.capturedLocation.coordinateText}</span>{decision.distanceFromReferenceMeters != null && <><br />Jarak: {decision.distanceFromReferenceMeters.toFixed(1)} meter</>}</div>}</>}
     </div><div className="border-t border-gray-200 bg-gray-50 px-5 py-3 text-center text-[10px] text-gray-500">Jangan bagikan tautan verifikasi ini</div>
   </div></div>;
 };

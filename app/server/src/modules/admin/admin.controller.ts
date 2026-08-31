@@ -1,5 +1,8 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { adminListQuerySchema, customerCreateSchema, customerListQuerySchema, reviewSchema, validationConfigSchema } from '../../common/contracts.js';
 import { CurrentAdmin, RequestAdmin } from '../../common/request-user.js';
 import { BetterAuthGuard } from '../../auth/auth.guard.js';
@@ -36,7 +39,7 @@ export class AdminController {
 
   @Post('customers/import')
   @Roles('SUPER_ADMIN', 'ADMIN')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor('file', { storage: diskStorage({ destination: tmpdir(), filename: (_request, file, callback) => callback(null, `exact-location-upload-${randomUUID()}${file.originalname.slice(file.originalname.lastIndexOf('.'))}`) }), limits: { fileSize: 50 * 1024 * 1024 } }))
   importCustomers(@CurrentAdmin() currentAdmin: RequestAdmin, @UploadedFile() file: UploadedCustomerFile) {
     if (!file) throw new BadRequestException('Pilih file .xlsx atau .csv terlebih dahulu.');
     return this.customerImport.import(currentAdmin, file);

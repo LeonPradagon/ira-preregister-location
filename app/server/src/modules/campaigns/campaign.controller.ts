@@ -37,5 +37,9 @@ export class CampaignController {
 
   @Get(':id/items')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  items(@Param('id') id: string) { return this.campaigns.items(id); }
+  items(@Param('id') id: string, @Query() query: unknown) {
+    const parsed = adminListQuerySchema.safeParse(query);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.campaigns.items(id, parsed.data);
+  }
 }

@@ -1,7 +1,9 @@
 import 'dotenv/config';
 import { existsSync } from 'node:fs';
+import { createReadStream } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { createInterface } from 'node:readline';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import pg from 'pg';
@@ -124,88 +126,106 @@ const parseCsv = (source) => {
   return rows;
 };
 
-const parseRows = (matrix) => {
-  const headers = (matrix[0] ?? []).map((value) => text(value).replace(/^\uFEFF/, ''));
-  if (requiredHeaders.some((header, index) => headers[index] !== header)) {
-    throw new Error(`Unexpected headers. Expected: ${requiredHeaders.join(', ')}`);
-  }
+const createStats = () => ({ rows: 0, duplicatePhones: 0, missingPostalCodes: 0, coverage: new Map(), coveredBts: 0 });
 
-  const rows = [];
+const parseDataRow = (headers, sourceValues, rowNumber, seenIds, seenPhones, stats) => {
+  const values = Object.fromEntries(requiredHeaders.map((header, index) => [header, text(sourceValues[index])]));
+  if (requiredHeaders.some((header, index) => headers[index] !== header)) throw new Error(`Unexpected headers. Expected: ${requiredHeaders.join(', ')}`);
+  if (!values.id || !values.full_name || !values.effective_address || !values.effective_province || !values.effective_kota || !values.effective_kecamatan || !values.effective_kelurahan) throw new Error(`Row ${rowNumber}: required identity/address field is empty`);
+  if (seenIds.has(values.id)) throw new Error(`Row ${rowNumber}: duplicate source id ${values.id}`);
+  seenIds.add(values.id);
+  const phoneE164 = normalizePhone(values.effective_phone_number);
+  if (!/^\+[1-9]\d{7,14}$/.test(phoneE164)) throw new Error(`Row ${rowNumber}: invalid phone ${values.effective_phone_number}`);
+  if (seenPhones.has(phoneE164)) stats.duplicatePhones += 1;
+  seenPhones.add(phoneE164);
+  const longitude = parseCoordinate(values.effective_longitude, 'longitude', rowNumber);
+  const latitude = parseCoordinate(values.effective_latitude, 'latitude', rowNumber);
+  const postalCode = postalCodeFromAddress(values.effective_address);
+  if (postalCode === '00000') stats.missingPostalCodes += 1;
+  const coverageStatus = values.coverage_status || 'UNKNOWN';
+  stats.coverage.set(coverageStatus, (stats.coverage.get(coverageStatus) ?? 0) + 1);
+  if (parseBoolean(values.is_cover_bts)) stats.coveredBts += 1;
+  const sourceCreatedAt = values.created_at ? new Date(values.created_at) : null;
+  if (sourceCreatedAt && Number.isNaN(sourceCreatedAt.getTime())) throw new Error(`Row ${rowNumber}: invalid created_at`);
+  stats.rows += 1;
+  return { sourceId: values.id, externalId: `PREREG-NON-CUSTOMER-${values.id}`, fullName: values.full_name, phoneE164, rawAddress: values.effective_address, landmark: values.address_reference || null, longitude, latitude, province: values.effective_province, city: values.effective_kota, district: values.effective_kecamatan, subdistrict: values.effective_kelurahan, postalCode, street: streetFromAddress(values.effective_address), houseNumber: houseNumberFromAddress(values.effective_address), sourceCreatedAt, coverageStatus, isCoverBts: parseBoolean(values.is_cover_bts), btsName: values.bts_name || null };
+};
+
+const parseCsvLine = (line, delimiter) => {
+  const values = [];
+  let field = '';
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (quoted && character === '"' && line[index + 1] === '"') { field += '"'; index += 1; }
+    else if (character === '"') quoted = !quoted;
+    else if (!quoted && character === delimiter) { values.push(field); field = ''; }
+    else field += character;
+  }
+  if (quoted) throw new Error('CSV contains an unterminated quoted field');
+  values.push(field);
+  return values;
+};
+
+const streamCsvRows = async function* (stats) {
+  const input = createReadStream(sourcePath, { encoding: 'utf8' });
+  const lines = createInterface({ input, crlfDelay: Infinity });
+  let headers = null;
+  let delimiter = ',';
   const seenIds = new Set();
   const seenPhones = new Set();
-  const stats = { rows: 0, duplicatePhones: 0, missingPostalCodes: 0, coverage: new Map(), coveredBts: 0 };
-  for (let rowIndex = 1; rowIndex < matrix.length; rowIndex += 1) {
-    const rowNumber = rowIndex + 1;
-    const sourceValues = matrix[rowIndex] ?? [];
-    const values = Object.fromEntries(requiredHeaders.map((header, index) => [header, text(sourceValues[index])]));
-    if (!values.id || !values.full_name || !values.effective_address || !values.effective_province || !values.effective_kota || !values.effective_kecamatan || !values.effective_kelurahan) {
-      throw new Error(`Row ${rowNumber}: required identity/address field is empty`);
+  let rowNumber = 0;
+  try {
+    for await (const rawLine of lines) {
+      rowNumber += 1;
+      if (!rawLine.trim()) continue;
+      if (!headers) { delimiter = rawLine.includes(';') && !rawLine.includes(',') ? ';' : ','; headers = parseCsvLine(rawLine.replace(/^\uFEFF/, ''), delimiter).map((value) => text(value)); continue; }
+      yield parseDataRow(headers, parseCsvLine(rawLine, delimiter), rowNumber, seenIds, seenPhones, stats);
     }
-    if (seenIds.has(values.id)) throw new Error(`Row ${rowNumber}: duplicate source id ${values.id}`);
-    seenIds.add(values.id);
-    const phoneE164 = normalizePhone(values.effective_phone_number);
-    if (!/^\+[1-9]\d{7,14}$/.test(phoneE164)) throw new Error(`Row ${rowNumber}: invalid phone ${values.effective_phone_number}`);
-    if (seenPhones.has(phoneE164)) stats.duplicatePhones += 1;
-    seenPhones.add(phoneE164);
-    const longitude = parseCoordinate(values.effective_longitude, 'longitude', rowNumber);
-    const latitude = parseCoordinate(values.effective_latitude, 'latitude', rowNumber);
-    const postalCode = postalCodeFromAddress(values.effective_address);
-    if (postalCode === '00000') stats.missingPostalCodes += 1;
-    const coverageStatus = values.coverage_status || 'UNKNOWN';
-    stats.coverage.set(coverageStatus, (stats.coverage.get(coverageStatus) ?? 0) + 1);
-    if (parseBoolean(values.is_cover_bts)) stats.coveredBts += 1;
-    const sourceCreatedAt = values.created_at ? new Date(values.created_at) : null;
-    if (sourceCreatedAt && Number.isNaN(sourceCreatedAt.getTime())) throw new Error(`Row ${rowNumber}: invalid created_at`);
-    rows.push({
-      sourceId: values.id,
-      externalId: `PREREG-NON-CUSTOMER-${values.id}`,
-      fullName: values.full_name,
-      phoneE164,
-      rawAddress: values.effective_address,
-      landmark: values.address_reference || null,
-      longitude,
-      latitude,
-      province: values.effective_province,
-      city: values.effective_kota,
-      district: values.effective_kecamatan,
-      subdistrict: values.effective_kelurahan,
-      postalCode,
-      street: streetFromAddress(values.effective_address),
-      houseNumber: houseNumberFromAddress(values.effective_address),
-      sourceCreatedAt,
-      coverageStatus,
-      isCoverBts: parseBoolean(values.is_cover_bts),
-      btsName: values.bts_name || null,
-    });
-    stats.rows += 1;
+  } finally { lines.close(); input.destroy(); }
+};
+
+const streamXlsxRows = async function* (stats) {
+  const workbook = new ExcelJS.stream.xlsx.WorkbookReader(sourcePath, { worksheets: 'emit', sharedStrings: 'cache', hyperlinks: 'ignore', styles: 'ignore' });
+  const seenIds = new Set();
+  const seenPhones = new Set();
+  for await (const worksheet of workbook) {
+    let headers = null;
+    for await (const row of worksheet) {
+      const values = Array.isArray(row.values) ? row.values.slice(1) : [];
+      const rowNumber = row.number;
+      if (!headers) { headers = values.map((value) => text(value).replace(/^\uFEFF/, '')); continue; }
+      if (values.every((value) => text(value) === '')) continue;
+      yield parseDataRow(headers, values, rowNumber, seenIds, seenPhones, stats);
+    }
+    break;
   }
+};
+
+const parseRows = (matrix) => {
+  const stats = createStats();
+  const headers = (matrix[0] ?? []).map((value) => text(value).replace(/^\uFEFF/, ''));
+  const seenIds = new Set();
+  const seenPhones = new Set();
+  const rows = [];
+  for (let rowIndex = 1; rowIndex < matrix.length; rowIndex += 1) rows.push(parseDataRow(headers, matrix[rowIndex] ?? [], rowIndex + 1, seenIds, seenPhones, stats));
   return { rows, stats };
 };
 
 const readRows = async () => {
-  if (sourcePath.toLowerCase().endsWith('.csv')) {
-    return parseRows(parseCsv(await readFile(sourcePath, 'utf8')));
+  const stats = createStats();
+  if (sourcePath.toLowerCase().endsWith('.csv')) return { rows: streamCsvRows(stats), stats };
+  try { return { rows: streamXlsxRows(stats), stats }; }
+  catch (error) {
+    const workbook = new ExcelJS.Workbook();
+    try { await workbook.xlsx.load(await repairWorkbookXml(await readFile(sourcePath))); }
+    catch { throw error; }
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) throw new Error('Workbook has no worksheet');
+    const matrix = [];
+    for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1) matrix.push(worksheet.getRow(rowNumber).values.slice(1));
+    return parseRows(matrix);
   }
-
-  let workbook = new ExcelJS.Workbook();
-  try {
-    await workbook.xlsx.readFile(sourcePath);
-  } catch (error) {
-    try {
-      const repairedBuffer = await repairWorkbookXml(await readFile(sourcePath));
-      workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(repairedBuffer);
-    } catch {
-      throw error;
-    }
-  }
-  const worksheet = workbook.worksheets[0];
-  if (!worksheet) throw new Error('Workbook has no worksheet');
-  const matrix = [];
-  for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1) {
-    matrix.push(worksheet.getRow(rowNumber).values.slice(1));
-  }
-  return parseRows(matrix);
 };
 
 const stageColumns = ['source_id', 'external_id', 'full_name', 'phone_e164', 'raw_address', 'landmark', 'longitude', 'latitude', 'province', 'city', 'district', 'subdistrict', 'postal_code', 'street', 'house_number', 'source_created_at', 'coverage_status', 'is_cover_bts', 'bts_name'];
@@ -247,7 +267,15 @@ const importRows = async ({ rows, stats }) => {
       is_cover_bts boolean NOT NULL,
       bts_name text
     ) ON COMMIT DROP`);
-    for (let index = 0; index < rows.length; index += batchSize) await insertStageBatch(client, rows.slice(index, index + batchSize));
+    let stageBatch = [];
+    for await (const row of rows) {
+      stageBatch.push(row);
+      if (stageBatch.length >= batchSize) {
+        await insertStageBatch(client, stageBatch);
+        stageBatch = [];
+      }
+    }
+    if (stageBatch.length) await insertStageBatch(client, stageBatch);
 
     const customerResult = await client.query(`
       INSERT INTO customers (external_id, name, phone_e164, status, source_record_id, source_created_at, is_cover_bts, bts_name, coverage_status, source_metadata, created_at, updated_at)

@@ -1,12 +1,45 @@
 import { Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
-import { auditLogs, customers, reminders, verificationCampaignItems } from '../../db/schema/index.js';
+import { auditLogs, customers, reminders, verificationCampaignItems, verificationCampaigns, whatsappDeliveryLogs } from '../../db/schema/index.js';
 import { NotFoundError } from '../../common/errors.js';
 import { hashPhone, isOptOutMessage } from './whatsapp.policy.js';
 
 @Injectable()
 export class WhatsAppComplianceService {
+  async recordDeliveryStatus(input: { providerMessageId: string; status: 'SENT' | 'DELIVERED' | 'READ' | 'FAILED'; error?: string; occurredAt?: string }) {
+    const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date();
+    if (Number.isNaN(occurredAt.getTime())) return { accepted: false, reason: 'INVALID_TIMESTAMP' };
+    const [delivery] = await db.update(whatsappDeliveryLogs).set({
+      status: input.status,
+      deliveredAt: input.status === 'DELIVERED' ? occurredAt : undefined,
+      readAt: input.status === 'READ' ? occurredAt : undefined,
+      failedAt: input.status === 'FAILED' ? occurredAt : undefined,
+      lastError: input.status === 'FAILED' ? input.error ?? 'PROVIDER_REPORTED_FAILURE' : null,
+    }).where(eq(whatsappDeliveryLogs.providerMessageId, input.providerMessageId)).returning({ id: whatsappDeliveryLogs.id });
+    const itemStatus = input.status === 'FAILED' ? 'FAILED' : input.status;
+    const itemSet = input.status === 'DELIVERED'
+      ? { status: itemStatus, deliveredAt: occurredAt, updatedAt: occurredAt }
+      : input.status === 'READ'
+        ? { status: itemStatus, readAt: occurredAt, updatedAt: occurredAt }
+        : input.status === 'FAILED'
+          ? { status: itemStatus, failedAt: occurredAt, lastError: input.error ?? 'PROVIDER_REPORTED_FAILURE', updatedAt: occurredAt }
+          : { status: itemStatus, updatedAt: occurredAt };
+    const [campaignItem] = await db.update(verificationCampaignItems).set(itemSet).where(eq(verificationCampaignItems.providerMessageId, input.providerMessageId)).returning({ id: verificationCampaignItems.id, campaignId: verificationCampaignItems.campaignId });
+    const [reminder] = await db.update(reminders).set({ status: input.status === 'FAILED' ? 'FAILED' : 'SENT' }).where(eq(reminders.providerMessageId, input.providerMessageId)).returning({ id: reminders.id });
+    if (delivery || campaignItem || reminder) {
+      await db.insert(auditLogs).values({ actorUserId: 'whatsapp-webhook', actorName: 'WhatsApp Provider', action: `WHATSAPP_${input.status}`, entityType: campaignItem ? 'CAMPAIGN_ITEM' : reminder ? 'REMINDER' : 'DELIVERY', entityId: campaignItem?.id ?? reminder?.id ?? delivery?.id ?? input.providerMessageId, after: { providerMessageId: input.providerMessageId, status: input.status, error: input.status === 'FAILED' ? input.error : undefined }, timestamp: occurredAt });
+    }
+    if (campaignItem) {
+      const [counts] = await db.select({
+        sent: sql<number>`count(*) filter (where ${verificationCampaignItems.status} in ('SENT', 'DELIVERED', 'READ'))`,
+        failed: sql<number>`count(*) filter (where ${verificationCampaignItems.status} in ('FAILED', 'PROVIDER_UNAVAILABLE', 'OPTED_OUT'))`,
+      }).from(verificationCampaignItems).where(eq(verificationCampaignItems.campaignId, campaignItem.campaignId));
+      await db.update(verificationCampaigns).set({ sentCount: Number(counts.sent), failedCount: Number(counts.failed), updatedAt: occurredAt }).where(eq(verificationCampaigns.id, campaignItem.campaignId));
+    }
+    return { accepted: true, matched: Boolean(delivery || campaignItem || reminder) };
+  }
+
   async recordInbound(phoneE164: string, text: string) {
     if (!isOptOutMessage(text)) return { optedOut: false };
     const [customer] = await db.select({ id: customers.id }).from(customers).where(eq(customers.phoneE164, phoneE164)).limit(1);

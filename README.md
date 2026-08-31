@@ -29,8 +29,8 @@ Browser Admin/Customer -> NestJS API (/v) -> PostgreSQL/PostGIS
 ## Cara kerja aplikasi
 
 1. Admin mengimpor customer dan alamat master melalui Excel/CSV atau menambahkan satu customer melalui UI.
-2. Menu **Campaign Blast** mengambil kandidat secara server-side dengan filter alamat `UNVERIFIED`; pagination mencegah browser hanya melihat 25 customer halaman pertama.
-3. Admin memilih customer per batch, membuat campaign, lalu menekan mulai. Satu batch dibatasi `CAMPAIGN_MAX_BATCH_SIZE` (default 10.000); data besar harus dibuat dalam beberapa batch.
+2. Menu **Campaign Blast** mengambil kandidat secara server-side dengan filter alamat `UNVERIFIED`. Admin dapat memilih sebagian customer atau **Pilih semua eligible** tanpa mengirim jutaan ID ke browser/API.
+3. Campaign menyimpan filter dan materialisasi target dilakukan asynchronous oleh worker per batch (`CAMPAIGN_MATERIALIZATION_BATCH_SIZE`). Window default 7 hari tetap tunduk pada daily quota dan rate limit provider.
 4. Worker mengirim approved WhatsApp template dengan link unik. Raw token hanya dibuat saat link dikirim dan database hanya menyimpan token ID/hash.
 5. Customer membuka link, melihat konteks alamat yang dimasking, mengonfirmasi konteks data/alamat, memberi izin lokasi browser, lalu mengirim 3–5 sampel GPS.
 6. Backend memilih sampel dengan akurasi terbaik dan membandingkannya dengan koordinat/alamat referensi menggunakan aturan validasi. Jika valid, alamat diberi `isVerified=true` dan customer menjadi `VERIFIED`.
@@ -60,7 +60,7 @@ Import batch preregistrasi XLSX dijalankan eksplisit setelah migration:
 npm --workspace app/server run import:prereg -- /absolute/path/to/prereg_non_customer_part_001.xlsx
 ```
 
-Importer memproses batch secara transaksional/idempoten, menormalisasi nomor ke E.164, menyimpan customer sebagai `PENDING_INSTALLATION`, tidak mengisi WhatsApp opt-in, dan menyimpan field BTS/coverage tambahan pada `source_metadata`. Kode pos yang tidak ada di sumber memakai sentinel `00000`; koordinat sumber diberi precision konservatif `STREET` sampai ada metadata precision/provider.
+Importer memproses batch secara transaksional/idempoten dan streaming per baris, menormalisasi nomor ke E.164, menyimpan customer sebagai `PENDING_INSTALLATION`, tidak mengisi WhatsApp opt-in, dan menyimpan field BTS/coverage tambahan pada `source_metadata`. Upload web ditulis ke file sementara, bukan ditahan sebagai buffer API. Kode pos yang tidak ada di sumber memakai sentinel `00000`; koordinat sumber diberi precision konservatif `STREET` sampai ada metadata precision/provider.
 
 Import customer juga tersedia dari UI melalui menu **Pelanggan & Alamat → Import Excel / CSV**. Upload mendukung `.xlsx` dan `.csv` dengan header report yang sama (`id`, `full_name`, `effective_phone_number`, `effective_address`, `address_reference`, koordinat, wilayah, `created_at`, dan field BTS/coverage), maksimal 50 MB per file. Gunakan beberapa file batch untuk data besar; source ID yang sudah ada akan diperbarui secara idempotent. Import tidak mengubah WhatsApp opt-in.
 
@@ -96,7 +96,7 @@ Login UI selalu menggunakan Better Auth melalui API. Gunakan akun seed `admin@ex
 
 ## Campaign blast
 
-Admin dapat membuat campaign dari customer aktif per batch melalui menu **Campaign Blast**. Satu batch dibatasi `CAMPAIGN_MAX_BATCH_SIZE` (default 10.000); untuk volume besar seperti 1,5 juta customer, pecah data menjadi beberapa batch. API membuat session dan item pengiriman, lalu worker BullMQ mengirim undangan WhatsApp dengan rate limit `WHATSAPP_RATE_LIMIT_PER_SECOND`, retry, dan status per item. Raw token hanya dibuat sesaat di worker untuk membentuk link dan tidak disimpan.
+Admin dapat membuat campaign dari customer belum terverifikasi melalui pilihan per halaman atau filter seluruh eligible. API tidak membuat satu transaksi besar: worker melakukan materialisasi target per `batchSize`, membuat token hanya saat item akan dikirim, lalu mengatur jadwal sepanjang `sendWindowDays`. Status item mencakup `PENDING`, `PROCESSING`, `SENT`, `DELIVERED`, `READ`, `FAILED`, `PROVIDER_UNAVAILABLE`, dan `OPTED_OUT`.
 
 Link reminder meminta customer mengonfirmasi apakah masih tinggal di alamat yang sama. Jika alamat berubah, alamat baru berstatus `PROPOSED` sampai lolos validasi GPS. Pilihan reminder tersedia sebagai 1 jam lagi, malam ini, atau besok pagi dan dijadwalkan backend memakai `REMINDER_TIMEZONE`.
 
@@ -104,7 +104,7 @@ Link reminder meminta customer mengonfirmasi apakah masih tinggal di alamat yang
 
 Mode operasional saat ini menganggap customer hasil import eligible untuk campaign/reminder selama tidak memiliki opt-out aktif, sesuai keputusan bisnis bahwa dasar persetujuan sudah tersedia di luar aplikasi. Customer dapat berhenti melalui keyword `STOP`, `UNSUBSCRIBE`, `BERHENTI`, atau opt-out Admin; setelah itu seluruh campaign/reminder diblokir. Blast dan reminder dikirim sebagai approved template melalui adapter provider, bukan free-form text. Status `whatsappOptInAt` tetap disimpan bila tersedia sebagai metadata historis, tetapi bukan lagi syarat pengiriman.
 
-Default pacing dibuat konservatif: maksimal 2 pesan/detik, cooldown 60 menit per nomor, quota global 10.000 pesan per UTC day, dan circuit breaker membuka jeda 15 menit bila error provider mencapai 30% setelah minimal 50 percobaan. Nilai tersebut adalah guardrail internal, bukan jaminan bebas ban; sebelum produksi tetap perlu memastikan dasar hukum/persetujuan bisnis, template approval Meta, pilot bertahap, webhook delivery/quality monitoring, dan runbook pause.
+Default pacing dibuat konservatif: maksimal 2 pesan/detik, cooldown 60 menit per nomor, quota global 10.000 pesan per UTC day, dan circuit breaker membuka jeda 15 menit bila error provider mencapai 30% setelah minimal 50 percobaan. Nilai tersebut adalah guardrail internal, bukan jaminan bebas ban; sebelum produksi tetap perlu memastikan dasar hukum/persetujuan bisnis, template approval Meta, pilot bertahap, webhook delivery/quality monitoring, dan runbook pause. Provider `mekari` sengaja masuk mode disabled sampai adapter, endpoint, credential, template, dan kontrak webhook Qontak dikonfirmasi.
 
 ## Deployment production langkah demi langkah
 
@@ -134,7 +134,8 @@ Variabel paling penting:
 | `BETTER_AUTH_URL` | URL API/backend yang digunakan Better Auth |
 | `WEB_ORIGIN` | Origin frontend yang diizinkan CORS dan cookie |
 | `VITE_API_URL` | URL API publik yang ditanam saat build frontend |
-| `WHATSAPP_*` | Endpoint, API key, template, dan webhook WhatsApp Business |
+| `WHATSAPP_*` | Provider, endpoint, API key, template, webhook, quota, pacing, dan circuit breaker WhatsApp Business |
+| `CAMPAIGN_*` | Ukuran materialisasi, batas batch, queue scan, dan window blast |
 | `GEOCODING_*` | Endpoint, API key, timeout, dan retry geocoding |
 
 Jangan gunakan password seed lokal di production dan jangan commit `deploy/.env`.
@@ -185,7 +186,7 @@ Detail file deployment tersedia di [deploy/README.md](deploy/README.md). Jangan 
 
 Nilai validasi lokasi dapat diubah dari **Validation Settings** atau environment/backend config, termasuk `GPS_MAX_ACCURACY_METERS`, `HOME_RADIUS_METERS`, `STREET_MATCH_THRESHOLD`, `ADDRESS_SCORE_THRESHOLD`, `MAX_LOCATION_ATTEMPTS`, dan `MAX_REMINDERS_PER_SESSION`.
 
-WhatsApp menggunakan template, bukan free-form message. Untuk mengaktifkan provider HTTP, isi `WHATSAPP_BASE_URL`, `WHATSAPP_API_KEY`, `WHATSAPP_TEMPLATE_NAME`, dan `WHATSAPP_TEMPLATE_LANGUAGE`. Tanpa konfigurasi provider di production, adapter disabled mengembalikan kegagalan aman dan item campaign tidak diberi status sukses.
+WhatsApp menggunakan template, bukan free-form message. Provider default `disabled`. Untuk adapter HTTP generic/Meta, isi `WHATSAPP_PROVIDER`, `WHATSAPP_BASE_URL`, `WHATSAPP_API_KEY`, `WHATSAPP_TEMPLATE_NAME`, dan `WHATSAPP_TEMPLATE_LANGUAGE`. `WHATSAPP_PROVIDER=mekari` belum mengaktifkan pengiriman sebelum kontrak API Mekari/Qontak tersedia. Tanpa konfigurasi provider valid di production, adapter disabled mengembalikan kegagalan aman dan item campaign menjadi `PROVIDER_UNAVAILABLE`, bukan sukses. Status delivery diterima melalui `POST /v1/webhooks/whatsapp/status` dengan secret webhook.
 
 Geocoding menggunakan `GEOCODING_BASE_URL` dan optional `GEOCODING_API_KEY`, dengan timeout/retry yang dapat diatur. Tanpa provider nyata, proses yang membutuhkan geocoding mengembalikan error provider secara eksplisit; sistem tidak memalsukan koordinat.
 
@@ -207,12 +208,12 @@ Admin:
 
 - `GET /admin/dashboard` dan `GET /admin/customers`.
 - `POST /admin/customers/import` dan `GET /admin/customers/:id`.
-- `GET/POST /admin/campaigns` dan `POST /admin/campaigns/:id/start`.
-- `GET /admin/campaigns/:id` serta `/items`.
+- `GET/POST /admin/campaigns` dan `POST /admin/campaigns/:id/start`; POST dapat memakai `customerIds` atau `targetFilter` (`locationStatus`, `status`, `search`).
+- `GET /admin/campaigns/:id` serta `/items` dengan pagination.
 - `GET /admin/verifications`, `/reminders`, `/audit-logs`, dan `/outbox`.
 - `POST /admin/verifications/:id/resend`, `/revoke`, `/reminders`, dan `/review`.
 
-Endpoint customer mendukung pagination, pencarian, status customer, dan `locationStatus=UNVERIFIED|VERIFIED`. Hal ini penting untuk dataset besar karena browser tidak memuat seluruh data sekaligus.
+Endpoint customer mendukung pagination, pencarian, status customer, `locationStatus=UNVERIFIED|VERIFIED`, dan cursor UUID untuk pembacaan keyset. Campaign memakai keyset saat materialisasi sehingga browser tidak memuat seluruh data sekaligus.
 
 Perintah verifikasi seluruh workspace:
 

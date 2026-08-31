@@ -18,7 +18,7 @@ export interface ServerValidationDecision {
   result: string;
   reasonCodes: string[];
   bestSample: { latitude: number; longitude: number; accuracyMeters: number; capturedAt: string };
-  distanceFromReferenceMeters: number;
+  distanceFromReferenceMeters: number | null;
   addressScore: number;
   sampleSpreadMeters: number;
   capturedLocation: { latitude: number; longitude: number; accuracyMeters: number; coordinateText: string; googleMapsUrl: string };
@@ -129,6 +129,7 @@ export interface AdminListQuery {
   search?: string;
   status?: string;
   actor?: string;
+  cursor?: string;
 }
 
 function queryString(query: AdminListQuery): string {
@@ -138,6 +139,7 @@ function queryString(query: AdminListQuery): string {
   if (query.search) params.set('search', query.search);
   if (query.status && query.status !== 'ALL') params.set('status', query.status);
   if (query.actor && query.actor !== 'ALL') params.set('actor', query.actor);
+  if (query.cursor) params.set('cursor', query.cursor);
   const value = params.toString();
   return value ? `?${value}` : '';
 }
@@ -164,13 +166,14 @@ export const publicVerificationApi = {
 export const adminApi = {
   me: () => request<AuthAdminApiUser>('/admin/me'),
   dashboard: () => request<AdminDashboardApi>('/admin/dashboard'),
-  customers: (query: { page?: number; pageSize?: number; search?: string; status?: string; locationStatus?: 'UNVERIFIED' | 'VERIFIED' } = {}) => {
+  customers: (query: { page?: number; pageSize?: number; search?: string; status?: string; locationStatus?: 'UNVERIFIED' | 'VERIFIED'; cursor?: string } = {}) => {
     const params = new URLSearchParams();
     if (query.page) params.set('page', String(query.page));
     if (query.pageSize) params.set('pageSize', String(query.pageSize));
     if (query.search) params.set('search', query.search);
     if (query.status && query.status !== 'ALL') params.set('status', query.status);
     if (query.locationStatus) params.set('locationStatus', query.locationStatus);
+    if (query.cursor) params.set('cursor', query.cursor);
     const suffix = params.toString() ? `?${params.toString()}` : '';
     return request<{ items: Array<Record<string, unknown>>; page: number; pageSize: number; total: number; totalPages: number }>(`/admin/customers${suffix}`);
   },
@@ -196,7 +199,7 @@ export const adminApi = {
   outbox: (query: AdminListQuery = {}) => request<AdminPageApi<Record<string, unknown>>>(`/admin/outbox${queryString(query)}`),
   campaigns: (query: AdminListQuery = {}) => request<AdminPageApi<Record<string, unknown>>>(`/admin/campaigns${queryString(query)}`),
   campaign: (id: string) => request<Record<string, unknown>>(`/admin/campaigns/${encodeURIComponent(id)}`),
-  campaignItems: (id: string) => request<Array<Record<string, unknown>>>(`/admin/campaigns/${encodeURIComponent(id)}/items`),
+  campaignItems: (id: string, query: AdminListQuery = {}) => request<AdminPageApi<Record<string, unknown>>>(`/admin/campaigns/${encodeURIComponent(id)}/items${queryString(query)}`),
   createCampaign: (body: unknown) => request<Record<string, unknown>>('/admin/campaigns', { method: 'POST', body: JSON.stringify(body) }),
   startCampaign: (id: string) => request<{ id: string; status: string }>(`/admin/campaigns/${encodeURIComponent(id)}/start`, { method: 'POST' }),
   optOutCustomer: (id: string) => request<{ customerId: string; status: string }>(`/admin/customers/${encodeURIComponent(id)}/whatsapp-opt-out`, { method: 'POST' }),

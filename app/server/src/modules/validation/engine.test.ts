@@ -53,4 +53,13 @@ describe('server validation engine', () => {
     expect(decision.result).not.toBe('LOCATION_VALID');
     expect(decision.reasonCodes).toContain('STREET_MISMATCH');
   });
+
+  it('does not invent a distance or approve a capture when the reference coordinate is null', () => {
+    const decision = decideValidation([
+      sample(-6.884, 107.613), sample(-6.88401, 107.61301, 12, 1), sample(-6.88399, 107.61299, 14, 2),
+    ], { ...address, referenceLatitude: null, referenceLongitude: null }, reverseGeocode, config);
+    expect(decision.result).toBe('MANUAL_REVIEW');
+    expect(decision.distanceFromReferenceMeters).toBeNull();
+    expect(decision.reasonCodes).toContain('REFERENCE_LOCATION_MISSING');
+  });
 });

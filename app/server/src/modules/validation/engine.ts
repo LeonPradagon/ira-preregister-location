@@ -11,8 +11,8 @@ export interface AddressEvidence {
   subdistrict: string;
   street: string;
   houseNumber?: string;
-  referenceLatitude: number;
-  referenceLongitude: number;
+  referenceLatitude: number | null;
+  referenceLongitude: number | null;
   referencePrecision: ReferencePrecision;
 }
 
@@ -38,7 +38,7 @@ export interface ValidationDecision {
   result: ValidationResult;
   bestSample: GpsSample;
   sampleSpreadMeters: number;
-  distanceFromReferenceMeters: number;
+  distanceFromReferenceMeters: number | null;
   addressScore: number;
   provinceMatch: boolean;
   cityMatch: boolean;
@@ -101,7 +101,8 @@ export function decideValidation(
   const bestSample = [...samples].sort((a, b) => a.accuracyMeters - b.accuracyMeters)[0];
   const reasonCodes: string[] = [];
   const spreadMeters = sampleSpreadMeters(samples);
-  const precisionOk = ['EXACT_MASTER', 'ROOFTOP', 'HOUSE'].includes(address.referencePrecision);
+  const hasReferenceLocation = address.referenceLatitude != null && address.referenceLongitude != null;
+  const precisionOk = hasReferenceLocation && ['EXACT_MASTER', 'ROOFTOP', 'HOUSE'].includes(address.referencePrecision);
   const provinceMatch = normalizeAddress(address.province) === normalizeAddress(reverseGeocode.province);
   const cityMatch = normalizeAddress(address.city) === normalizeAddress(reverseGeocode.city);
   const districtMatch = tokenScore(address.district, reverseGeocode.district) >= 0.7;
@@ -111,12 +112,13 @@ export function decideValidation(
     ? normalizeAddress(address.houseNumber) === normalizeAddress(reverseGeocode.houseNumber)
     : undefined;
   const addressScore = Math.round((Number(districtMatch) * 0.2 + Number(subdistrictMatch) * 0.25 + streetScore * 0.35 + (houseNumberMatch === undefined ? 0.2 : Number(houseNumberMatch) * 0.2)) * 100) / 100;
-  const distanceFromReferenceMeters = distanceMeters(bestSample, {
-    latitude: address.referenceLatitude,
-    longitude: address.referenceLongitude,
-  });
+  const distanceFromReferenceMeters = hasReferenceLocation ? distanceMeters(bestSample, {
+    latitude: address.referenceLatitude!,
+    longitude: address.referenceLongitude!,
+  }) : null;
   if (bestSample.accuracyMeters > config.gpsMaxAccuracyMeters) reasonCodes.push('LOW_GPS_ACCURACY');
   if (spreadMeters > 100) reasonCodes.push('GPS_SAMPLE_INCONSISTENT');
+  if (!hasReferenceLocation) reasonCodes.push('REFERENCE_LOCATION_MISSING');
   if (!precisionOk) reasonCodes.push('REFERENCE_LOCATION_NOT_PRECISE');
   if (!provinceMatch) reasonCodes.push('PROVINCE_MISMATCH');
   if (!cityMatch) reasonCodes.push('CITY_MISMATCH');
@@ -124,13 +126,13 @@ export function decideValidation(
   if (!subdistrictMatch) reasonCodes.push('SUBDISTRICT_MISMATCH');
   if (streetScore < config.streetMatchThreshold) reasonCodes.push('STREET_MISMATCH');
   if (houseNumberMatch === false) reasonCodes.push('HOUSE_NUMBER_MISMATCH');
-  if (distanceFromReferenceMeters > config.homeRadiusMeters) reasonCodes.push('HOME_RADIUS_EXCEEDED');
+  if (distanceFromReferenceMeters != null && distanceFromReferenceMeters > config.homeRadiusMeters) reasonCodes.push('HOME_RADIUS_EXCEEDED');
 
   let result: ValidationResult = 'MANUAL_REVIEW';
   if (bestSample.accuracyMeters > config.gpsMaxAccuracyMeters) result = 'LOW_GPS_ACCURACY';
   else if (spreadMeters > 100) result = 'MANUAL_REVIEW';
-  else if (precisionOk && provinceMatch && cityMatch && districtMatch && subdistrictMatch && streetScore >= config.streetMatchThreshold && distanceFromReferenceMeters <= config.homeRadiusMeters && addressScore >= config.addressScoreThreshold) result = 'LOCATION_VALID';
-  else if (distanceFromReferenceMeters > config.homeRadiusMeters || addressScore < 0.6 || !provinceMatch || !cityMatch) result = 'LOCATION_MISMATCH';
+  else if (precisionOk && provinceMatch && cityMatch && districtMatch && subdistrictMatch && streetScore >= config.streetMatchThreshold && distanceFromReferenceMeters != null && distanceFromReferenceMeters <= config.homeRadiusMeters && addressScore >= config.addressScoreThreshold) result = 'LOCATION_VALID';
+  else if ((distanceFromReferenceMeters != null && distanceFromReferenceMeters > config.homeRadiusMeters) || addressScore < 0.6 || !provinceMatch || !cityMatch) result = 'LOCATION_MISMATCH';
   if (result === 'LOCATION_VALID') reasonCodes.push('LOCATION_VALID');
   if (result === 'MANUAL_REVIEW') reasonCodes.push('MANUAL_REVIEW_REQUIRED');
   return { result, bestSample, sampleSpreadMeters: spreadMeters, distanceFromReferenceMeters, addressScore, provinceMatch, cityMatch, districtMatch, subdistrictMatch, streetScore, houseNumberMatch, reasonCodes, referencePrecision: address.referencePrecision, reverseGeocode };

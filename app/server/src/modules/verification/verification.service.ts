@@ -49,7 +49,7 @@ export class VerificationService {
       .where(and(eq(verificationSessions.tokenId, parsed.tokenId), isNull(verificationSessions.revokedAt), gt(verificationSessions.expiresAt, now())))
       .limit(1);
     if (!row) throw new NotFoundError('Verification link is invalid or expired');
-    if (!(await verifyVerificationToken(token, row.session.tokenHash))) throw new NotFoundError('Verification link is invalid or expired');
+    if (!row.session.tokenHash || !(await verifyVerificationToken(token, row.session.tokenHash))) throw new NotFoundError('Verification link is invalid or expired');
     return row;
   }
 
@@ -126,13 +126,12 @@ export class VerificationService {
     const config = await this.validationConfig.get();
     if (row.session.customerConfirmationStatus !== 'CONFIRMED' || !row.session.consentAt) throw new DomainError('Confirmation and consent are required before location capture');
     if (row.session.attemptCount >= config.MAX_LOCATION_ATTEMPTS) throw new DomainError('Maximum GPS attempts reached', 409, 'ATTEMPT_LIMIT_REACHED');
-    if (row.referenceLatitude == null || row.referenceLongitude == null) throw new DomainError('Reference location is not precise enough', 422, 'REFERENCE_LOCATION_NOT_PRECISE');
     const bestSample = [...samples].sort((left, right) => left.accuracyMeters - right.accuracyMeters)[0];
     const geocode = await this.geocoding.reverse(bestSample.latitude, bestSample.longitude);
     const decision = decideValidation(samples, {
       id: row.address.id, province: row.address.province, city: row.address.city, district: row.address.district,
       subdistrict: row.address.subdistrict, street: row.address.street, houseNumber: row.address.houseNumber,
-      referenceLatitude: Number(row.referenceLatitude), referenceLongitude: Number(row.referenceLongitude),
+      referenceLatitude: row.referenceLatitude == null ? null : Number(row.referenceLatitude), referenceLongitude: row.referenceLongitude == null ? null : Number(row.referenceLongitude),
       referencePrecision: row.address.referencePrecision as AddressEvidence['referencePrecision'],
     }, geocode, {
       gpsMaxAccuracyMeters: config.GPS_MAX_ACCURACY_METERS,
@@ -160,11 +159,11 @@ export class VerificationService {
         provinceMatch: decision.provinceMatch, cityMatch: decision.cityMatch, districtMatch: decision.districtMatch,
         subdistrictMatch: decision.subdistrictMatch, streetScore: decision.streetScore.toFixed(3),
         houseNumberMatch: decision.houseNumberMatch, gpsAccuracyMeters: decision.bestSample.accuracyMeters.toFixed(2),
-        distanceToReferenceMeters: decision.distanceFromReferenceMeters.toFixed(2), addressScore: decision.addressScore.toFixed(3),
+        distanceToReferenceMeters: decision.distanceFromReferenceMeters == null ? null : decision.distanceFromReferenceMeters.toFixed(2), addressScore: decision.addressScore.toFixed(3),
         result: decision.result, reasonCodes: decision.reasonCodes, reverseGeocode: decision.reverseGeocode,
         referencePrecision: decision.referencePrecision, engineVersion: '1.0.0', configVersion: 'env',
         capturedLatitude: decision.bestSample.latitude.toFixed(7), capturedLongitude: decision.bestSample.longitude.toFixed(7),
-        referenceLatitude: Number(row.referenceLatitude).toFixed(7), referenceLongitude: Number(row.referenceLongitude).toFixed(7), createdAt: timestamp,
+        referenceLatitude: row.referenceLatitude == null ? null : Number(row.referenceLatitude).toFixed(7), referenceLongitude: row.referenceLongitude == null ? null : Number(row.referenceLongitude).toFixed(7), createdAt: timestamp,
       });
       await tx.update(verificationSessions).set({
         attemptCount: row.session.attemptCount + 1, verificationStatus: nextStatus,

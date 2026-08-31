@@ -301,12 +301,45 @@ ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "whatsapp_opt_out_at" timestamp
 -- statement-breakpoint
 ALTER TABLE "verification_campaigns" ADD COLUMN IF NOT EXISTS "opted_out_count" integer DEFAULT 0 NOT NULL;
 -- statement-breakpoint
+ALTER TABLE "verification_campaigns" ADD COLUMN IF NOT EXISTS "target_filter" jsonb;
+-- statement-breakpoint
+ALTER TABLE "verification_campaigns" ADD COLUMN IF NOT EXISTS "batch_size" integer DEFAULT 1000 NOT NULL;
+-- statement-breakpoint
+ALTER TABLE "verification_campaigns" ADD COLUMN IF NOT EXISTS "send_window_days" integer DEFAULT 7 NOT NULL;
+-- statement-breakpoint
+ALTER TABLE "verification_campaigns" ADD COLUMN IF NOT EXISTS "materialization_cursor" text;
+-- statement-breakpoint
+ALTER TABLE "verification_campaigns" ADD COLUMN IF NOT EXISTS "materialization_complete" boolean DEFAULT true NOT NULL;
+-- statement-breakpoint
+ALTER TABLE "verification_campaigns" ADD COLUMN IF NOT EXISTS "materialized_count" integer DEFAULT 0 NOT NULL;
+-- statement-breakpoint
+ALTER TABLE "verification_sessions" ALTER COLUMN "token_hash" DROP NOT NULL;
+-- statement-breakpoint
+ALTER TABLE "validation_results" ALTER COLUMN "distance_to_reference_meters" DROP NOT NULL;
+-- statement-breakpoint
+ALTER TABLE "validation_results" ALTER COLUMN "reference_latitude" DROP NOT NULL;
+-- statement-breakpoint
+ALTER TABLE "validation_results" ALTER COLUMN "reference_longitude" DROP NOT NULL;
+-- statement-breakpoint
+ALTER TABLE "verification_campaign_items" ADD COLUMN IF NOT EXISTS "processing_started_at" timestamptz;
+-- statement-breakpoint
+ALTER TABLE "verification_campaign_items" ADD COLUMN IF NOT EXISTS "delivered_at" timestamptz;
+-- statement-breakpoint
+ALTER TABLE "verification_campaign_items" ADD COLUMN IF NOT EXISTS "read_at" timestamptz;
+-- statement-breakpoint
+ALTER TABLE "verification_campaign_items" ADD COLUMN IF NOT EXISTS "failed_at" timestamptz;
+-- statement-breakpoint
 CREATE TABLE IF NOT EXISTS "whatsapp_delivery_logs" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "phone_hash" varchar(64) NOT NULL,
   "message_type" varchar(32) NOT NULL,
   "idempotency_key" varchar(255) NOT NULL UNIQUE,
   "provider_message_id" varchar(255),
+  "status" varchar(32) DEFAULT 'ACCEPTED' NOT NULL,
+  "delivered_at" timestamptz,
+  "read_at" timestamptz,
+  "failed_at" timestamptz,
+  "last_error" text,
   "sent_at" timestamptz NOT NULL,
   "created_at" timestamptz DEFAULT now() NOT NULL
 );
@@ -314,6 +347,16 @@ CREATE TABLE IF NOT EXISTS "whatsapp_delivery_logs" (
 CREATE INDEX IF NOT EXISTS "whatsapp_delivery_logs_phone_time_idx" ON "whatsapp_delivery_logs" ("phone_hash", "sent_at");
 -- statement-breakpoint
 CREATE INDEX IF NOT EXISTS "whatsapp_delivery_logs_daily_idx" ON "whatsapp_delivery_logs" ("sent_at");
+-- statement-breakpoint
+CREATE INDEX IF NOT EXISTS "customers_status_updated_id_idx" ON "customers" ("status", "updated_at", "id");
+-- statement-breakpoint
+CREATE INDEX IF NOT EXISTS "customer_addresses_customer_active_verified_idx" ON "customer_addresses" ("customer_id", "is_active", "is_verified", "updated_at");
+-- statement-breakpoint
+CREATE INDEX IF NOT EXISTS "verification_campaign_items_campaign_status_schedule_idx" ON "verification_campaign_items" ("campaign_id", "status", "scheduled_at", "id");
+-- statement-breakpoint
+CREATE INDEX IF NOT EXISTS "verification_campaign_items_provider_id_idx" ON "verification_campaign_items" ("provider_message_id") WHERE "provider_message_id" IS NOT NULL;
+-- statement-breakpoint
+CREATE INDEX IF NOT EXISTS "verification_sessions_customer_updated_idx" ON "verification_sessions" ("customer_id", "updated_at");
 -- statement-breakpoint
 ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "source_metadata" jsonb;
 -- statement-breakpoint

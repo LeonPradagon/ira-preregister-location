@@ -128,7 +128,7 @@ export interface ValidationResult {
   streetScore: number; // 0.0 - 1.0
   houseNumberMatch?: boolean;
   gpsAccuracyM: number;
-  distanceToReferenceM: number;
+  distanceToReferenceM: number | null;
   addressScore: number; // 0.0 - 1.0
   reverseGeocode?: {
     province: string;
@@ -157,8 +157,8 @@ export interface ValidationResult {
     latitude: number;
     longitude: number;
     precision: ReferencePrecision;
-  };
-  distanceFromReferenceMeters: number;
+  } | null;
+  distanceFromReferenceMeters: number | null;
   createdAt: string;
 }
 
@@ -253,8 +253,8 @@ export interface DashboardSummary {
   };
 }
 
-export type CampaignStatus = 'DRAFT' | 'RUNNING' | 'COMPLETED';
-export type CampaignItemStatus = 'PENDING' | 'PROCESSING' | 'SENT' | 'FAILED';
+export type CampaignStatus = 'DRAFT' | 'RUNNING' | 'PAUSED' | 'COMPLETED';
+export type CampaignItemStatus = 'PENDING' | 'PROCESSING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED' | 'PROVIDER_UNAVAILABLE' | 'OPTED_OUT';
 
 export interface VerificationCampaign {
   id: string;
@@ -265,6 +265,11 @@ export interface VerificationCampaign {
   targetCount: number;
   sentCount: number;
   failedCount: number;
+  optedOutCount?: number;
+  batchSize?: number;
+  sendWindowDays?: number;
+  materializedCount?: number;
+  materializationComplete?: boolean;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

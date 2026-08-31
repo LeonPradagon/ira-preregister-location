@@ -35,6 +35,7 @@ export const envSchema = z.object({
   GEOCODING_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
   GEOCODING_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
   WHATSAPP_BASE_URL: optionalUrl,
+  WHATSAPP_PROVIDER: z.enum(['meta', 'generic', 'mekari', 'disabled']).default('disabled'),
   WHATSAPP_API_KEY: optionalString,
   WHATSAPP_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
   WHATSAPP_TEMPLATE_NAME: optionalString,
@@ -46,6 +47,10 @@ export const envSchema = z.object({
   WHATSAPP_CIRCUIT_FAILURE_RATIO: z.coerce.number().min(0).max(1).default(0.3),
   WHATSAPP_CIRCUIT_COOLDOWN_MINUTES: z.coerce.number().int().positive().default(15),
   CAMPAIGN_MAX_BATCH_SIZE: z.coerce.number().int().positive().max(10000).default(10000),
+  CAMPAIGN_DEFAULT_BATCH_SIZE: z.coerce.number().int().positive().max(10000).default(1000),
+  CAMPAIGN_DEFAULT_SEND_WINDOW_DAYS: z.coerce.number().int().positive().max(30).default(7),
+  CAMPAIGN_MATERIALIZATION_BATCH_SIZE: z.coerce.number().int().positive().max(10000).default(1000),
+  CAMPAIGN_QUEUE_SCAN_LIMIT: z.coerce.number().int().positive().max(1000).default(100),
   WHATSAPP_RATE_LIMIT_PER_SECOND: z.coerce.number().int().positive().default(2),
   REMINDER_TIMEZONE: z.string().min(1).default('Asia/Jakarta'),
 });

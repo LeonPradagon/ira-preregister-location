@@ -11,6 +11,7 @@ import { DisabledWhatsAppAdapter } from './integrations/whatsapp/disabled-whatsa
 import { WhatsAppPort } from './integrations/whatsapp/whatsapp.port.js';
 import { hashPhone, nextAllowedSendAt, nextUtcMidnight } from './integrations/whatsapp/whatsapp.policy.js';
 import { createVerificationToken } from './modules/verification/verification-token.js';
+import { CampaignService } from './modules/campaigns/campaign.service.js';
 
 const connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null });
 const outboxQueueName = 'exact-location-outbox';
@@ -19,9 +20,17 @@ const campaignQueueName = 'exact-location-campaigns';
 const outboxQueue = new Queue(outboxQueueName, { connection });
 const reminderQueue = new Queue(reminderQueueName, { connection });
 const campaignQueue = new Queue(campaignQueueName, { connection });
-const whatsapp: WhatsAppPort = process.env.WHATSAPP_BASE_URL && process.env.WHATSAPP_TEMPLATE_NAME ? new HttpWhatsAppAdapter() : process.env.NODE_ENV === 'production' ? new DisabledWhatsAppAdapter() : new ConsoleWhatsAppAdapter();
+const whatsappProvider = process.env.WHATSAPP_PROVIDER ?? (process.env.NODE_ENV === 'production' ? 'disabled' : 'generic');
+const whatsapp: WhatsAppPort = whatsappProvider === 'disabled' || whatsappProvider === 'mekari'
+  ? new DisabledWhatsAppAdapter()
+  : process.env.WHATSAPP_BASE_URL && process.env.WHATSAPP_TEMPLATE_NAME
+    ? new HttpWhatsAppAdapter()
+    : process.env.NODE_ENV === 'production'
+      ? new DisabledWhatsAppAdapter()
+      : new ConsoleWhatsAppAdapter();
 const templateName = process.env.WHATSAPP_TEMPLATE_NAME ?? 'location_verification';
 const templateLanguage = process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? 'id';
+const campaigns = new CampaignService();
 
 const circuitBucket = () => `whatsapp:outcomes:${Math.floor(Date.now() / 60000)}`;
 const isCircuitOpen = async () => (await connection.get('whatsapp:circuit:open')) === '1';
@@ -62,7 +71,7 @@ const dispatchSafety = async (phoneE164: string) => {
 };
 
 const recordDelivery = async (phoneE164: string, messageType: string, idempotencyKey: string, providerMessageId: string) => {
-  await db.insert(whatsappDeliveryLogs).values({ id: randomUUID(), phoneHash: hashPhone(phoneE164), messageType, idempotencyKey, providerMessageId, sentAt: new Date(), createdAt: new Date() }).onConflictDoNothing({ target: whatsappDeliveryLogs.idempotencyKey });
+  await db.insert(whatsappDeliveryLogs).values({ id: randomUUID(), phoneHash: hashPhone(phoneE164), messageType, idempotencyKey, providerMessageId, status: 'ACCEPTED', sentAt: new Date(), createdAt: new Date() }).onConflictDoNothing({ target: whatsappDeliveryLogs.idempotencyKey });
 };
 
 const outboxWorker = new Worker(
@@ -140,19 +149,33 @@ const reminderWorker = new Worker(
 
 const refreshCampaign = async (campaignId: string) => {
   const [counts] = await db.select({
-    sent: sql<number>`count(*) filter (where ${verificationCampaignItems.status} = 'SENT')`,
-    failed: sql<number>`count(*) filter (where ${verificationCampaignItems.status} = 'FAILED')`,
+    sent: sql<number>`count(*) filter (where ${verificationCampaignItems.status} in ('SENT', 'DELIVERED', 'READ'))`,
+    failed: sql<number>`count(*) filter (where ${verificationCampaignItems.status} in ('FAILED', 'PROVIDER_UNAVAILABLE', 'OPTED_OUT'))`,
     pending: sql<number>`count(*) filter (where ${verificationCampaignItems.status} in ('PENDING', 'PROCESSING'))`,
   }).from(verificationCampaignItems).where(eq(verificationCampaignItems.campaignId, campaignId));
-  await db.update(verificationCampaigns).set({ sentCount: Number(counts.sent), failedCount: Number(counts.failed), status: Number(counts.pending) === 0 ? 'COMPLETED' : 'RUNNING', updatedAt: new Date() }).where(eq(verificationCampaigns.id, campaignId));
+  const [campaign] = await db.select({ materializationComplete: verificationCampaigns.materializationComplete, status: verificationCampaigns.status }).from(verificationCampaigns).where(eq(verificationCampaigns.id, campaignId));
+  if (!campaign) return;
+  await db.update(verificationCampaigns).set({ sentCount: Number(counts.sent), failedCount: Number(counts.failed), status: campaign.status === 'PAUSED' ? 'PAUSED' : campaign.materializationComplete && Number(counts.pending) === 0 ? 'COMPLETED' : 'RUNNING', updatedAt: new Date() }).where(eq(verificationCampaigns.id, campaignId));
 };
 
 const campaignWorker = new Worker(
   campaignQueueName,
   async (job) => {
+    if (job.name === 'materialize-campaign') {
+      const campaignId = String(job.data.campaignId);
+      const lockKey = `campaign:materialize:${campaignId}`;
+      const lockToken = randomUUID();
+      if (!(await connection.set(lockKey, lockToken, 'EX', 120, 'NX'))) return;
+      try {
+        await campaigns.materializeNext(campaignId);
+      } finally {
+        if ((await connection.get(lockKey)) === lockToken) await connection.del(lockKey);
+      }
+      return;
+    }
     const itemId = String(job.data.itemId);
     const [claimed] = await db.update(verificationCampaignItems)
-      .set({ status: 'PROCESSING', updatedAt: new Date() })
+      .set({ status: 'PROCESSING', processingStartedAt: new Date(), updatedAt: new Date() })
       .where(and(eq(verificationCampaignItems.id, itemId), eq(verificationCampaignItems.status, 'PENDING')))
       .returning();
     if (!claimed) return;
@@ -173,7 +196,7 @@ const campaignWorker = new Worker(
       return;
     }
     if (target.customer.whatsappOptOutAt) {
-      await db.update(verificationCampaignItems).set({ status: 'FAILED', lastError: 'CUSTOMER_OPTED_OUT', updatedAt: new Date() }).where(eq(verificationCampaignItems.id, itemId));
+      await db.update(verificationCampaignItems).set({ status: 'OPTED_OUT', lastError: 'CUSTOMER_OPTED_OUT', failedAt: new Date(), updatedAt: new Date() }).where(eq(verificationCampaignItems.id, itemId));
       await refreshCampaign(target.item.campaignId);
       return;
     }
@@ -196,7 +219,7 @@ const campaignWorker = new Worker(
       await recordProviderOutcome(false);
       const retryCount = target.item.retryCount + 1;
       const terminal = retryCount >= 3;
-      await db.update(verificationCampaignItems).set({ status: terminal ? 'FAILED' : 'PENDING', retryCount, scheduledAt: terminal ? target.item.scheduledAt : new Date(Date.now() + retryCount * 60 * 1000), lastError: 'PROVIDER_UNAVAILABLE', updatedAt: new Date() }).where(eq(verificationCampaignItems.id, itemId));
+      await db.update(verificationCampaignItems).set({ status: terminal ? 'PROVIDER_UNAVAILABLE' : 'PENDING', retryCount, scheduledAt: terminal ? target.item.scheduledAt : new Date(Date.now() + retryCount * 60 * 1000), lastError: 'PROVIDER_UNAVAILABLE', failedAt: terminal ? new Date() : null, updatedAt: new Date() }).where(eq(verificationCampaignItems.id, itemId));
       if (terminal) await db.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Campaign Worker', action: 'CAMPAIGN_INVITATION_FAILED', entityType: 'CAMPAIGN_ITEM', entityId: itemId, after: { campaignId: target.item.campaignId, retryCount, reason: 'PROVIDER_UNAVAILABLE' }, timestamp: new Date() });
       throw new Error('Campaign invitation provider unavailable');
     } finally {
@@ -221,7 +244,8 @@ const enqueueDueReminders = async () => {
   const due = await db.select({ id: reminders.id, sessionId: reminders.sessionId })
     .from(reminders)
     .where(and(eq(reminders.status, 'SCHEDULED'), lte(reminders.scheduledAt, new Date())))
-    .limit(100);
+    .orderBy(reminders.scheduledAt, reminders.id)
+    .limit(Number(process.env.CAMPAIGN_QUEUE_SCAN_LIMIT ?? 100));
   await Promise.all(due.map((reminder) => reminderQueue.add('send-whatsapp-reminder', { reminderId: reminder.id, sessionId: reminder.sessionId }, { jobId: reminder.id, attempts: 1, removeOnComplete: true, removeOnFail: true })));
 };
 
@@ -230,12 +254,22 @@ const enqueueDueCampaignItems = async () => {
     .from(verificationCampaignItems)
     .innerJoin(verificationCampaigns, eq(verificationCampaigns.id, verificationCampaignItems.campaignId))
     .where(and(eq(verificationCampaignItems.status, 'PENDING'), eq(verificationCampaigns.status, 'RUNNING'), lte(verificationCampaignItems.scheduledAt, new Date())))
-    .limit(100);
+    .orderBy(verificationCampaignItems.scheduledAt, verificationCampaignItems.id)
+    .limit(Number(process.env.CAMPAIGN_QUEUE_SCAN_LIMIT ?? 100));
   await Promise.all(due.map((item) => campaignQueue.add('send-campaign-invitation', { itemId: item.id }, { jobId: item.id, attempts: 1, removeOnComplete: true, removeOnFail: true })));
 };
 
+const enqueueCampaignMaterialization = async () => {
+  const campaignsToMaterialize = await db.select({ id: verificationCampaigns.id, cursor: verificationCampaigns.materializationCursor })
+    .from(verificationCampaigns)
+    .where(and(eq(verificationCampaigns.status, 'RUNNING'), eq(verificationCampaigns.materializationComplete, false)))
+    .orderBy(verificationCampaigns.updatedAt, verificationCampaigns.id)
+    .limit(20);
+  await Promise.all(campaignsToMaterialize.map((campaign) => campaignQueue.add('materialize-campaign', { campaignId: campaign.id }, { jobId: `materialize:${campaign.id}:${campaign.cursor ?? 'start'}`, attempts: 1, removeOnComplete: true, removeOnFail: true })));
+};
+
 const poll = async () => {
-  await Promise.all([enqueuePendingOutbox(), enqueueDueReminders(), enqueueDueCampaignItems()]);
+  await Promise.all([enqueuePendingOutbox(), enqueueDueReminders(), enqueueDueCampaignItems(), enqueueCampaignMaterialization()]);
 };
 const poller = setInterval(() => { void poll().catch(() => console.error('[worker:poller:failed]')); }, 5000);
 void poll().catch(() => console.error('[worker:poller:failed]'));

@@ -16,7 +16,7 @@ interface VerificationMapProps {
   } | null;
   capturedLabel?: string;
   homeRadiusMeters?: number;
-  distanceMeters?: number;
+  distanceMeters?: number | null;
   isMatch?: boolean;
   heightClass?: string;
 }
@@ -189,7 +189,7 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
       const midLng = (referenceLocation.longitude + capturedLocation.longitude) / 2;
 
       const distText =
-        distanceMeters !== undefined
+        distanceMeters != null
           ? `${distanceMeters.toFixed(1)} m`
           : 'Jarak Antar Titik';
 

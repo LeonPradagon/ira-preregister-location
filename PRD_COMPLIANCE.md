@@ -15,16 +15,16 @@ Audit ini membedakan capability backend yang sudah tersedia, demo compatibility,
 | Local runtime | Hybrid Compose: PostgreSQL/PostGIS, Redis, worker di Docker; web/API native host | Ready |
 | Address change | Forward-geocoding port, proposed address, supersede previous proposal | Backend ready; provider pending |
 | Reminder policy | Max 3, unique session/number, scheduled state, cancellation on mismatch/verified | Backend ready |
-| Campaign blast | Batch campaign, per-customer session/item, asynchronous queue, rate limit, retry, delivery counters | Implemented; XLSX batch importer tersedia, orkestrasi multi-file 1,5 juta customer tetap perlu dijalankan per batch |
+| Campaign blast | Filter campaign, asynchronous target materialization, per-customer session/item, rate limit, retry, idempotent claim, delivery counters | Implemented; load test dan provider production tetap pending |
 | Reminder address check | Link reminder meminta konfirmasi alamat; alamat berubah masuk editing/proposed dan wajib re-verifikasi GPS | Implemented |
-| WhatsApp safety | Opt-out suppression, approved-template contract, per-number cooldown, daily quota, Redis rate limit, provider-error circuit breaker | Implemented sesuai mode bisnis tanpa gate opt-in aplikasi; dasar persetujuan/provider Meta dan webhook quality/delivery tetap perlu divalidasi sebelum production |
+| WhatsApp safety | Opt-out suppression, approved-template contract, per-number cooldown, daily quota, Redis rate limit, provider-error circuit breaker, delivery webhook | Implemented untuk normalized contract; adapter/provider Mekari, quality webhook, dan bukti opt-in eksternal tetap perlu divalidasi sebelum production |
 | Manual review | Review contract, RBAC, transactional status/address/customer update, audit | Backend ready |
 | Integration event | `location.verified.v1`, correlation/idempotency key, durable outbox | Backend ready |
-| Worker | Redis/BullMQ outbox, due-reminder queue, campaign invitation queue, idempotent job claim, retryable job boundary, status update | Implemented; provider nyata pending |
+| Worker | Redis/BullMQ outbox, due-reminder queue, campaign materialization/invitation queue, idempotent job claim, retryable job boundary, status update | Implemented; horizontal scaling/load test dan provider nyata pending |
 | Safe adapters | Disabled geocoder returns explicit `503`; console WhatsApp adapter makes no external call | Safe local mode |
 | Frontend integration | `app/web`, public `/v/:token`, confirmation/consent/3 GPS samples/mismatch/wait/retry/address proposal/result, reminder address check, campaign monitoring | Implemented; provider and browser E2E remain external/pending |
 | Deployment layout | Development hybrid Compose plus independent backend/frontend deployment Compose files | Ready |
-| Regression tests | Web API-client/GPS evidence tests plus server contract, configuration, adapter, engine, state, and reminder tests | 24 tests passing; campaign HTTP/provider integration and Playwright production browser run pending |
+| Regression tests | Web API-client/GPS evidence tests plus server contract, configuration, adapter, engine, state, reminder, null-reference, and filter-contract tests | 27 tests passing; campaign HTTP/provider integration and Playwright production browser run pending |
 
 ## Masih perlu diselesaikan untuk production complete
 
@@ -36,7 +36,7 @@ Audit ini membedakan capability backend yang sudah tersedia, demo compatibility,
 | P1 | Geocoding | Adapter provider nyata, timeout/retry, quota, confidence/precision mapping |
 | P1 | WhatsApp | Provider nyata, template approval, delivery callback, retry/dead-letter policy |
 | P1 | WhatsApp quality monitoring | Delivery/read/quality/template/account webhook dan automatic campaign pause belum terhubung ke payload provider nyata |
-| P1 | Campaign import | Importer XLSX batch tersedia; orkestrasi seluruh file 1,5 juta customer dan validasi sumber lanjutan tetap menjadi pekerjaan operasional |
+| P1 | Campaign scale/import | Target filter dan materialisasi keyset per batch sudah tersedia; orkestrasi multi-file, load test 5–10 juta, backup, dan capacity planning tetap pekerjaan operasional |
 | P2 | Observability | OpenTelemetry/Sentry/metrics exporter dan dashboards |
 | P2 | IRA/ticketing | Port dan disabled adapter tersedia; credentials/contract integration belum diaktifkan |
 
@@ -46,3 +46,4 @@ Audit ini membedakan capability backend yang sudah tersedia, demo compatibility,
 - Secret public token di-hash dengan bcrypt; `tokenId` hanya menjadi locator indeks dan bukan secret yang dapat membuka sesi.
 - Resend merotasi token dengan token baru; token lama menjadi invalid karena hash diganti.
 - Console WhatsApp hanya untuk development/test; production tanpa provider nyata ditolak dengan status provider unavailable.
+- `WHATSAPP_PROVIDER=mekari` tidak memakai payload generic secara diam-diam; pengiriman tetap disabled sampai adapter Mekari/Qontak dikonfigurasi.

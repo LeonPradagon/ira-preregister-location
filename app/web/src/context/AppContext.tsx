@@ -8,10 +8,10 @@ import { assertCapability } from '../lib/accessControl';
 import { AdminDashboardApi, adminApi, authApi } from '../lib/apiClient';
 
 const DEFAULT_VALIDATION_CONFIG: ValidationConfig = {
-  GPS_MAX_ACCURACY_METERS: 30, HOME_RADIUS_METERS: 50, STREET_MATCH_THRESHOLD: 0.85,
-  ADDRESS_SCORE_THRESHOLD: 0.8, MAX_LOCATION_ATTEMPTS: 3, MAX_REMINDERS_PER_SESSION: 3,
-  COORDINATE_DISPLAY_DECIMALS: 6, VERIFICATION_TOKEN_TTL_DAYS: 3,
-  REMINDER_DEFAULT_1_HOURS: 1, REMINDER_DEFAULT_2_HOURS: 4, REMINDER_DEFAULT_3_HOURS: 24,
+  GPS_MAX_ACCURACY_METERS: 30, HOME_RADIUS_METERS: 50, STREET_MATCH_THRESHOLD: 0.9,
+  ADDRESS_SCORE_THRESHOLD: 0.9, MAX_LOCATION_ATTEMPTS: 5, MAX_REMINDERS_PER_SESSION: 3,
+  COORDINATE_DISPLAY_DECIMALS: 6, VERIFICATION_TOKEN_TTL_DAYS: 7,
+  REMINDER_DEFAULT_1_HOURS: 2, REMINDER_DEFAULT_2_HOURS: 24, REMINDER_DEFAULT_3_HOURS: 24,
   ENABLE_CUSTOMER_OTP: false, ENABLE_IRA_COVERAGE: false, ENABLE_TICKETING: false,
   ENABLE_MANUAL_REVIEW: true, ENABLE_ADDRESS_EDIT: true, ENABLE_REMINDERS: true,
 };
@@ -59,7 +59,7 @@ interface AppContextType {
   revokeVerificationSession: (sessionId: string) => Promise<void>;
   performManualReview: (sessionId: string, decision: ReviewDecision, reasonCode: string, reviewNote: string) => Promise<void>;
   sendManualReminder: (sessionId: string) => Promise<{ success: boolean; message: string }>;
-  createCampaign: (name: string, customerIds: string[], scheduledAt?: string) => Promise<VerificationCampaign>;
+  createCampaign: (name: string, customerIds?: string[], scheduledAt?: string, options?: { targetFilter?: { locationStatus: 'UNVERIFIED' | 'VERIFIED'; status?: CustomerStatus; search?: string }; batchSize?: number; sendWindowDays?: number }) => Promise<VerificationCampaign>;
   startCampaign: (campaignId: string) => Promise<void>;
   optOutCustomer: (customerId: string) => Promise<void>;
   updateValidationConfig: (newConfig: Partial<ValidationConfig>) => Promise<void>;
@@ -132,9 +132,9 @@ export function mapApiValidationResult(raw: Record<string, unknown>): Validation
   const precision = String(raw.referencePrecision ?? 'UNKNOWN') as ValidationResult['referencePrecision'];
   return {
     ...(raw as unknown as ValidationResult), id: String(raw.id), sessionId: String(raw.sessionId), captureId: String(raw.captureId), addressId: String(raw.addressId),
-    gpsAccuracyM: accuracyMeters, distanceToReferenceM: Number(raw.distanceToReferenceMeters), distanceFromReferenceMeters: Number(raw.distanceToReferenceMeters),
+    gpsAccuracyM: accuracyMeters, distanceToReferenceM: raw.distanceToReferenceMeters == null ? null : Number(raw.distanceToReferenceMeters), distanceFromReferenceMeters: raw.distanceToReferenceMeters == null ? null : Number(raw.distanceToReferenceMeters),
     capturedLocation: { latitude, longitude, accuracyMeters, capturedAt: String(raw.createdAt), coordinateText: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`, googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}` },
-    referenceLocation: { latitude: Number(raw.referenceLatitude), longitude: Number(raw.referenceLongitude), precision }, referencePrecision: precision, createdAt: String(raw.createdAt),
+    referenceLocation: raw.referenceLatitude == null || raw.referenceLongitude == null ? null : { latitude: Number(raw.referenceLatitude), longitude: Number(raw.referenceLongitude), precision }, referencePrecision: precision, createdAt: String(raw.createdAt),
   };
 }
 
@@ -241,7 +241,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const resendInvitation = async (sessionId: string) => { assertCapability(currentAdmin?.role, 'sendVerification'); const result = await adminApi.resend(sessionId); setVerificationSessions((prev) => prev.map((session) => session.id === sessionId ? { ...session, expiresAt: result.expiresAt, updatedAt: new Date().toISOString() } : session)); await refreshDashboard(); };
   const revokeVerificationSession = async (sessionId: string) => { assertCapability(currentAdmin?.role, 'sendVerification'); await adminApi.revoke(sessionId); const now = new Date().toISOString(); setVerificationSessions((prev) => prev.map((session) => session.id === sessionId ? { ...session, revokedAt: now, verificationStatus: 'EXPIRED', updatedAt: now } : session)); setReminders((prev) => prev.map((reminder) => reminder.sessionId === sessionId && reminder.status === 'SCHEDULED' ? { ...reminder, status: 'CANCELLED' } : reminder)); await refreshDashboard(); };
   const sendManualReminder = async (sessionId: string) => { try { assertCapability(currentAdmin?.role, 'sendVerification'); const result = await adminApi.reminder(sessionId); setVerificationSessions((prev) => prev.map((session) => session.id === sessionId ? { ...session, reminderCount: result.reminderNumber, verificationStatus: result.status as VerificationSession['verificationStatus'], updatedAt: new Date().toISOString() } : session)); await refreshDashboard(); return { success: true, message: `Pengingat #${result.reminderNumber} berhasil dijadwalkan.` }; } catch (error) { return { success: false, message: error instanceof Error ? error.message : 'Pengingat gagal dijadwalkan.' }; } };
-  const createCampaign = async (name: string, customerIds: string[], scheduledAt?: string) => { assertCapability(currentAdmin?.role, 'createVerification'); const raw = await adminApi.createCampaign({ name, customerIds, scheduledAt, timezone: 'Asia/Jakarta' }); const campaign = { ...(raw as unknown as VerificationCampaign), id: String(raw.id), name: String(raw.name), status: String(raw.status) as VerificationCampaign['status'], timezone: String(raw.timezone), scheduledAt: String(raw.scheduledAt), targetCount: Number(raw.targetCount), sentCount: Number(raw.sentCount ?? 0), failedCount: Number(raw.failedCount ?? 0), createdBy: String(raw.createdBy ?? ''), createdAt: String(raw.createdAt ?? ''), updatedAt: String(raw.updatedAt ?? '') }; setCampaigns((prev) => [campaign, ...prev]); await refreshDashboard(); return campaign; };
+  const createCampaign = async (name: string, customerIds: string[] = [], scheduledAt?: string, options?: { targetFilter?: { locationStatus: 'UNVERIFIED' | 'VERIFIED'; status?: CustomerStatus; search?: string }; batchSize?: number; sendWindowDays?: number }) => { assertCapability(currentAdmin?.role, 'createVerification'); const raw = await adminApi.createCampaign({ name, ...(options?.targetFilter ? { targetFilter: options.targetFilter } : { customerIds }), batchSize: options?.batchSize ?? 1000, sendWindowDays: options?.sendWindowDays ?? 7, scheduledAt, timezone: 'Asia/Jakarta' }); const campaign = { ...(raw as unknown as VerificationCampaign), id: String(raw.id), name: String(raw.name), status: String(raw.status) as VerificationCampaign['status'], timezone: String(raw.timezone), scheduledAt: String(raw.scheduledAt), targetCount: Number(raw.targetCount), sentCount: Number(raw.sentCount ?? 0), failedCount: Number(raw.failedCount ?? 0), optedOutCount: Number(raw.optedOutCount ?? 0), batchSize: Number(raw.batchSize ?? 1000), sendWindowDays: Number(raw.sendWindowDays ?? 7), materializedCount: Number(raw.materializedCount ?? 0), createdBy: String(raw.createdBy ?? ''), createdAt: String(raw.createdAt ?? ''), updatedAt: String(raw.updatedAt ?? '') }; setCampaigns((prev) => [campaign, ...prev]); await refreshDashboard(); return campaign; };
   const startCampaign = async (campaignId: string) => { assertCapability(currentAdmin?.role, 'createVerification'); await adminApi.startCampaign(campaignId); setCampaigns((prev) => prev.map((campaign) => campaign.id === campaignId ? { ...campaign, status: 'RUNNING' } : campaign)); await refreshDashboard(); };
   const optOutCustomer = async (customerId: string) => { await adminApi.optOutCustomer(customerId); setCustomers((prev) => prev.map((customer) => customer.id === customerId ? { ...customer, whatsappOptOutAt: new Date().toISOString() } : customer)); await refreshDashboard(); };
   const performManualReview = async (sessionId: string, decision: ReviewDecision, reasonCode: string, reviewNote: string) => { assertCapability(currentAdmin?.role, 'manualReview'); const result = await adminApi.review(sessionId, { decision, reasonCode, reviewNote }); setVerificationSessions((prev) => prev.map((session) => session.id === sessionId ? { ...session, verificationStatus: result.status as VerificationSession['verificationStatus'], updatedAt: new Date().toISOString() } : session)); await refreshDashboard(); };

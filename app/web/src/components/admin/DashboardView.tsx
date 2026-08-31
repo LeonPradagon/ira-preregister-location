@@ -401,7 +401,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             {lastVal.capturedLocation.latitude.toFixed(6)}, {lastVal.capturedLocation.longitude.toFixed(6)}
                           </div>
                           <div className="text-[10px] text-gray-500 dark:text-gray-400">
-                            Jarak: {lastVal.distanceFromReferenceMeters.toFixed(1)}m • Akurasi: &plusmn;{lastVal.gpsAccuracyM}m
+                            Jarak: {lastVal.distanceFromReferenceMeters == null ? 'Belum ada referensi' : `${lastVal.distanceFromReferenceMeters.toFixed(1)}m`} • Akurasi: &plusmn;{lastVal.gpsAccuracyM}m
                           </div>
                         </div>
                       ) : (

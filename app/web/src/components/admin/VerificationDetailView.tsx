@@ -520,7 +520,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                   <div className="bg-gray-50 dark:bg-gray-800/60 p-2 rounded-lg border border-gray-200 dark:border-gray-700">
                     <span className="text-gray-500 dark:text-gray-400 text-[10px] block">Jarak ke Rumah:</span>
                     <span className="font-mono font-bold text-gray-900 dark:text-white">
-                      {lastVal?.distanceFromReferenceMeters.toFixed(1)} meter
+                      {lastVal?.distanceFromReferenceMeters == null ? 'Belum ada referensi' : `${lastVal.distanceFromReferenceMeters.toFixed(1)} meter`}
                     </span>
                   </div>
 
@@ -621,39 +621,39 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                     <td className="px-3.5 py-2">{address.street}</td>
                     <td className="px-3.5 py-2">{address.street}</td>
                     <td className="px-3.5 py-2 text-right font-semibold text-emerald-700 dark:text-emerald-400">
-                      {lastVal ? `${Math.round(lastVal.streetScore * 100)}% Match` : '96% Match'}
+                      {lastVal ? `${Math.round(lastVal.streetScore * 100)}% Match` : 'Belum ada hasil'}
                     </td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Akurasi GPS Device</td>
                     <td className="px-3.5 py-2 font-mono text-[11px]">&le; {validationConfig.GPS_MAX_ACCURACY_METERS}m</td>
                     <td className="px-3.5 py-2 font-mono text-[11px]">
-                      &plusmn;{lastVal?.gpsAccuracyM || 12}m
+                      {lastVal ? `±${lastVal.gpsAccuracyM}m` : 'Belum ada tangkapan'}
                     </td>
                     <td
                       className={`px-3.5 py-2 text-right font-semibold ${
-                        (lastVal?.gpsAccuracyM || 12) <= validationConfig.GPS_MAX_ACCURACY_METERS
+                        lastVal != null && lastVal.gpsAccuracyM <= validationConfig.GPS_MAX_ACCURACY_METERS
                           ? 'text-emerald-700 dark:text-emerald-400'
                           : 'text-rose-700 dark:text-rose-400'
                       }`}
                     >
-                      {(lastVal?.gpsAccuracyM || 12) <= validationConfig.GPS_MAX_ACCURACY_METERS ? 'PASS' : 'FAIL'}
+                      {lastVal == null ? '—' : lastVal.gpsAccuracyM <= validationConfig.GPS_MAX_ACCURACY_METERS ? 'PASS' : 'FAIL'}
                     </td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Jarak vs Toleransi Rumah</td>
                     <td className="px-3.5 py-2 font-mono text-[11px]">&le; {validationConfig.HOME_RADIUS_METERS}m</td>
                     <td className="px-3.5 py-2 font-mono text-[11px]">
-                      {lastVal?.distanceFromReferenceMeters.toFixed(1) || '11.2'}m
+                      {lastVal?.distanceFromReferenceMeters == null ? 'Belum ada referensi' : `${lastVal.distanceFromReferenceMeters.toFixed(1)}m`}
                     </td>
                     <td
                       className={`px-3.5 py-2 text-right font-semibold ${
-                        (lastVal?.distanceFromReferenceMeters || 11.2) <= validationConfig.HOME_RADIUS_METERS
+                        lastVal?.distanceFromReferenceMeters != null && lastVal.distanceFromReferenceMeters <= validationConfig.HOME_RADIUS_METERS
                           ? 'text-emerald-700 dark:text-emerald-400'
                           : 'text-rose-700 dark:text-rose-400'
                       }`}
                     >
-                      {(lastVal?.distanceFromReferenceMeters || 11.2) <= validationConfig.HOME_RADIUS_METERS
+                      {lastVal?.distanceFromReferenceMeters != null && lastVal.distanceFromReferenceMeters <= validationConfig.HOME_RADIUS_METERS
                         ? 'PASS'
                         : 'FAIL'}
                     </td>
