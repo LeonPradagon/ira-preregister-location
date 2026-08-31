@@ -5,7 +5,6 @@ services:
       dockerfile: app/web/Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:?VITE_API_URL must be set to the public API URL}
-        VITE_API_MODE: ${VITE_API_MODE:-true}
     ports:
       - "${WEB_PORT:-8080}:80"
     restart: unless-stopped

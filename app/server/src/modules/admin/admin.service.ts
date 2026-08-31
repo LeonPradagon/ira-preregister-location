@@ -1,21 +1,21 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
-import { auditLogs, customerAddresses, customers, integrationConfigs, integrationOutbox, locationCaptures, reminders, validationResults, verificationReviews, verificationSessions } from '../../db/schema/index.js';
-import { AddressChangeInput, CustomerCreateInput, ReviewInput, ValidationConfigInput } from '../../common/contracts.js';
+import { auditLogs, customerAddresses, customers, integrationConfigs, integrationOutbox, locationCaptures, reminders, validationResults, verificationReviews, verificationSessions, whatsappDeliveryLogs } from '../../db/schema/index.js';
+import { AddressChangeInput, AdminListQueryInput, CustomerCreateInput, CustomerListQueryInput, ReviewInput, ValidationConfigInput } from '../../common/contracts.js';
 import { DomainError, NotFoundError } from '../../common/errors.js';
 import { RequestAdmin } from '../../common/request-user.js';
 import { WhatsAppPort } from '../../integrations/whatsapp/whatsapp.port.js';
 import { assertTransition } from '../verification/state-machine.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
-
-const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
+import { hashPhone, nextAllowedSendAt } from '../../integrations/whatsapp/whatsapp.policy.js';
+import { createVerificationToken } from '../verification/verification-token.js';
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
 
 function sanitizeSession(session: typeof verificationSessions.$inferSelect) {
-  const { tokenHash: _tokenHash, ...safeSession } = session;
+  const { tokenId: _tokenId, tokenHash: _tokenHash, ...safeSession } = session;
   return safeSession;
 }
 
@@ -30,8 +30,105 @@ export class AdminService {
     return admin;
   }
 
-  async listCustomers() {
-    return db.select().from(customers).orderBy(desc(customers.updatedAt));
+  async dashboard() {
+    const [customerStats] = await db.select({
+      total: sql<number>`count(*)`,
+      active: sql<number>`count(*) filter (where ${customers.status} = 'ACTIVE')`,
+      verified: sql<number>`count(*) filter (where ${customers.status} = 'VERIFIED')`,
+      whatsappOptedIn: sql<number>`count(*) filter (where ${customers.whatsappOptInAt} is not null and ${customers.whatsappOptOutAt} is null)`,
+      whatsappOptedOut: sql<number>`count(*) filter (where ${customers.whatsappOptOutAt} is not null)`,
+    }).from(customers);
+
+    const [verificationStats] = await db.select({
+      total: sql<number>`count(*)`,
+      invitationsSent: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} <> 'CREATED')`,
+      linksOpened: sql<number>`count(*) filter (where ${verificationSessions.openedAt} is not null)`,
+      customersConfirmed: sql<number>`count(*) filter (where ${verificationSessions.customerConfirmationStatus} = 'CONFIRMED')`,
+      customersMismatch: sql<number>`count(*) filter (where ${verificationSessions.customerConfirmationStatus} = 'MISMATCH')`,
+      gpsCaptured: sql<number>`count(*) filter (where ${verificationSessions.attemptCount} > 0)`,
+      lowGpsAccuracy: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} = 'LOW_GPS_ACCURACY')`,
+      waitingForHome: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} = 'WAITING_FOR_HOME')`,
+      addressChanged: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} in ('ADDRESS_EDITING', 'ADDRESS_PROPOSED'))`,
+      manualReview: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} = 'MANUAL_REVIEW')`,
+      locationValid: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} = 'LOCATION_VALID')`,
+    }).from(verificationSessions);
+
+    const [reminderStats, outboxStats, verificationStatusRows, reminderNumberRows] = await Promise.all([
+      db.select({
+        total: sql<number>`count(*)`,
+        scheduled: sql<number>`count(*) filter (where ${reminders.status} = 'SCHEDULED')`,
+        sent: sql<number>`count(*) filter (where ${reminders.status} = 'SENT')`,
+        failed: sql<number>`count(*) filter (where ${reminders.status} = 'FAILED')`,
+        cancelled: sql<number>`count(*) filter (where ${reminders.status} = 'CANCELLED')`,
+      }).from(reminders),
+      db.select({
+        total: sql<number>`count(*)`,
+        pending: sql<number>`count(*) filter (where ${integrationOutbox.status} = 'PENDING')`,
+        published: sql<number>`count(*) filter (where ${integrationOutbox.status} = 'PUBLISHED')`,
+        failed: sql<number>`count(*) filter (where ${integrationOutbox.status} = 'FAILED')`,
+      }).from(integrationOutbox),
+      db.select({ status: verificationSessions.verificationStatus, total: sql<number>`count(*)` }).from(verificationSessions).groupBy(verificationSessions.verificationStatus),
+      db.select({ reminderNumber: reminders.reminderNumber, total: sql<number>`count(*) filter (where ${reminders.status} = 'SENT')` }).from(reminders).groupBy(reminders.reminderNumber),
+    ]);
+
+    const toNumber = (value: number | string | null | undefined) => Number(value ?? 0);
+    const statusCounts = Object.fromEntries(verificationStatusRows.map((row) => [row.status, toNumber(row.total)]));
+    const byNumber = Object.fromEntries(reminderNumberRows.map((row) => [String(row.reminderNumber), toNumber(row.total)]));
+
+    return {
+      generatedAt: new Date().toISOString(),
+      customers: Object.fromEntries(Object.entries(customerStats).map(([key, value]) => [key, toNumber(value)])),
+      verifications: {
+        ...Object.fromEntries(Object.entries(verificationStats).map(([key, value]) => [key, toNumber(value)])),
+        statusCounts,
+      },
+      reminders: {
+        ...Object.fromEntries(Object.entries(reminderStats[0]).map(([key, value]) => [key, toNumber(value)])),
+        byNumber,
+      },
+      outbox: Object.fromEntries(Object.entries(outboxStats[0]).map(([key, value]) => [key, toNumber(value)])),
+    };
+  }
+
+  async listCustomers(query: CustomerListQueryInput) {
+    const filters = [];
+    if (query.search) {
+      const pattern = `%${query.search}%`;
+      filters.push(or(ilike(customers.name, pattern), ilike(customers.externalId, pattern), ilike(customers.phoneE164, pattern), ilike(customers.sourceRecordId, pattern)));
+    }
+    if (query.status) filters.push(eq(customers.status, query.status));
+    if (query.locationStatus === 'UNVERIFIED') {
+      filters.push(ne(customers.status, 'SUSPENDED'), isNull(customers.whatsappOptOutAt), sql`exists (select 1 from customer_addresses campaign_address where campaign_address.customer_id = ${customers.id} and campaign_address.is_active = true and campaign_address.is_verified = false)`);
+    } else if (query.locationStatus === 'VERIFIED') {
+      filters.push(sql`exists (select 1 from customer_addresses campaign_address where campaign_address.customer_id = ${customers.id} and campaign_address.is_active = true and campaign_address.is_verified = true)`);
+    }
+    const where = and(...filters);
+    const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(customers).where(where);
+    const offset = (query.page - 1) * query.pageSize;
+    const customerRows = await db.select().from(customers).where(where).orderBy(desc(customers.updatedAt), desc(customers.id)).limit(query.pageSize).offset(offset);
+    const customerIds = customerRows.map((customer) => customer.id);
+    if (!customerIds.length) return { items: [], page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize) };
+
+    const addressRows = await db.select({
+      address: customerAddresses,
+      referenceLatitude: sql<number>`ST_Y(${customerAddresses.referenceLocation}::geometry)`,
+      referenceLongitude: sql<number>`ST_X(${customerAddresses.referenceLocation}::geometry)`,
+    }).from(customerAddresses).where(and(inArray(customerAddresses.customerId, customerIds), eq(customerAddresses.isActive, true)));
+    const sessionRows = await db.select().from(verificationSessions).where(inArray(verificationSessions.customerId, customerIds)).orderBy(desc(verificationSessions.updatedAt));
+    const addressByCustomer = new Map<string, Record<string, unknown>>();
+    for (const row of addressRows) if (!addressByCustomer.has(row.address.customerId)) addressByCustomer.set(row.address.customerId, {
+      ...row.address,
+      referenceLocation: row.referenceLatitude == null || row.referenceLongitude == null ? null : { latitude: Number(row.referenceLatitude), longitude: Number(row.referenceLongitude) },
+    });
+    const sessionByCustomer = new Map<string, typeof sessionRows[number]>();
+    for (const session of sessionRows) if (!sessionByCustomer.has(session.customerId)) sessionByCustomer.set(session.customerId, session);
+    return {
+      items: customerRows.map((customer) => ({ ...customer, activeAddress: addressByCustomer.get(customer.id) ?? null, latestVerification: sessionByCustomer.get(customer.id) ? sanitizeSession(sessionByCustomer.get(customer.id)!) : null })),
+      page: query.page,
+      pageSize: query.pageSize,
+      total: Number(total),
+      totalPages: Math.ceil(Number(total) / query.pageSize),
+    };
   }
 
   async createCustomer(admin: RequestAdmin, input: CustomerCreateInput) {
@@ -57,6 +154,8 @@ export class AdminService {
         externalId: input.externalId,
         name: input.name,
         phoneE164: input.phoneE164,
+        whatsappOptInAt: input.whatsappOptInAt ? new Date(input.whatsappOptInAt) : null,
+        whatsappOptInSource: input.whatsappOptInSource ?? null,
         status: input.status,
         createdAt: created,
         updatedAt: created,
@@ -129,23 +228,35 @@ export class AdminService {
     const [customer] = await db.select().from(customers).where(eq(customers.id, customerId));
     const [address] = await db.select().from(customerAddresses).where(and(eq(customerAddresses.id, addressId), eq(customerAddresses.customerId, customerId), eq(customerAddresses.isActive, true)));
     if (!customer || !address) throw new NotFoundError('Customer or active address not found');
-    const rawToken = randomBytes(32).toString('base64url');
+    if (customer.whatsappOptOutAt) throw new DomainError('Customer has opted out of WhatsApp messages', 422, 'CUSTOMER_OPTED_OUT');
+    await this.assertManualSendAllowed(customer.phoneE164);
+    const verificationToken = await createVerificationToken();
     const created = timestamp();
     const [session] = await db.insert(verificationSessions).values({
-      id: randomUUID(), customerId, currentAddressId: addressId, tokenHash: hashToken(rawToken),
+      id: randomUUID(), customerId, currentAddressId: addressId, tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash,
       expiresAt: new Date(Date.now() + config.VERIFICATION_TOKEN_TTL_DAYS * 86400000),
-      verificationStatus: 'MESSAGE_SENT', customerConfirmationStatus: 'UNCONFIRMED', registeredPhoneSnapshot: customer.phoneE164,
+      verificationStatus: 'CREATED', customerConfirmationStatus: 'UNCONFIRMED', registeredPhoneSnapshot: customer.phoneE164,
       createdAt: created, updatedAt: created,
     }).returning();
-    const verificationLink = `${process.env.WEB_ORIGIN}/v/${rawToken}`;
-    await this.whatsapp.send({ phoneE164: customer.phoneE164, messageText: `Halo ${customer.name}, silakan verifikasi lokasi melalui link: ${verificationLink}`, idempotencyKey: `invitation:${session.id}` });
+    const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
+    await this.whatsapp.send({ phoneE164: customer.phoneE164, templateName: process.env.WHATSAPP_TEMPLATE_NAME ?? 'location_verification', templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? 'id', templateParameters: [customer.name, verificationLink], idempotencyKey: `invitation:${session.id}` });
+    await this.recordManualDelivery(customer.phoneE164, `invitation:${session.id}`, 'CAMPAIGN_INVITATION');
+    await db.update(verificationSessions).set({ verificationStatus: 'MESSAGE_SENT', updatedAt: timestamp() }).where(eq(verificationSessions.id, session.id));
     await db.insert(auditLogs).values({ actorUserId: admin.id, actorName: admin.name, action: 'VERIFICATION_CREATED', entityType: 'VERIFICATION_SESSION', entityId: session.id, after: { customerId, addressId, tokenStoredAsHash: true }, timestamp: created });
     return { sessionId: session.id, verificationLink, expiresAt: session.expiresAt };
   }
 
-  async verifications() {
-    const rows = await db.select({ session: verificationSessions, customer: customers }).from(verificationSessions).innerJoin(customers, eq(customers.id, verificationSessions.customerId)).orderBy(desc(verificationSessions.updatedAt));
-    return rows.map(({ session, customer }) => ({ session: sanitizeSession(session), customer }));
+  async verifications(query: AdminListQueryInput) {
+    const filters = [];
+    if (query.search) {
+      const pattern = `%${query.search}%`;
+      filters.push(or(sql`${verificationSessions.id}::text ilike ${pattern}`, ilike(customers.name, pattern), ilike(customers.externalId, pattern), ilike(verificationSessions.registeredPhoneSnapshot, pattern)));
+    }
+    if (query.status) filters.push(eq(verificationSessions.verificationStatus, query.status as typeof verificationSessions.$inferSelect.verificationStatus));
+    const where = and(...filters);
+    const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(verificationSessions).innerJoin(customers, eq(customers.id, verificationSessions.customerId)).where(where);
+    const rows = await db.select({ session: verificationSessions, customer: customers }).from(verificationSessions).innerJoin(customers, eq(customers.id, verificationSessions.customerId)).where(where).orderBy(desc(verificationSessions.updatedAt)).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
+    return { items: rows.map(({ session, customer }) => ({ session: sanitizeSession(session), customer })), page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize) };
   }
 
   async verification(id: string) {
@@ -179,12 +290,16 @@ export class AdminService {
     const detail = await this.verification(id);
     if (detail.session.revokedAt || detail.session.expiresAt <= timestamp()) throw new DomainError('Session is expired or revoked', 409, 'SESSION_EXPIRED');
     if (detail.session.verificationStatus === 'LOCATION_VALID') throw new DomainError('Verified sessions cannot be resent', 409, 'SESSION_COMPLETED');
-    const rawToken = randomBytes(32).toString('base64url');
+    if (detail.customer.whatsappOptOutAt) throw new DomainError('Customer has opted out of WhatsApp messages', 422, 'CUSTOMER_OPTED_OUT');
+    await this.assertManualSendAllowed(detail.customer.phoneE164);
+    const verificationToken = await createVerificationToken();
     const expiresAt = new Date(Date.now() + config.VERIFICATION_TOKEN_TTL_DAYS * 86400000);
     const updatedAt = timestamp();
-    await db.update(verificationSessions).set({ tokenHash: hashToken(rawToken), expiresAt, updatedAt }).where(eq(verificationSessions.id, id));
-    const verificationLink = `${process.env.WEB_ORIGIN}/v/${rawToken}`;
-    await this.whatsapp.send({ phoneE164: detail.customer.phoneE164, messageText: `Halo ${detail.customer.name}, berikut link verifikasi lokasi terbaru: ${verificationLink}`, idempotencyKey: `invitation-resend:${id}:${hashToken(rawToken)}` });
+    await db.update(verificationSessions).set({ tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, expiresAt, updatedAt }).where(eq(verificationSessions.id, id));
+    const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
+    const idempotencyKey = `invitation-resend:${id}:${verificationToken.tokenId}`;
+    await this.whatsapp.send({ phoneE164: detail.customer.phoneE164, templateName: process.env.WHATSAPP_TEMPLATE_NAME ?? 'location_verification', templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? 'id', templateParameters: [detail.customer.name, verificationLink], idempotencyKey });
+    await this.recordManualDelivery(detail.customer.phoneE164, idempotencyKey, 'INVITATION_RESEND');
     await db.insert(auditLogs).values({ actorUserId: admin.id, actorName: admin.name, action: 'INVITATION_RESENT', entityType: 'VERIFICATION_SESSION', entityId: id, after: { tokenRotated: true, tokenStoredAsHash: true, expiresAt: expiresAt.toISOString() }, timestamp: updatedAt });
     return { status: 'SENT', verificationLink, expiresAt };
   }
@@ -222,17 +337,11 @@ export class AdminService {
     if (detail.session.verificationStatus === 'LOCATION_VALID' || detail.session.verificationStatus === 'EXPIRED') throw new DomainError('Completed sessions cannot receive reminders', 409, 'SESSION_COMPLETED');
     if (reminderNumber > max) throw new DomainError('Reminder limit reached', 409, 'REMINDER_LIMIT_REACHED');
 
-    // The raw token is never persisted. Rotate it and put the generated link
-    // into the durable reminder record so the worker can deliver it safely.
-    const rawToken = randomBytes(32).toString('base64url');
-    const expiresAt = new Date(Date.now() + config.VERIFICATION_TOKEN_TTL_DAYS * 86400000);
     const scheduledAt = timestamp();
     const nextStatus = reminderNumber >= max ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME';
     assertTransition(detail.session.verificationStatus, nextStatus);
-    const verificationLink = `${process.env.WEB_ORIGIN}/v/${rawToken}`;
-    const messageText = `Halo ${detail.customer.name}, ini pengingat verifikasi lokasi Anda: ${verificationLink}`;
     await db.transaction(async (tx) => {
-      await tx.update(verificationSessions).set({ tokenHash: hashToken(rawToken), expiresAt, reminderCount: reminderNumber, verificationStatus: nextStatus, updatedAt: scheduledAt }).where(eq(verificationSessions.id, id));
+      await tx.update(verificationSessions).set({ reminderCount: reminderNumber, verificationStatus: nextStatus, updatedAt: scheduledAt }).where(eq(verificationSessions.id, id));
       await tx.insert(reminders).values({
         id: randomUUID(),
         sessionId: id,
@@ -240,7 +349,7 @@ export class AdminService {
         channel: 'WHATSAPP',
         scheduledAt,
         status: 'SCHEDULED',
-        messageText,
+        messageText: `Halo ${detail.customer.name}, ini pengingat verifikasi lokasi Anda. Pengingat ${reminderNumber} dari ${max}. Tautan dibuat saat pengiriman.`,
         retryCount: 0,
         createdAt: scheduledAt,
       });
@@ -254,7 +363,7 @@ export class AdminService {
         timestamp: scheduledAt,
       });
     });
-    return { status: 'SCHEDULED', reminderNumber, verificationLink, expiresAt };
+    return { status: 'SCHEDULED', reminderNumber };
   }
 
   async review(admin: RequestAdmin, id: string, input: ReviewInput) {
@@ -262,23 +371,51 @@ export class AdminService {
     const detail = await this.verification(id);
     const nextStatus = input.decision === 'APPROVE' ? 'LOCATION_VALID' : input.decision === 'REJECT' ? 'LOCATION_MISMATCH' : input.decision === 'REQUEST_RETRY' ? 'GPS_CAPTURING' : 'ADDRESS_EDITING';
     assertTransition(detail.session.verificationStatus, nextStatus);
+    if (input.decision === 'APPROVE' && !detail.results[0]) throw new DomainError('Approval requires a recorded GPS validation result', 409, 'VALIDATION_RESULT_REQUIRED');
     const reviewedAt = timestamp();
     await db.transaction(async (tx) => {
       await tx.insert(verificationReviews).values({ id: randomUUID(), sessionId: id, reviewerUserId: admin.id, decision: input.decision, reasonCode: input.reasonCode, reviewNote: input.reviewNote, engineResultSnapshot: detail.results[0] ?? null, beforeStatus: detail.session.verificationStatus, afterStatus: nextStatus, reviewedAt, createdAt: reviewedAt });
       await tx.update(verificationSessions).set({ verificationStatus: nextStatus, locationVerifiedAt: input.decision === 'APPROVE' ? reviewedAt : null, completedAt: input.decision === 'APPROVE' ? reviewedAt : null, updatedAt: reviewedAt }).where(eq(verificationSessions.id, id));
-      await tx.insert(auditLogs).values({ actorUserId: admin.id, actorName: admin.name, action: 'MANUAL_REVIEW_COMPLETED', entityType: 'REVIEW', entityId: id, before: { status: detail.session.verificationStatus }, after: { status: nextStatus, decision: input.decision, reasonCode: input.reasonCode }, reason: input.reviewNote, timestamp: reviewedAt });
+      await tx.insert(auditLogs).values({ actorUserId: admin.id, actorName: admin.name, action: input.decision === 'APPROVE' ? 'MANUAL_REVIEW_APPROVED' : input.decision === 'REJECT' ? 'MANUAL_REVIEW_REJECTED' : 'MANUAL_REVIEW_COMPLETED', entityType: 'REVIEW', entityId: id, before: { status: detail.session.verificationStatus }, after: { status: nextStatus, decision: input.decision, reasonCode: input.reasonCode }, reason: input.reviewNote, timestamp: reviewedAt });
       if (input.decision === 'APPROVE') {
+        await tx.update(customerAddresses).set({ addressStatus: 'SUPERSEDED', addressType: 'HISTORICAL', isActive: false, validTo: reviewedAt, updatedAt: reviewedAt }).where(and(eq(customerAddresses.customerId, detail.customer.id), eq(customerAddresses.isActive, true), ne(customerAddresses.id, detail.address.id)));
         await tx.update(customerAddresses).set({ isVerified: true, addressStatus: 'VERIFIED', addressType: 'VERIFIED_INSTALLATION', updatedAt: reviewedAt }).where(eq(customerAddresses.id, detail.address.id));
         await tx.update(customers).set({ status: 'VERIFIED', updatedAt: reviewedAt }).where(eq(customers.id, detail.customer.id));
         const eventId = randomUUID();
-        await tx.insert(integrationOutbox).values({ id: randomUUID(), eventId, eventType: 'location.verified.v1', aggregateType: 'VERIFICATION_SESSION', aggregateId: id, correlationId: id, idempotencyKey: `location-verified:${id}`, payload: { eventId, eventType: 'location.verified.v1', occurredAt: reviewedAt.toISOString(), correlationId: id, idempotencyKey: `location-verified:${id}`, customer: { externalId: detail.customer.externalId, name: detail.customer.name }, verifiedAddress: { addressId: detail.address.id, fullAddress: detail.address.rawAddress }, verifiedLocation: { latitude: Number(detail.results[0]?.capturedLatitude ?? 0), longitude: Number(detail.results[0]?.capturedLongitude ?? 0), accuracyMeters: Number(detail.results[0]?.gpsAccuracyMeters ?? 0), verifiedAt: reviewedAt.toISOString() } }, status: 'PENDING', attemptCount: 0, createdAt: reviewedAt, updatedAt: reviewedAt }).onConflictDoNothing({ target: integrationOutbox.idempotencyKey });
+        await tx.insert(integrationOutbox).values({ id: randomUUID(), eventId, eventType: 'location.verified.v1', aggregateType: 'VERIFICATION_SESSION', aggregateId: id, correlationId: id, idempotencyKey: `location-verified:${id}`, payload: { eventId, eventType: 'location.verified.v1', occurredAt: reviewedAt.toISOString(), correlationId: id, idempotencyKey: `location-verified:${id}`, customer: { externalId: detail.customer.externalId, name: detail.customer.name }, verifiedAddress: { addressId: detail.address.id, fullAddress: detail.address.rawAddress }, verifiedLocation: { latitude: Number(detail.results[0].capturedLatitude), longitude: Number(detail.results[0].capturedLongitude), accuracyMeters: Number(detail.results[0].gpsAccuracyMeters), verifiedAt: reviewedAt.toISOString() } }, status: 'PENDING', attemptCount: 0, createdAt: reviewedAt, updatedAt: reviewedAt }).onConflictDoNothing({ target: integrationOutbox.idempotencyKey });
       }
     });
     return { status: nextStatus };
   }
 
-  async reminders() { return db.select().from(reminders).orderBy(desc(reminders.createdAt)); }
-  async audits() { return db.select().from(auditLogs).orderBy(desc(auditLogs.timestamp)); }
+  async reminders(query: AdminListQueryInput) {
+    const filters = [];
+    if (query.search) {
+      const pattern = `%${query.search}%`;
+      filters.push(or(sql`${reminders.sessionId}::text ilike ${pattern}`, ilike(customers.name, pattern), ilike(customers.externalId, pattern), ilike(verificationSessions.registeredPhoneSnapshot, pattern)));
+    }
+    if (query.status) filters.push(eq(reminders.status, query.status as typeof reminders.$inferSelect.status));
+    const where = and(...filters);
+    const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(reminders).innerJoin(verificationSessions, eq(verificationSessions.id, reminders.sessionId)).innerJoin(customers, eq(customers.id, verificationSessions.customerId)).where(where);
+    const rows = await db.select({ reminder: reminders, session: verificationSessions, customer: customers }).from(reminders).innerJoin(verificationSessions, eq(verificationSessions.id, reminders.sessionId)).innerJoin(customers, eq(customers.id, verificationSessions.customerId)).where(where).orderBy(desc(reminders.createdAt)).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
+    return { items: rows.map(({ reminder, session, customer }) => ({ ...reminder, session: sanitizeSession(session), customer })), page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize) };
+  }
+
+  async audits(query: AdminListQueryInput) {
+    const filters = [];
+    if (query.search) {
+      const pattern = `%${query.search}%`;
+      filters.push(or(ilike(auditLogs.action, pattern), ilike(auditLogs.actorName, pattern), ilike(auditLogs.entityId, pattern), ilike(auditLogs.reason, pattern)));
+    }
+    if (query.status) filters.push(eq(auditLogs.entityType, query.status as typeof auditLogs.$inferSelect.entityType));
+    if (query.actor === 'CUSTOMER') filters.push(eq(auditLogs.actorUserId, 'customer'));
+    if (query.actor === 'SYSTEM') filters.push(eq(auditLogs.actorUserId, 'system'));
+    if (query.actor === 'ADMIN') filters.push(ilike(auditLogs.actorUserId, 'usr-admin%'));
+    const where = and(...filters);
+    const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(auditLogs).where(where);
+    const items = await db.select().from(auditLogs).where(where).orderBy(desc(auditLogs.timestamp)).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
+    return { items, page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize) };
+  }
 
   async settings() {
     return this.validationConfig.get();
@@ -292,5 +429,29 @@ export class AdminService {
   }
 
   async integrations() { return db.select().from(integrationConfigs).orderBy(integrationConfigs.key); }
-  async outbox() { return db.select().from(integrationOutbox).orderBy(desc(integrationOutbox.createdAt)); }
+  async outbox(query: AdminListQueryInput) {
+    const filters = [];
+    if (query.search) {
+      const pattern = `%${query.search}%`;
+      filters.push(or(ilike(integrationOutbox.eventType, pattern), ilike(integrationOutbox.aggregateId, pattern), ilike(integrationOutbox.correlationId, pattern), ilike(integrationOutbox.idempotencyKey, pattern)));
+    }
+    if (query.status) filters.push(eq(integrationOutbox.status, query.status as typeof integrationOutbox.$inferSelect.status));
+    const where = and(...filters);
+    const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(integrationOutbox).where(where);
+    const items = await db.select().from(integrationOutbox).where(where).orderBy(desc(integrationOutbox.createdAt)).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
+    return { items, page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize) };
+  }
+
+  private async assertManualSendAllowed(phoneE164: string) {
+    const [last] = await db.select({ sentAt: whatsappDeliveryLogs.sentAt }).from(whatsappDeliveryLogs).where(eq(whatsappDeliveryLogs.phoneHash, hashPhone(phoneE164))).orderBy(desc(whatsappDeliveryLogs.sentAt)).limit(1);
+    const retryAt = nextAllowedSendAt(last?.sentAt ?? null, Number(process.env.WHATSAPP_MIN_INTERVAL_MINUTES ?? 60));
+    if (retryAt) throw new DomainError(`WhatsApp cooldown active until ${retryAt.toISOString()}`, 429, 'WHATSAPP_COOLDOWN');
+    const dayStart = new Date(); dayStart.setUTCHours(0, 0, 0, 0);
+    const [daily] = await db.select({ total: sql<number>`count(*)` }).from(whatsappDeliveryLogs).where(sql`${whatsappDeliveryLogs.sentAt} >= ${dayStart}`);
+    if (Number(daily.total) >= Number(process.env.WHATSAPP_DAILY_SEND_LIMIT ?? 10000)) throw new DomainError('WhatsApp daily send limit reached', 429, 'WHATSAPP_DAILY_LIMIT_REACHED');
+  }
+
+  private async recordManualDelivery(phoneE164: string, idempotencyKey: string, messageType: string) {
+    await db.insert(whatsappDeliveryLogs).values({ id: randomUUID(), phoneHash: hashPhone(phoneE164), messageType, idempotencyKey, providerMessageId: idempotencyKey, sentAt: new Date(), createdAt: new Date() }).onConflictDoNothing({ target: whatsappDeliveryLogs.idempotencyKey });
+  }
 }

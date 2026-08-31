@@ -1,26 +1,46 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
-import { customerCreateSchema, reviewSchema, validationConfigSchema } from '../../common/contracts.js';
+import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { adminListQuerySchema, customerCreateSchema, customerListQuerySchema, reviewSchema, validationConfigSchema } from '../../common/contracts.js';
 import { CurrentAdmin, RequestAdmin } from '../../common/request-user.js';
 import { BetterAuthGuard } from '../../auth/auth.guard.js';
 import { RolesGuard } from '../../auth/roles.guard.js';
 import { Roles } from '../../common/roles.js';
 import { AdminService } from './admin.service.js';
 import { z } from 'zod';
+import { WhatsAppComplianceService } from '../../integrations/whatsapp/whatsapp-compliance.service.js';
+import { CustomerImportService } from '../imports/customer-import.service.js';
+import type { UploadedCustomerFile } from '../imports/customer-import.service.js';
 
 const createVerificationSchema = z.object({ addressId: z.string().uuid() });
 
 @Controller('admin')
 @UseGuards(BetterAuthGuard, RolesGuard)
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(private readonly admin: AdminService, private readonly whatsappCompliance: WhatsAppComplianceService, private readonly customerImport: CustomerImportService) {}
 
   @Get('me')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
   me(@CurrentAdmin() currentAdmin: RequestAdmin) { return this.admin.me(currentAdmin); }
 
+  @Get('dashboard')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
+  dashboard() { return this.admin.dashboard(); }
+
   @Get('customers')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  customers() { return this.admin.listCustomers(); }
+  customers(@Query() query: unknown) {
+    const parsed = customerListQuerySchema.safeParse(query);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.admin.listCustomers(parsed.data);
+  }
+
+  @Post('customers/import')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
+  importCustomers(@CurrentAdmin() currentAdmin: RequestAdmin, @UploadedFile() file: UploadedCustomerFile) {
+    if (!file) throw new BadRequestException('Pilih file .xlsx atau .csv terlebih dahulu.');
+    return this.customerImport.import(currentAdmin, file);
+  }
 
   @Post('customers')
   @Roles('SUPER_ADMIN', 'ADMIN')
@@ -34,6 +54,10 @@ export class AdminController {
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
   customer(@Param('id') id: string) { return this.admin.customer(id); }
 
+  @Post('customers/:id/whatsapp-opt-out')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  optOut(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') customerId: string) { return this.whatsappCompliance.optOut(currentAdmin.id, customerId); }
+
   @Post('customers/:id/verifications')
   @Roles('SUPER_ADMIN', 'ADMIN')
   async createVerification(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') customerId: string, @Body() body: unknown) {
@@ -44,7 +68,11 @@ export class AdminController {
 
   @Get('verifications')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  verifications() { return this.admin.verifications(); }
+  verifications(@Query() query: unknown) {
+    const parsed = adminListQuerySchema.safeParse(query);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.admin.verifications(parsed.data);
+  }
 
   @Get('verifications/:id')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
@@ -72,11 +100,19 @@ export class AdminController {
 
   @Get('reminders')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  reminders() { return this.admin.reminders(); }
+  reminders(@Query() query: unknown) {
+    const parsed = adminListQuerySchema.safeParse(query);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.admin.reminders(parsed.data);
+  }
 
   @Get('audit-logs')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  auditLogs() { return this.admin.audits(); }
+  auditLogs(@Query() query: unknown) {
+    const parsed = adminListQuerySchema.safeParse(query);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.admin.audits(parsed.data);
+  }
 
   @Get('settings/validation')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
@@ -96,5 +132,9 @@ export class AdminController {
 
   @Get('outbox')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  outbox() { return this.admin.outbox(); }
+  outbox(@Query() query: unknown) {
+    const parsed = adminListQuerySchema.safeParse(query);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.admin.outbox(parsed.data);
+  }
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -7,76 +7,104 @@ import {
   CheckCircle2,
   Clock,
   Compass,
-  ExternalLink,
   MapPin,
   MessageSquare,
   Plus,
   Radio,
   RefreshCw,
   ShieldCheck,
-  Smartphone,
   Users,
   XCircle,
+  type LucideIcon,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { VerificationSession } from '../../types';
 import { hasCapability } from '../../lib/accessControl';
+import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
+
+type DashboardDestination = 'customers' | 'campaigns' | 'verifications' | 'reminders';
 
 interface DashboardViewProps {
   onSelectVerification: (sessionId: string) => void;
-  onSelectCustomer: (customerId: string) => void;
+  onNavigate: (destination: DashboardDestination) => void;
   onCreateVerificationClick: () => void;
-  onOpenCustomerSimulator: (token: string) => void;
 }
+
+interface DashboardMetricCardProps {
+  label: string;
+  value: number;
+  detail: string;
+  icon: LucideIcon;
+  iconClassName: string;
+  valueClassName?: string;
+  detailClassName?: string;
+  onClick: () => void;
+}
+
+const DashboardMetricCard: React.FC<DashboardMetricCardProps> = ({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  iconClassName,
+  valueClassName = 'text-gray-900 dark:text-white',
+  detailClassName = 'text-gray-400 dark:text-gray-500',
+  onClick,
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="w-full text-left bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3.5 rounded-xl shadow-xs hover:border-gray-400 dark:hover:border-gray-600 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-600"
+  >
+    <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-1">
+      <span className="text-[11px] font-medium">{label}</span>
+      <Icon className={`w-4 h-4 ${iconClassName}`} />
+    </div>
+    <div className={`text-xl font-bold tracking-tight ${valueClassName}`}>{value.toLocaleString('id-ID')}</div>
+    <div className={`text-[10px] mt-1 font-mono ${detailClassName}`}>{detail}</div>
+  </button>
+);
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectVerification,
-  onSelectCustomer,
+  onNavigate,
   onCreateVerificationClick,
-  onOpenCustomerSimulator,
 }) => {
-  const { customers, verificationSessions, reminders, outboxEvents, validationConfig, integrationConfigs, currentAdmin } =
-    useApp();
+  const { customers, verificationSessions, dashboardSummary, refreshDashboard, validationConfig, integrationConfigs, currentAdmin } = useApp();
   const canCreateVerification = hasCapability(currentAdmin?.role, 'createVerification');
+  const [sessionPage, setSessionPage] = useState(1);
+  const [sessionPageSize, setSessionPageSize] = useState<TablePageSize>(10);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const pagedVerificationSessions = verificationSessions.slice((sessionPage - 1) * sessionPageSize, sessionPage * sessionPageSize);
 
-  // Compute Funnel Metrics (PRD Section 33.2)
-  const totalCustomers = customers.length;
-  const totalCreated = verificationSessions.length;
-  const invitationsSent = verificationSessions.filter(
-    (s) => s.verificationStatus !== 'CREATED'
-  ).length;
-  const linksOpened = verificationSessions.filter(
-    (s) => !!s.openedAt || s.verificationStatus !== 'MESSAGE_SENT'
-  ).length;
-  const customersConfirmed = verificationSessions.filter(
-    (s) => s.customerConfirmationStatus === 'CONFIRMED'
-  ).length;
-  const customersMismatch = verificationSessions.filter(
-    (s) => s.customerConfirmationStatus === 'MISMATCH'
-  ).length;
-  const gpsCaptured = verificationSessions.filter(
-    (s) => s.attemptCount > 0 || s.lastValidationResult
-  ).length;
-  const lowGpsAccuracyCount = verificationSessions.filter(
-    (s) => s.verificationStatus === 'LOW_GPS_ACCURACY'
-  ).length;
-  const waitingForHomeCount = verificationSessions.filter(
-    (s) => s.verificationStatus === 'WAITING_FOR_HOME'
-  ).length;
-  const addressChangedCount = verificationSessions.filter(
-    (s) => s.verificationStatus === 'ADDRESS_EDITING' || s.verificationStatus === 'ADDRESS_PROPOSED'
-  ).length;
-  const manualReviewCount = verificationSessions.filter(
-    (s) => s.verificationStatus === 'MANUAL_REVIEW'
-  ).length;
-  const locationValidCount = verificationSessions.filter(
-    (s) => s.verificationStatus === 'LOCATION_VALID'
-  ).length;
+  const customerStats = dashboardSummary.customers;
+  const verificationStats = dashboardSummary.verifications;
+  const reminderStats = dashboardSummary.reminders;
+  const outboxStats = dashboardSummary.outbox;
+  const totalCustomers = customerStats.total;
+  const totalCreated = verificationStats.total;
+  const invitationsSent = verificationStats.invitationsSent;
+  const linksOpened = verificationStats.linksOpened;
+  const customersConfirmed = verificationStats.customersConfirmed;
+  const customersMismatch = verificationStats.customersMismatch;
+  const gpsCaptured = verificationStats.gpsCaptured;
+  const lowGpsAccuracyCount = verificationStats.lowGpsAccuracy;
+  const waitingForHomeCount = verificationStats.waitingForHome;
+  const addressChangedCount = verificationStats.addressChanged;
+  const manualReviewCount = verificationStats.manualReview;
+  const locationValidCount = verificationStats.locationValid;
+  const reminder1Count = reminderStats.byNumber['1'] ?? 0;
+  const reminder2Count = reminderStats.byNumber['2'] ?? 0;
+  const reminder3Count = reminderStats.byNumber['3'] ?? 0;
 
-  // Reminder stats
-  const reminder1Count = reminders.filter((r) => r.reminderNumber === 1 && r.status === 'SENT').length;
-  const reminder2Count = reminders.filter((r) => r.reminderNumber === 2 && r.status === 'SENT').length;
-  const reminder3Count = reminders.filter((r) => r.reminderNumber === 3 && r.status === 'SENT').length;
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshDashboard();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const getStatusBadge = (status: VerificationSession['verificationStatus']) => {
     switch (status) {
@@ -142,9 +170,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
             Monitoring verifikasi exact coordinate customer, kecocokan alamat, dan status antrean manual review.
           </p>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 font-mono">
+            Data API diperbarui: {dashboardSummary.generatedAt ? new Date(dashboardSummary.generatedAt).toLocaleString('id-ID') : 'memuat...'}
+          </p>
         </div>
 
         <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => void handleRefresh()}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 text-xs font-medium rounded-lg transition-all"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>Perbarui Data</span>
+          </button>
           <button
             type="button"
             onClick={onCreateVerificationClick}
@@ -160,65 +200,60 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Primary KPI Grid (PRD Section 33.2 Operational Metrics) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {/* Total Pelanggan */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3.5 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-1">
-            <span className="text-[11px] font-medium">Total Pelanggan</span>
-            <Users className="w-4 h-4 text-gray-400" />
-          </div>
-          <div className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">{totalCustomers}</div>
-          <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 font-mono">Master records</div>
-        </div>
-
-        {/* Undangan Dikirim */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3.5 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-1">
-            <span className="text-[11px] font-medium">Undangan WA</span>
-            <MessageSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <div className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">{invitationsSent}</div>
-          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-mono">{linksOpened} link dibuka</div>
-        </div>
-
-        {/* Konfirmasi Benar */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3.5 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-1">
-            <span className="text-[11px] font-medium">Data Terkonfirmasi</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <div className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">{customersConfirmed}</div>
-          <div className="text-[10px] text-rose-600 dark:text-rose-400 mt-1 font-mono">{customersMismatch} mismatch</div>
-        </div>
-
-        {/* GPS Captured */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3.5 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-1">
-            <span className="text-[11px] font-medium">GPS Captured</span>
-            <Compass className="w-4 h-4 text-gray-600 dark:text-gray-300" />
-          </div>
-          <div className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">{gpsCaptured}</div>
-          <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 font-mono">Multi-sampel</div>
-        </div>
-
-        {/* Needs Ops Review */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3.5 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-1">
-            <span className="text-[11px] font-medium">Manual Review</span>
-            <ShieldCheck className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-          </div>
-          <div className="text-xl font-bold text-purple-700 dark:text-purple-400 tracking-tight">{manualReviewCount}</div>
-          <div className="text-[10px] text-purple-600 dark:text-purple-400 mt-1 font-mono">Address QA queue</div>
-        </div>
-
-        {/* Location Valid */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3.5 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-1">
-            <span className="text-[11px] font-medium">Location Valid</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <div className="text-xl font-bold text-emerald-700 dark:text-emerald-400 tracking-tight">{locationValidCount}</div>
-          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-mono">{outboxEvents.length} outbox events</div>
-        </div>
+        <DashboardMetricCard
+          label="Total Pelanggan"
+          value={totalCustomers}
+          detail={`${customerStats.verified.toLocaleString('id-ID')} sudah terverifikasi`}
+          icon={Users}
+          iconClassName="text-gray-400"
+          onClick={() => onNavigate('customers')}
+        />
+        <DashboardMetricCard
+          label="Undangan WA"
+          value={invitationsSent}
+          detail={`${linksOpened.toLocaleString('id-ID')} link dibuka`}
+          icon={MessageSquare}
+          iconClassName="text-emerald-600 dark:text-emerald-400"
+          detailClassName="text-emerald-600 dark:text-emerald-400"
+          onClick={() => onNavigate('campaigns')}
+        />
+        <DashboardMetricCard
+          label="Data Terkonfirmasi"
+          value={customersConfirmed}
+          detail={`${customersMismatch.toLocaleString('id-ID')} mismatch`}
+          icon={CheckCircle2}
+          iconClassName="text-emerald-600 dark:text-emerald-400"
+          detailClassName="text-rose-600 dark:text-rose-400"
+          onClick={() => onNavigate('verifications')}
+        />
+        <DashboardMetricCard
+          label="GPS Captured"
+          value={gpsCaptured}
+          detail="Multi-sampel dari API"
+          icon={Compass}
+          iconClassName="text-gray-600 dark:text-gray-300"
+          onClick={() => onNavigate('verifications')}
+        />
+        <DashboardMetricCard
+          label="Manual Review"
+          value={manualReviewCount}
+          detail="Address QA queue"
+          icon={ShieldCheck}
+          iconClassName="text-purple-600 dark:text-purple-400"
+          valueClassName="text-purple-700 dark:text-purple-400"
+          detailClassName="text-purple-600 dark:text-purple-400"
+          onClick={() => onNavigate('verifications')}
+        />
+        <DashboardMetricCard
+          label="Location Valid"
+          value={locationValidCount}
+          detail={`${outboxStats.total.toLocaleString('id-ID')} outbox events`}
+          icon={CheckCircle2}
+          iconClassName="text-emerald-600 dark:text-emerald-400"
+          valueClassName="text-emerald-700 dark:text-emerald-400"
+          detailClassName="text-emerald-600 dark:text-emerald-400"
+          onClick={() => onNavigate('verifications')}
+        />
       </div>
 
       {/* Funnel Sub-Metrics & Breakdown Bar */}
@@ -229,39 +264,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div className="bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <button type="button" onClick={() => onNavigate('verifications')} className="w-full text-left bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between hover:border-gray-400 dark:hover:border-gray-600 transition-colors">
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <span className="text-gray-700 dark:text-gray-300 font-medium">Menunggu di Rumah:</span>
             </div>
             <span className="font-semibold text-amber-700 dark:text-amber-400">{waitingForHomeCount}</span>
-          </div>
+          </button>
 
-          <div className="bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <button type="button" onClick={() => onNavigate('verifications')} className="w-full text-left bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between hover:border-gray-400 dark:hover:border-gray-600 transition-colors">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-              <span className="text-gray-700 dark:text-gray-300 font-medium">Akurasi Rendah (&gt;30m):</span>
+              <span className="text-gray-700 dark:text-gray-300 font-medium">Akurasi Rendah (&gt;{validationConfig.GPS_MAX_ACCURACY_METERS}m):</span>
             </div>
             <span className="font-semibold text-rose-700 dark:text-rose-400">{lowGpsAccuracyCount}</span>
-          </div>
+          </button>
 
-          <div className="bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <button type="button" onClick={() => onNavigate('verifications')} className="w-full text-left bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between hover:border-gray-400 dark:hover:border-gray-600 transition-colors">
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span className="text-gray-700 dark:text-gray-300 font-medium">Alamat Berubah (Proposed):</span>
             </div>
             <span className="font-semibold text-blue-700 dark:text-blue-400">{addressChangedCount}</span>
-          </div>
+          </button>
 
-          <div className="bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <button type="button" onClick={() => onNavigate('reminders')} className="w-full text-left bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between hover:border-gray-400 dark:hover:border-gray-600 transition-colors">
             <div className="flex items-center gap-2">
               <Bell className="w-4 h-4 text-gray-600 dark:text-gray-300" />
               <span className="text-gray-700 dark:text-gray-300 font-medium">Pengingat (1 / 2 / 3):</span>
             </div>
             <span className="font-semibold text-gray-900 dark:text-white">
-              {reminder1Count} / {reminder2Count} / {reminder3Count}
+              {reminder1Count.toLocaleString('id-ID')} / {reminder2Count.toLocaleString('id-ID')} / {reminder3Count.toLocaleString('id-ID')}
             </span>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -279,12 +314,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="text-[10px] text-gray-500 dark:text-gray-400">Network Polygon & Port Capacity</div>
               </div>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 font-medium">
-              PORT_READY (DISABLED)
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md border font-medium ${integrationConfigs.IRA_COVERAGE.enabled ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'}`}>
+              {integrationConfigs.IRA_COVERAGE.enabled ? 'ENABLED' : integrationConfigs.IRA_COVERAGE.status}
             </span>
           </div>
           <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
-            Adapter & event consumer contract <code className="text-gray-900 dark:text-gray-200 font-mono">location.verified.v1</code> disiapkan di Outbox. Tidak menjadi blocking dependency untuk MVP verifikasi lokasi.
+            {integrationConfigs.IRA_COVERAGE.description}. Adapter event <code className="text-gray-900 dark:text-gray-200 font-mono">location.verified.v1</code> tetap tercatat melalui Outbox.
           </p>
         </div>
 
@@ -300,12 +335,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="text-[10px] text-gray-500 dark:text-gray-400">Technician Dispatch & SLA</div>
               </div>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 font-medium">
-              PORT_READY (DISABLED)
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md border font-medium ${integrationConfigs.TICKETING.enabled ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'}`}>
+              {integrationConfigs.TICKETING.enabled ? 'ENABLED' : integrationConfigs.TICKETING.status}
             </span>
           </div>
           <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
-            Contract Idempotency Key & Correlation ID siap dipanggil saat customer dinyatakan eligible di fase instalasi berikutnya.
+            {integrationConfigs.TICKETING.description}. Contract idempotency key dan correlation ID disiapkan untuk fase instalasi berikutnya.
           </p>
         </div>
       </div>
@@ -323,8 +358,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <AdminTable
+          minWidthClass="min-w-[950px]"
+          footer={<TablePagination page={sessionPage} pageSize={sessionPageSize} total={verificationSessions.length} onPageChange={setSessionPage} onPageSizeChange={(size) => { setSessionPageSize(size); setSessionPage(1); }} />}
+        >
             <thead className="bg-gray-50 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-800">
               <tr>
                 <th className="px-4 py-2.5">Pelanggan</th>
@@ -336,7 +373,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {verificationSessions.map((session) => {
+              {pagedVerificationSessions.map((session) => {
                 const customer = customers.find((c) => c.id === session.customerId);
                 const lastVal = session.lastValidationResult;
 
@@ -381,17 +418,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <td className="px-4 py-3 text-right space-x-2" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
-                        onClick={() => onOpenCustomerSimulator(session.token)}
-                        disabled={!session.token}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-[11px] font-medium transition-colors"
-                        title={session.token ? 'Buka Tampilan Customer Mobile' : 'Token hanya tersedia saat link dibuat atau dirotasi'}
-                      >
-                        <Smartphone className="w-3 h-3" />
-                        <span>Simulasi</span>
-                      </button>
-
-                      <button
-                        type="button"
                         onClick={() => onSelectVerification(session.id)}
                         className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-white text-white dark:text-gray-900 text-[11px] font-medium transition-colors"
                       >
@@ -402,9 +428,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </tr>
                 );
               })}
+              {!pagedVerificationSessions.length && <tr><td colSpan={6} className="px-4 py-10 text-center text-xs text-gray-400 dark:text-gray-500">Belum ada sesi verifikasi.</td></tr>}
             </tbody>
-          </table>
-        </div>
+        </AdminTable>
       </div>
     </div>
   );

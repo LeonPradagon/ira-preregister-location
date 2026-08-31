@@ -251,3 +251,82 @@ CREATE INDEX IF NOT EXISTS "location_captures_location_gist" ON "location_captur
 CREATE INDEX IF NOT EXISTS "integration_outbox_pending_idx" ON "integration_outbox" ("status", "next_retry_at", "created_at");
 -- statement-breakpoint
 CREATE INDEX IF NOT EXISTS "audit_logs_entity_idx" ON "audit_logs" ("entity_type", "entity_id", "timestamp");
+-- statement-breakpoint
+CREATE TABLE IF NOT EXISTS "verification_campaigns" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "name" varchar(255) NOT NULL,
+  "status" varchar(32) DEFAULT 'DRAFT' NOT NULL,
+  "timezone" varchar(64) DEFAULT 'Asia/Jakarta' NOT NULL,
+  "scheduled_at" timestamptz NOT NULL,
+  "target_count" integer DEFAULT 0 NOT NULL,
+  "sent_count" integer DEFAULT 0 NOT NULL,
+  "failed_count" integer DEFAULT 0 NOT NULL,
+  "created_by" text NOT NULL REFERENCES "user"("id"),
+  "created_at" timestamptz DEFAULT now() NOT NULL,
+  "updated_at" timestamptz DEFAULT now() NOT NULL
+);
+-- statement-breakpoint
+ALTER TABLE "verification_sessions" ADD COLUMN IF NOT EXISTS "campaign_id" uuid REFERENCES "verification_campaigns"("id");
+-- statement-breakpoint
+CREATE TABLE IF NOT EXISTS "verification_campaign_items" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "campaign_id" uuid NOT NULL REFERENCES "verification_campaigns"("id") ON DELETE CASCADE,
+  "customer_id" uuid NOT NULL REFERENCES "customers"("id"),
+  "address_id" uuid NOT NULL REFERENCES "customer_addresses"("id"),
+  "session_id" uuid NOT NULL REFERENCES "verification_sessions"("id"),
+  "status" varchar(32) DEFAULT 'PENDING' NOT NULL,
+  "scheduled_at" timestamptz NOT NULL,
+  "sent_at" timestamptz,
+  "provider_message_id" varchar(255),
+  "retry_count" integer DEFAULT 0 NOT NULL,
+  "last_error" text,
+  "created_at" timestamptz DEFAULT now() NOT NULL,
+  "updated_at" timestamptz DEFAULT now() NOT NULL,
+  CONSTRAINT "verification_campaign_items_campaign_customer_unique" UNIQUE ("campaign_id", "customer_id")
+);
+-- statement-breakpoint
+CREATE INDEX IF NOT EXISTS "verification_campaigns_status_schedule_idx" ON "verification_campaigns" ("status", "scheduled_at");
+-- statement-breakpoint
+CREATE INDEX IF NOT EXISTS "verification_campaign_items_queue_idx" ON "verification_campaign_items" ("status", "scheduled_at");
+-- statement-breakpoint
+ALTER TABLE "verification_sessions" ADD COLUMN IF NOT EXISTS "token_id" varchar(64);
+-- statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "verification_sessions_token_id_idx" ON "verification_sessions" ("token_id");
+-- statement-breakpoint
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "whatsapp_opt_in_at" timestamptz;
+-- statement-breakpoint
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "whatsapp_opt_in_source" varchar(128);
+-- statement-breakpoint
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "whatsapp_opt_out_at" timestamptz;
+-- statement-breakpoint
+ALTER TABLE "verification_campaigns" ADD COLUMN IF NOT EXISTS "opted_out_count" integer DEFAULT 0 NOT NULL;
+-- statement-breakpoint
+CREATE TABLE IF NOT EXISTS "whatsapp_delivery_logs" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "phone_hash" varchar(64) NOT NULL,
+  "message_type" varchar(32) NOT NULL,
+  "idempotency_key" varchar(255) NOT NULL UNIQUE,
+  "provider_message_id" varchar(255),
+  "sent_at" timestamptz NOT NULL,
+  "created_at" timestamptz DEFAULT now() NOT NULL
+);
+-- statement-breakpoint
+CREATE INDEX IF NOT EXISTS "whatsapp_delivery_logs_phone_time_idx" ON "whatsapp_delivery_logs" ("phone_hash", "sent_at");
+-- statement-breakpoint
+CREATE INDEX IF NOT EXISTS "whatsapp_delivery_logs_daily_idx" ON "whatsapp_delivery_logs" ("sent_at");
+-- statement-breakpoint
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "source_metadata" jsonb;
+-- statement-breakpoint
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "source_record_id" varchar(128);
+-- statement-breakpoint
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "source_created_at" timestamptz;
+-- statement-breakpoint
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "is_cover_bts" boolean;
+-- statement-breakpoint
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "bts_name" varchar(255);
+-- statement-breakpoint
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "coverage_status" varchar(64);
+-- statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "customers_source_record_id_idx" ON "customers" ("source_record_id");
+-- statement-breakpoint
+ALTER TABLE "customer_addresses" ADD COLUMN IF NOT EXISTS "address_reference" text;

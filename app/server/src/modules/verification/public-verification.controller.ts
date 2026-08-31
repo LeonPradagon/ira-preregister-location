@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Param, Post } from '@nestjs/common';
-import { addressChangeSchema, confirmationSchema, locationSamplesSchema, reminderSchema } from '../../common/contracts.js';
+import { addressChangeSchema, addressStatusSchema, confirmationSchema, locationSamplesSchema, reminderSchema } from '../../common/contracts.js';
 import { VerificationService } from './verification.service.js';
 
 @Controller('public/verifications')
@@ -47,6 +47,13 @@ export class PublicVerificationController {
     const parsed = addressChangeSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
     return this.verification.changeAddress(token, parsed.data);
+  }
+
+  @Post(':token/address-status')
+  async addressStatus(@Param('token') token: string, @Body() body: unknown) {
+    const parsed = addressStatusSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.verification.addressStatus(token, parsed.data.sameAddress);
   }
 
   @Post(':token/reminders')

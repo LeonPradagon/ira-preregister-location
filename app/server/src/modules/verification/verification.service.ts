@@ -1,6 +1,6 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, ne, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { customerAddresses, customers, integrationOutbox, locationCaptures, reminders, validationResults, verificationSessions, auditLogs } from '../../db/schema/index.js';
 import { AddressChangeInput, GpsSample, PublicVerificationContext } from '../../common/contracts.js';
@@ -8,10 +8,9 @@ import { DomainError, NotFoundError } from '../../common/errors.js';
 import { GeocodingPort } from '../../integrations/geocoding/geocoding.port.js';
 import { decideValidation, AddressEvidence } from '../validation/engine.js';
 import { assertTransition } from './state-machine.js';
-import { nextReminderNumber, ReminderPreference, scheduleReminder } from '../reminders/reminder.policy.js';
+import { nextReminderNumber, ReminderPreference, scheduleReminderInTimezone } from '../reminders/reminder.policy.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
-
-const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+import { parseVerificationToken, verifyVerificationToken } from './verification-token.js';
 const now = () => new Date();
 
 function maskName(value: string): string {
@@ -34,7 +33,8 @@ export class VerificationService {
   ) {}
 
   private async findByToken(token: string) {
-    if (!token || token.length < 32) throw new NotFoundError('Verification link is invalid or expired');
+    const parsed = parseVerificationToken(token);
+    if (!parsed) throw new NotFoundError('Verification link is invalid or expired');
     const [row] = await db
       .select({
         session: verificationSessions,
@@ -46,16 +46,21 @@ export class VerificationService {
       .from(verificationSessions)
       .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
       .innerJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
-      .where(and(eq(verificationSessions.tokenHash, sha256(token)), isNull(verificationSessions.revokedAt), gt(verificationSessions.expiresAt, now())))
+      .where(and(eq(verificationSessions.tokenId, parsed.tokenId), isNull(verificationSessions.revokedAt), gt(verificationSessions.expiresAt, now())))
       .limit(1);
     if (!row) throw new NotFoundError('Verification link is invalid or expired');
+    if (!(await verifyVerificationToken(token, row.session.tokenHash))) throw new NotFoundError('Verification link is invalid or expired');
     return row;
   }
 
   async open(token: string): Promise<PublicVerificationContext> {
     const row = await this.findByToken(token);
     if (!row.session.openedAt) {
-      await db.update(verificationSessions).set({ openedAt: now(), verificationStatus: 'LINK_OPENED', updatedAt: now() }).where(eq(verificationSessions.id, row.session.id));
+      const timestamp = now();
+      await db.transaction(async (tx) => {
+        await tx.update(verificationSessions).set({ openedAt: timestamp, verificationStatus: 'LINK_OPENED', updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
+        await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'LINK_OPENED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, before: { status: row.session.verificationStatus }, after: { status: 'LINK_OPENED' }, timestamp });
+      });
     }
     return {
       session: {
@@ -108,7 +113,11 @@ export class VerificationService {
     const row = await this.findByToken(token);
     if (row.session.customerConfirmationStatus !== 'CONFIRMED') throw new DomainError('Customer confirmation is required first');
     assertTransition(row.session.verificationStatus, 'GPS_CAPTURING');
-    await db.update(verificationSessions).set({ consentAt: now(), verificationStatus: 'GPS_CAPTURING', updatedAt: now() }).where(eq(verificationSessions.id, row.session.id));
+    const timestamp = now();
+    await db.transaction(async (tx) => {
+      await tx.update(verificationSessions).set({ consentAt: timestamp, verificationStatus: 'GPS_CAPTURING', updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
+      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'CONSENT_GIVEN', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, before: { status: row.session.verificationStatus }, after: { status: 'GPS_CAPTURING' }, timestamp });
+    });
     return { status: 'GPS_CAPTURING' };
   }
 
@@ -117,8 +126,9 @@ export class VerificationService {
     const config = await this.validationConfig.get();
     if (row.session.customerConfirmationStatus !== 'CONFIRMED' || !row.session.consentAt) throw new DomainError('Confirmation and consent are required before location capture');
     if (row.session.attemptCount >= config.MAX_LOCATION_ATTEMPTS) throw new DomainError('Maximum GPS attempts reached', 409, 'ATTEMPT_LIMIT_REACHED');
-    const geocode = await this.geocoding.reverse(samples[0].latitude, samples[0].longitude);
     if (row.referenceLatitude == null || row.referenceLongitude == null) throw new DomainError('Reference location is not precise enough', 422, 'REFERENCE_LOCATION_NOT_PRECISE');
+    const bestSample = [...samples].sort((left, right) => left.accuracyMeters - right.accuracyMeters)[0];
+    const geocode = await this.geocoding.reverse(bestSample.latitude, bestSample.longitude);
     const decision = decideValidation(samples, {
       id: row.address.id, province: row.address.province, city: row.address.city, district: row.address.district,
       subdistrict: row.address.subdistrict, street: row.address.street, houseNumber: row.address.houseNumber,
@@ -161,8 +171,11 @@ export class VerificationService {
         locationVerifiedAt: decision.result === 'LOCATION_VALID' ? timestamp : null,
         completedAt: decision.result === 'LOCATION_VALID' ? timestamp : null, updatedAt: timestamp,
       }).where(eq(verificationSessions.id, row.session.id));
-      await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Validation Engine', action: 'LOCATION_VALIDATION_COMPLETED', entityType: 'VALIDATION', entityId: resultId, after: decision, timestamp });
+      await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Validation Engine', action: 'LOCATION_VALIDATION_COMPLETED', entityType: 'VALIDATION', entityId: resultId, after: { result: decision.result, reasonCodes: decision.reasonCodes, accuracyMeters: decision.bestSample.accuracyMeters, distanceMeters: decision.distanceFromReferenceMeters, addressScore: decision.addressScore }, timestamp });
+      if (decision.result === 'LOW_GPS_ACCURACY') await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Validation Engine', action: 'GPS_ACCURACY_REJECTED', entityType: 'VALIDATION', entityId: resultId, after: { accuracyMeters: decision.bestSample.accuracyMeters, threshold: config.GPS_MAX_ACCURACY_METERS }, timestamp });
+      if (decision.result === 'LOCATION_MISMATCH') await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Validation Engine', action: 'HOME_VALIDATION_FAILED', entityType: 'VALIDATION', entityId: resultId, after: { distanceMeters: decision.distanceFromReferenceMeters, radiusMeters: config.HOME_RADIUS_METERS, reasonCodes: decision.reasonCodes }, timestamp });
       if (decision.result === 'LOCATION_VALID') {
+        await tx.update(customerAddresses).set({ addressStatus: 'SUPERSEDED', addressType: 'HISTORICAL', isActive: false, validTo: timestamp, updatedAt: timestamp }).where(and(eq(customerAddresses.customerId, row.customer.id), eq(customerAddresses.isActive, true), ne(customerAddresses.id, row.address.id)));
         await tx.update(customerAddresses).set({ isVerified: true, addressStatus: 'VERIFIED', addressType: 'VERIFIED_INSTALLATION', updatedAt: timestamp }).where(eq(customerAddresses.id, row.address.id));
         await tx.update(customers).set({ status: 'VERIFIED', updatedAt: timestamp }).where(eq(customers.id, row.customer.id));
         await tx.update(reminders).set({ status: 'CANCELLED' }).where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
@@ -185,14 +198,36 @@ export class VerificationService {
     if (!config.ENABLE_REMINDERS || row.session.reminderCount >= max) throw new DomainError('Reminder limit reached', 409, 'REMINDER_LIMIT_REACHED');
     const reminderNumber = nextReminderNumber(row.session.reminderCount, max);
     if (!reminderNumber) throw new DomainError('Reminder limit reached', 409, 'REMINDER_LIMIT_REACHED');
-    const scheduledAt = scheduleReminder(preference);
+    const scheduledAt = scheduleReminderInTimezone(preference, now(), process.env.REMINDER_TIMEZONE ?? 'Asia/Jakarta');
     const nextStatus = reminderNumber >= max ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME';
     assertTransition(row.session.verificationStatus, nextStatus);
     await db.transaction(async (tx) => {
-      await tx.insert(reminders).values({ id: randomUUID(), sessionId: row.session.id, reminderNumber, channel: 'WHATSAPP', scheduledAt, status: 'SCHEDULED', messageText: `Verifikasi lokasi: ${process.env.WEB_ORIGIN}/v/${token}`, retryCount: 0, createdAt: now() });
-      await tx.update(verificationSessions).set({ reminderCount: reminderNumber, verificationStatus: nextStatus, updatedAt: now() }).where(eq(verificationSessions.id, row.session.id));
+      const timestamp = now();
+      await tx.insert(reminders).values({ id: randomUUID(), sessionId: row.session.id, reminderNumber, channel: 'WHATSAPP', scheduledAt, status: 'SCHEDULED', messageText: `Halo ${row.customer.name}, pengingat ${reminderNumber} dari ${max}. Tautan verifikasi dibuat saat pengiriman.`, retryCount: 0, createdAt: timestamp });
+      await tx.update(verificationSessions).set({ reminderCount: reminderNumber, verificationStatus: nextStatus, updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
+      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'WAITING_FOR_HOME_SELECTED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, after: { preference, reminderNumber, scheduledAt: scheduledAt.toISOString() }, timestamp });
+      await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Reminder Scheduler', action: 'REMINDER_SCHEDULED', entityType: 'REMINDER', entityId: row.session.id, after: { reminderNumber, scheduledAt: scheduledAt.toISOString() }, timestamp });
     });
     return { status: reminderNumber >= max ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME', reminderNumber };
+  }
+
+  async addressStatus(token: string, sameAddress: boolean) {
+    const row = await this.findByToken(token);
+    const nextStatus = sameAddress ? 'GPS_CAPTURING' : 'ADDRESS_EDITING';
+    if (!row.session.consentAt) throw new DomainError('Location consent is required before confirming the address', 409, 'CONSENT_REQUIRED');
+    assertTransition(row.session.verificationStatus, nextStatus);
+    const timestamp = now();
+    await db.transaction(async (tx) => {
+      await tx.update(verificationSessions).set({ verificationStatus: nextStatus, updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
+      if (!sameAddress) await tx.update(reminders).set({ status: 'CANCELLED' }).where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
+      await tx.insert(auditLogs).values({
+        actorUserId: 'customer-token', actorName: 'Customer', action: sameAddress ? 'ADDRESS_CONFIRMED_CURRENT' : 'ADDRESS_CHANGE_STARTED',
+        entityType: 'VERIFICATION_SESSION', entityId: row.session.id,
+        before: { status: row.session.verificationStatus, addressId: row.address.id },
+        after: { status: nextStatus, sameAddress }, timestamp,
+      });
+    });
+    return { status: nextStatus, sameAddress };
   }
 
   async changeAddress(token: string, input: AddressChangeInput) {
@@ -205,9 +240,11 @@ export class VerificationService {
     const timestamp = now();
     const addressId = randomUUID();
     await db.transaction(async (tx) => {
+      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'ADDRESS_CHANGE_STARTED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, before: { addressId: row.address.id, status: row.session.verificationStatus }, after: { status: 'ADDRESS_EDITING' }, timestamp });
       await tx.update(customerAddresses).set({ addressStatus: 'SUPERSEDED', isActive: false, validTo: timestamp, updatedAt: timestamp }).where(and(eq(customerAddresses.customerId, row.customer.id), eq(customerAddresses.addressType, 'PROPOSED'), eq(customerAddresses.isActive, true)));
       await tx.insert(customerAddresses).values({ ...input, id: addressId, customerId: row.customer.id, addressType: 'PROPOSED', addressStatus: 'PROPOSED', rawAddress: [input.street, `No. ${input.houseNumber}`, input.block && `Blok ${input.block}`, input.subdistrict, input.district, input.city, input.province, input.postalCode].filter(Boolean).join(', '), referenceLocation: { latitude: geocode.latitude, longitude: geocode.longitude }, referenceSource: 'GEOCODED', referencePrecision: geocode.precision, referenceConfidence: geocode.confidence.toFixed(3), geocodingProvider: geocode.provider, providerPlaceId: geocode.providerPlaceId, geocodedAt: timestamp, isActive: true, isVerified: false, validFrom: timestamp, createdAt: timestamp, updatedAt: timestamp });
       await tx.update(verificationSessions).set({ currentAddressId: addressId, verificationStatus: 'ADDRESS_PROPOSED', updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
+      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'ADDRESS_PROPOSED', entityType: 'ADDRESS', entityId: addressId, after: { sessionId: row.session.id, status: 'PROPOSED' }, timestamp });
     });
     return { id: addressId, status: 'PROPOSED' };
   }

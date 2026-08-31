@@ -44,4 +44,13 @@ describe('server validation engine', () => {
     expect(decision.result).toBe('LOW_GPS_ACCURACY');
     expect(decision.reasonCodes).toContain('LOW_GPS_ACCURACY');
   });
+
+  it('enforces the street match threshold as a hard rule', () => {
+    const decision = decideValidation([
+      sample(-6.884, 107.613), sample(-6.88401, 107.61301, 12, 1), sample(-6.88399, 107.61299, 14, 2),
+    ], address, { ...reverseGeocode, street: 'Jalan Dipatiukur' }, config);
+    expect(decision.streetScore).toBeLessThan(config.streetMatchThreshold);
+    expect(decision.result).not.toBe('LOCATION_VALID');
+    expect(decision.reasonCodes).toContain('STREET_MISMATCH');
+  });
 });

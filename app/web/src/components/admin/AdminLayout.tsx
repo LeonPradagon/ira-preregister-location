@@ -10,25 +10,23 @@ import {
   LayoutDashboard,
   LogOut,
   MapPin,
-  MessageSquare,
+  Megaphone,
   Moon,
   Radio,
-  RotateCcw,
   Search,
   Settings,
   Shield,
-  Smartphone,
   Sun,
   User,
   Users,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ThemeMode } from '../../types';
-import { API_MODE } from '../../lib/apiClient';
 
 export type AdminTab =
   | 'dashboard'
   | 'customers'
+  | 'campaigns'
   | 'verifications'
   | 'reminders'
   | 'audit-logs'
@@ -42,7 +40,6 @@ interface AdminLayoutProps {
   onSelectCustomer?: (id: string | null) => void;
   selectedVerificationId?: string | null;
   onSelectVerification?: (id: string | null) => void;
-  onOpenCustomerSimulator?: (token: string) => void;
   children: React.ReactNode;
 }
 
@@ -51,14 +48,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   onSelectTab,
   onSelectCustomer,
   onSelectVerification,
-  onOpenCustomerSimulator,
   children,
 }) => {
   const {
     currentAdmin,
     logoutAdmin,
-    verificationSessions,
-    resetAllDataToDefault,
+    dashboardSummary,
+    validationConfig,
     theme,
     isDarkMode,
     setTheme,
@@ -68,17 +64,14 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const pendingReviewsCount = verificationSessions.filter(
-    (s) => s.verificationStatus === 'MANUAL_REVIEW' || s.verificationStatus === 'CUSTOMER_DATA_MISMATCH'
-  ).length;
-
-  const validLocationsCount = verificationSessions.filter(
-    (s) => s.verificationStatus === 'LOCATION_VALID'
-  ).length;
+  const pendingReviewsCount = dashboardSummary.verifications.manualReview
+    + (dashboardSummary.verifications.statusCounts.CUSTOMER_DATA_MISMATCH ?? 0);
+  const validLocationsCount = dashboardSummary.verifications.locationValid;
 
   const navItems = [
     { id: 'dashboard' as AdminTab, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'customers' as AdminTab, label: 'Pelanggan & Alamat', icon: Users },
+    { id: 'campaigns' as AdminTab, label: 'Campaign Blast', icon: Megaphone },
     {
       id: 'verifications' as AdminTab,
       label: 'Sesi Verifikasi',
@@ -102,7 +95,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col font-sans transition-colors duration-200">
       {/* Top Navbar */}
-      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-30 px-4 lg:px-6 py-2.5 flex items-center justify-between">
+      <header className="h-16 flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-30 px-4 lg:px-6 py-2.5 flex items-center justify-between">
         {/* Left Branding */}
         <div className="flex items-center gap-3">
           <button
@@ -141,29 +134,12 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           </div>
           <span className="text-gray-300 dark:text-gray-600">|</span>
           <div className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
-            Radius: <span className="text-gray-900 dark:text-gray-200 font-semibold">50m</span> • Acc: <span className="text-gray-900 dark:text-gray-200 font-semibold">&le;30m</span>
+            Radius: <span className="text-gray-900 dark:text-gray-200 font-semibold">{validationConfig.HOME_RADIUS_METERS}m</span> • Acc: <span className="text-gray-900 dark:text-gray-200 font-semibold">&le;{validationConfig.GPS_MAX_ACCURACY_METERS}m</span>
           </div>
         </div>
 
         {/* Right User & RBAC Menu */}
         <div className="flex items-center gap-2 sm:gap-2.5">
-          {/* Quick WhatsApp / Verification Simulator launcher button */}
-          <button
-            type="button"
-            onClick={() => {
-              const activeSession = verificationSessions[0];
-              if (activeSession && onOpenCustomerSimulator) {
-                onOpenCustomerSimulator(activeSession.token);
-              }
-            }}
-            disabled={!verificationSessions[0]?.token}
-            className="hidden sm:inline-flex items-center gap-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-750 text-gray-700 dark:text-gray-200 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 shadow-xs transition-all"
-            title="Buka tampilan mobile customer"
-          >
-            <Smartphone className="w-3.5 h-3.5 text-gray-600 dark:text-gray-300" />
-            <span>Simulasi Web Pelanggan</span>
-          </button>
-
           {/* Theme Toggle Button */}
           <div className="relative">
             <button
@@ -250,20 +226,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             )}
           </div>
 
-          {/* Reset Demo Data Button (demo-only, restricted to Super Admin) */}
-          {!API_MODE && currentAdmin?.role === 'SUPER_ADMIN' && <button
-            type="button"
-            onClick={() => {
-              if (confirm('Reset seluruh data ke kondisi awal PRD?')) {
-                resetAllDataToDefault();
-              }
-            }}
-            className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors border border-gray-200 dark:border-gray-700"
-            title="Reset Database ke Seed Awal"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>}
-
           {/* User Role Badge & Dropdown */}
           <div className="relative">
             <button
@@ -309,9 +271,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
       </header>
 
       {/* Main Layout Container with Sidebar & Content */}
-      <div className="flex-1 flex flex-col md:flex-row">
+      <div className="flex-1 flex flex-col md:flex-row md:pl-64">
         {/* Sidebar Navigation */}
-        <aside className="w-full md:w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 p-3 flex md:flex-col justify-between flex-shrink-0">
+        <aside className="w-full md:fixed md:left-0 md:top-16 md:bottom-0 md:z-20 md:w-64 md:overflow-y-auto bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 p-3 flex md:flex-col justify-between flex-shrink-0">
           <nav className="space-y-1 w-full flex md:flex-col overflow-x-auto md:overflow-visible gap-1 md:gap-0">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -369,7 +331,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 bg-gray-50 dark:bg-gray-950 p-4 lg:p-6 overflow-y-auto transition-colors duration-200">
+        <main className="min-w-0 min-h-[calc(100vh-4rem)] flex-1 bg-gray-50 dark:bg-gray-950 p-4 lg:p-6 overflow-y-auto transition-colors duration-200">
           {children}
         </main>
       </div>

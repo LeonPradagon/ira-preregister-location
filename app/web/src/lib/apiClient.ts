@@ -1,5 +1,4 @@
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000/v1').replace(/\/$/, '');
-export const API_MODE = import.meta.env.VITE_API_MODE === 'true';
 
 export interface ApiErrorBody {
   error?: { code?: string; message?: string };
@@ -30,11 +29,12 @@ function correlationId(): string {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     credentials: 'include',
     headers: {
-      'content-type': 'application/json',
+      ...(isFormData ? {} : { 'content-type': 'application/json' }),
       'x-correlation-id': correlationId(),
       ...(init.headers || {}),
     },
@@ -59,6 +59,89 @@ export interface AuthSessionResponse {
   session?: { id: string; expiresAt: string };
 }
 
+type ApiNumeric = number | string;
+
+export interface AdminDashboardApi {
+  generatedAt: string;
+  customers: {
+    total: ApiNumeric;
+    active: ApiNumeric;
+    verified: ApiNumeric;
+    whatsappOptedIn: ApiNumeric;
+    whatsappOptedOut: ApiNumeric;
+  };
+  verifications: {
+    total: ApiNumeric;
+    invitationsSent: ApiNumeric;
+    linksOpened: ApiNumeric;
+    customersConfirmed: ApiNumeric;
+    customersMismatch: ApiNumeric;
+    gpsCaptured: ApiNumeric;
+    lowGpsAccuracy: ApiNumeric;
+    waitingForHome: ApiNumeric;
+    addressChanged: ApiNumeric;
+    manualReview: ApiNumeric;
+    locationValid: ApiNumeric;
+    statusCounts: Record<string, ApiNumeric>;
+  };
+  reminders: {
+    total: ApiNumeric;
+    scheduled: ApiNumeric;
+    sent: ApiNumeric;
+    failed: ApiNumeric;
+    cancelled: ApiNumeric;
+    byNumber: Record<string, ApiNumeric>;
+  };
+  outbox: {
+    total: ApiNumeric;
+    pending: ApiNumeric;
+    published: ApiNumeric;
+    failed: ApiNumeric;
+  };
+}
+
+export interface CustomerImportApiResult {
+  fileName: string;
+  rowsRead: number;
+  customersUpserted: number;
+  addressesUpdated: number;
+  addressesInserted: number;
+  duplicatePhoneRows: number;
+  missingPostalCodeRowsStoredAs00000: number;
+  coveredBtsRows: number;
+  coverageStatusCounts: Record<string, number>;
+  whatsappOptIn: string;
+  referencePrecision: string;
+  importedAt: string;
+}
+
+export interface AdminPageApi<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface AdminListQuery {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  actor?: string;
+}
+
+function queryString(query: AdminListQuery): string {
+  const params = new URLSearchParams();
+  if (query.page) params.set('page', String(query.page));
+  if (query.pageSize) params.set('pageSize', String(query.pageSize));
+  if (query.search) params.set('search', query.search);
+  if (query.status && query.status !== 'ALL') params.set('status', query.status);
+  if (query.actor && query.actor !== 'ALL') params.set('actor', query.actor);
+  const value = params.toString();
+  return value ? `?${value}` : '';
+}
+
 export const authApi = {
   signInEmail: (email: string, password: string) => request<AuthSessionResponse>('/api/auth/sign-in/email', {
     method: 'POST',
@@ -75,24 +158,46 @@ export const publicVerificationApi = {
   submitLocation: (token: string, samples: unknown[]) => request<ServerValidationDecision>(`/public/verifications/${encodeURIComponent(token)}/location`, { method: 'POST', body: JSON.stringify({ samples }) }),
   waitForHome: (token: string, reminderPreference: string) => request<{ status: string; reminderNumber: number }>(`/public/verifications/${encodeURIComponent(token)}/wait-for-home`, { method: 'POST', body: JSON.stringify({ reminderPreference }) }),
   changeAddress: (token: string, address: unknown) => request<{ id: string; status: string }>(`/public/verifications/${encodeURIComponent(token)}/address-change`, { method: 'POST', body: JSON.stringify(address) }),
+  addressStatus: (token: string, sameAddress: boolean) => request<{ status: string; sameAddress: boolean }>(`/public/verifications/${encodeURIComponent(token)}/address-status`, { method: 'POST', body: JSON.stringify({ sameAddress }) }),
 };
 
 export const adminApi = {
   me: () => request<AuthAdminApiUser>('/admin/me'),
-  customers: () => request<Array<Record<string, unknown>>>('/admin/customers'),
+  dashboard: () => request<AdminDashboardApi>('/admin/dashboard'),
+  customers: (query: { page?: number; pageSize?: number; search?: string; status?: string; locationStatus?: 'UNVERIFIED' | 'VERIFIED' } = {}) => {
+    const params = new URLSearchParams();
+    if (query.page) params.set('page', String(query.page));
+    if (query.pageSize) params.set('pageSize', String(query.pageSize));
+    if (query.search) params.set('search', query.search);
+    if (query.status && query.status !== 'ALL') params.set('status', query.status);
+    if (query.locationStatus) params.set('locationStatus', query.locationStatus);
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return request<{ items: Array<Record<string, unknown>>; page: number; pageSize: number; total: number; totalPages: number }>(`/admin/customers${suffix}`);
+  },
   customer: (id: string) => request<Record<string, unknown>>(`/admin/customers/${encodeURIComponent(id)}`),
   createCustomer: (body: unknown) => request<Record<string, unknown>>('/admin/customers', { method: 'POST', body: JSON.stringify(body) }),
-  verifications: () => request<Array<Record<string, unknown>>>('/admin/verifications'),
+  importCustomers: (file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    return request<CustomerImportApiResult>('/admin/customers/import', { method: 'POST', body });
+  },
+  verifications: (query: AdminListQuery = {}) => request<AdminPageApi<{ session: Record<string, unknown>; customer: Record<string, unknown> }>>(`/admin/verifications${queryString(query)}`),
   verification: (id: string) => request<Record<string, unknown>>(`/admin/verifications/${encodeURIComponent(id)}`),
   createVerification: (customerId: string, addressId: string) => request<{ sessionId: string; verificationLink: string; expiresAt: string }>(`/admin/customers/${encodeURIComponent(customerId)}/verifications`, { method: 'POST', body: JSON.stringify({ addressId }) }),
   resend: (id: string) => request<{ status: string; verificationLink: string; expiresAt: string }>(`/admin/verifications/${encodeURIComponent(id)}/resend`, { method: 'POST' }),
   revoke: (id: string) => request<{ status: string }>(`/admin/verifications/${encodeURIComponent(id)}/revoke`, { method: 'POST' }),
-  reminder: (id: string) => request<{ status: string; reminderNumber: number; verificationLink: string; expiresAt: string }>(`/admin/verifications/${encodeURIComponent(id)}/reminders`, { method: 'POST' }),
+  reminder: (id: string) => request<{ status: string; reminderNumber: number }>(`/admin/verifications/${encodeURIComponent(id)}/reminders`, { method: 'POST' }),
   review: (id: string, body: unknown) => request<{ status: string }>(`/admin/verifications/${encodeURIComponent(id)}/review`, { method: 'POST', body: JSON.stringify(body) }),
-  reminders: () => request<Array<Record<string, unknown>>>('/admin/reminders'),
-  auditLogs: () => request<Array<Record<string, unknown>>>('/admin/audit-logs'),
+  reminders: (query: AdminListQuery = {}) => request<AdminPageApi<Record<string, unknown>>>(`/admin/reminders${queryString(query)}`),
+  auditLogs: (query: AdminListQuery = {}) => request<AdminPageApi<Record<string, unknown>>>(`/admin/audit-logs${queryString(query)}`),
   settings: () => request<Record<string, unknown>>('/admin/settings/validation'),
   updateSettings: (body: unknown) => request<Record<string, unknown>>('/admin/settings/validation', { method: 'PUT', body: JSON.stringify(body) }),
   integrations: () => request<Array<Record<string, unknown>>>('/admin/integrations'),
-  outbox: () => request<Array<Record<string, unknown>>>('/admin/outbox'),
+  outbox: (query: AdminListQuery = {}) => request<AdminPageApi<Record<string, unknown>>>(`/admin/outbox${queryString(query)}`),
+  campaigns: (query: AdminListQuery = {}) => request<AdminPageApi<Record<string, unknown>>>(`/admin/campaigns${queryString(query)}`),
+  campaign: (id: string) => request<Record<string, unknown>>(`/admin/campaigns/${encodeURIComponent(id)}`),
+  campaignItems: (id: string) => request<Array<Record<string, unknown>>>(`/admin/campaigns/${encodeURIComponent(id)}/items`),
+  createCampaign: (body: unknown) => request<Record<string, unknown>>('/admin/campaigns', { method: 'POST', body: JSON.stringify(body) }),
+  startCampaign: (id: string) => request<{ id: string; status: string }>(`/admin/campaigns/${encodeURIComponent(id)}/start`, { method: 'POST' }),
+  optOutCustomer: (id: string) => request<{ customerId: string; status: string }>(`/admin/customers/${encodeURIComponent(id)}/whatsapp-opt-out`, { method: 'POST' }),
 };

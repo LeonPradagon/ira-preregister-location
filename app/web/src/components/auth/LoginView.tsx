@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
-import { Lock, Mail, Shield, CheckCircle2, ArrowRight, UserCheck } from 'lucide-react';
+import { Lock, Mail, Shield, ArrowRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { AdminRole } from '../../types';
-import { API_MODE } from '../../lib/apiClient';
 
 export const LoginView: React.FC = () => {
-  const { loginAdmin, allAdminUsers } = useApp();
-  const apiMode = API_MODE;
+  const { loginAdmin } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -31,12 +28,6 @@ export const LoginView: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleSelectQuickAccount = (userEmail: string) => {
-    setEmail(userEmail);
-    setPassword('');
-    setError('Akun dipilih. Masukkan kata sandi demo untuk melanjutkan.');
   };
 
   return (
@@ -67,9 +58,7 @@ export const LoginView: React.FC = () => {
             )}
 
             <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg text-xs text-blue-800 dark:text-blue-300">
-              {apiMode
-                ? 'Mode API aktif: gunakan kredensial Better Auth yang dibuat melalui seed atau administrasi platform.'
-                : <>Mode demo lokal: kata sandi default adalah <code className="font-mono font-semibold">demo-password</code>.</>}
+              Gunakan kredensial Better Auth yang dibuat melalui seed atau administrasi platform.
             </div>
 
             <div>
@@ -122,34 +111,6 @@ export const LoginView: React.FC = () => {
             </button>
           </form>
 
-          {/* Quick Role Switcher for Testing (PRD Section 5.1) */}
-          {!apiMode && <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
-            <div className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2.5 flex items-center gap-1">
-              <UserCheck className="w-3.5 h-3.5 text-gray-700 dark:text-gray-300" />
-              <span>Akses Cepat Pengujian Role (RBAC):</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {allAdminUsers.map((user) => (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => handleSelectQuickAccount(user.email)}
-                  className="p-2.5 text-left rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all group bg-white dark:bg-gray-850"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 group-hover:text-gray-950 dark:group-hover:text-white truncate">
-                      {user.name}
-                    </span>
-                    <span className="text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 group-hover:bg-gray-900 group-hover:text-white dark:group-hover:bg-gray-100 dark:group-hover:text-gray-900 transition-colors">
-                      {user.role}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate mt-0.5">{user.department}</div>
-                </button>
-              ))}
-            </div>
-          </div>}
         </div>
 
         {/* Footer */}

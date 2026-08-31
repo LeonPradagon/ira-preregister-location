@@ -4,9 +4,7 @@ COPY app/web/package.json app/web/package-lock.json ./
 RUN npm ci
 COPY app/web ./
 ARG VITE_API_URL=http://localhost:3000/v1
-ARG VITE_API_MODE=true
 ENV VITE_API_URL=$VITE_API_URL
-ENV VITE_API_MODE=$VITE_API_MODE
 RUN npm run build
 
 FROM nginx:1.27-alpine

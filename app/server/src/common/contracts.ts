@@ -17,6 +17,15 @@ export const reminderSchema = z.object({
   reminderPreference: z.enum(['IN_1_HOUR', 'TONIGHT', 'TOMORROW_MORNING', 'DEFAULT']),
 });
 
+export const addressStatusSchema = z.object({ sameAddress: z.boolean() });
+
+export const campaignCreateSchema = z.object({
+  name: z.string().trim().min(1).max(255),
+  customerIds: z.array(z.string().uuid()).min(1).max(10000).transform((ids) => [...new Set(ids)]),
+  scheduledAt: z.string().datetime().optional(),
+  timezone: z.string().trim().min(1).max(64).default('Asia/Jakarta'),
+});
+
 export const addressChangeSchema = z.object({
   province: z.string().trim().min(1).max(128),
   city: z.string().trim().min(1).max(128),
@@ -38,6 +47,8 @@ export const customerCreateSchema = z.object({
   externalId: z.string().trim().min(1).max(128),
   name: z.string().trim().min(2).max(255),
   phoneE164: z.string().regex(/^\+[1-9]\d{7,14}$/, 'phoneE164 must use E.164 format'),
+  whatsappOptInAt: z.string().datetime().optional(),
+  whatsappOptInSource: z.string().trim().min(1).max(128).optional(),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).default('ACTIVE'),
   address: addressChangeSchema.extend({
     referenceLocation: z.object({
@@ -48,6 +59,22 @@ export const customerCreateSchema = z.object({
     referencePrecision: z.enum(['EXACT_MASTER', 'ROOFTOP', 'HOUSE', 'STREET', 'AREA', 'DISTRICT', 'CITY']).default('EXACT_MASTER'),
     referenceConfidence: z.number().finite().min(0).max(1).default(1),
   }),
+});
+
+export const customerListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  search: z.string().trim().max(128).default(''),
+  status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
+  locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
+});
+
+export const adminListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  search: z.string().trim().max(128).default(''),
+  status: z.string().trim().max(64).optional(),
+  actor: z.enum(['CUSTOMER', 'SYSTEM', 'ADMIN']).optional(),
 });
 
 export const reviewSchema = z.object({
@@ -79,8 +106,12 @@ export const validationConfigSchema = z.object({
 export type GpsSample = z.infer<typeof coordinateSchema>;
 export type AddressChangeInput = z.infer<typeof addressChangeSchema>;
 export type CustomerCreateInput = z.infer<typeof customerCreateSchema>;
+export type CustomerListQueryInput = z.infer<typeof customerListQuerySchema>;
+export type AdminListQueryInput = z.infer<typeof adminListQuerySchema>;
 export type ReviewInput = z.infer<typeof reviewSchema>;
 export type ValidationConfigInput = z.infer<typeof validationConfigSchema>;
+export type AddressStatusInput = z.infer<typeof addressStatusSchema>;
+export type CampaignCreateInput = z.infer<typeof campaignCreateSchema>;
 
 export interface PublicVerificationContext {
   session: {

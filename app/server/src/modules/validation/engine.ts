@@ -129,7 +129,7 @@ export function decideValidation(
   let result: ValidationResult = 'MANUAL_REVIEW';
   if (bestSample.accuracyMeters > config.gpsMaxAccuracyMeters) result = 'LOW_GPS_ACCURACY';
   else if (spreadMeters > 100) result = 'MANUAL_REVIEW';
-  else if (precisionOk && provinceMatch && cityMatch && districtMatch && subdistrictMatch && distanceFromReferenceMeters <= config.homeRadiusMeters && addressScore >= config.addressScoreThreshold) result = 'LOCATION_VALID';
+  else if (precisionOk && provinceMatch && cityMatch && districtMatch && subdistrictMatch && streetScore >= config.streetMatchThreshold && distanceFromReferenceMeters <= config.homeRadiusMeters && addressScore >= config.addressScoreThreshold) result = 'LOCATION_VALID';
   else if (distanceFromReferenceMeters > config.homeRadiusMeters || addressScore < 0.6 || !provinceMatch || !cityMatch) result = 'LOCATION_MISMATCH';
   if (result === 'LOCATION_VALID') reasonCodes.push('LOCATION_VALID');
   if (result === 'MANUAL_REVIEW') reasonCodes.push('MANUAL_REVIEW_REQUIRED');

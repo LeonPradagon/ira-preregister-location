@@ -23,7 +23,6 @@ interface CustomerDetailViewProps {
   onBack: () => void;
   onSelectVerification: (sessionId: string) => void;
   onCreateVerification: (customerId: string, addressId: string) => void;
-  onOpenCustomerSimulator: (token: string) => void;
 }
 
 export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
@@ -31,9 +30,8 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
   onBack,
   onSelectVerification,
   onCreateVerification,
-  onOpenCustomerSimulator,
 }) => {
-  const { customers, addresses, verificationSessions } = useApp();
+  const { customers, addresses, verificationSessions, optOutCustomer } = useApp();
 
   const customer = customers.find((c) => c.id === customerId);
   const custAddresses = addresses.filter((a) => a.customerId === customerId);
@@ -65,19 +63,29 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <div className="flex items-center gap-2">
+            <div>
               <h1 className="text-base font-semibold text-gray-900 dark:text-white tracking-tight">{customer.name}</h1>
-              <span className="font-mono text-[11px] text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
-                {customer.externalId}
-              </span>
+              <div className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">ID pelanggan: <span className="font-mono text-indigo-700 dark:text-indigo-400">{customer.externalId}</span></div>
+            </div>
+            <div className="flex items-center gap-2 mt-2">
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-                {customer.status}
+                {customer.status === 'PENDING_INSTALLATION' ? 'Menunggu pemasangan' : customer.status === 'VERIFIED' ? 'Terverifikasi' : customer.status === 'SUSPENDED' ? 'Ditangguhkan' : 'Aktif'}
+              </span>
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${masterAddress?.isVerified ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'}`}>
+                GPS: {masterAddress?.isVerified ? 'Terverifikasi' : 'Belum diverifikasi'}
               </span>
             </div>
             <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
               WhatsApp: <span className="font-mono text-gray-800 dark:text-gray-200 font-medium">{customer.phoneE164}</span> • Terdaftar sejak:{' '}
               {new Date(customer.createdAt).toLocaleDateString('id-ID')}
             </div>
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-gray-500 dark:text-gray-400">
+              <span>Source ID: <strong className="font-mono text-gray-700 dark:text-gray-300">{customer.sourceRecordId || '—'}</strong></span>
+              <span>Source dibuat: <strong className="text-gray-700 dark:text-gray-300">{customer.sourceCreatedAt ? new Date(customer.sourceCreatedAt).toLocaleString('id-ID') : '—'}</strong></span>
+              <span>Coverage: <strong className="text-gray-700 dark:text-gray-300">{customer.coverageStatus || '—'}</strong></span>
+              <span>BTS: <strong className="text-gray-700 dark:text-gray-300">{customer.btsName || '—'}{customer.isCoverBts ? ' (cover)' : ''}</strong></span>
+            </div>
+            <div className="mt-2 flex items-center gap-2 text-[10px]"><span className={customer.whatsappOptOutAt ? 'text-rose-600' : 'text-emerald-600'}>{customer.whatsappOptOutAt ? 'WhatsApp opt-out — pengiriman diblokir' : 'WhatsApp eligible — belum opt-out'}</span>{!customer.whatsappOptOutAt && <button type="button" onClick={() => { if (window.confirm('Hentikan seluruh pesan WhatsApp untuk customer ini?')) void optOutCustomer(customer.id); }} className="rounded border border-rose-200 px-2 py-1 text-rose-700">Stop pesan</button>}</div>
           </div>
         </div>
 
@@ -116,23 +124,20 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
                       <span>{addr.addressType}</span>
-                      {addr.isVerified && (
-                        <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] px-1.5 py-0.2 rounded font-semibold">
-                          VERIFIED
-                        </span>
-                      )}
+                      <span className={`${addr.isVerified ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'} border text-[10px] px-1.5 py-0.2 rounded font-semibold`}>{addr.isVerified ? 'GPS VERIFIED' : 'GPS BELUM VERIFIED'}</span>
                     </span>
-                    <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400">{addr.referencePrecision}</span>
                   </div>
 
                   <p className="text-gray-700 dark:text-gray-300 leading-relaxed font-medium">{addr.rawAddress}</p>
+                  <div className="grid grid-cols-2 gap-1 text-[10px] text-gray-500 dark:text-gray-400">
+                    <span>Provinsi: {addr.province || '—'}</span><span>Kota: {addr.city || '—'}</span>
+                    <span>Kecamatan: {addr.district || '—'}</span><span>Kelurahan: {addr.subdistrict || '—'}</span>
+                    <span>Kode pos: {addr.postalCode || '—'}</span><span>Patokan: {addr.addressReference || addr.landmark || '—'}</span>
+                  </div>
 
-                  <div className="text-[10px] font-mono text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                    <span>
-                      Ref: {addr.referenceLocation.latitude.toFixed(6)},{' '}
-                      {addr.referenceLocation.longitude.toFixed(6)}
-                    </span>
-                    <span>Conf: {Math.round(addr.referenceConfidence * 100)}%</span>
+                  <div className="text-[10px] font-mono text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-x-3 gap-y-1">
+                    <span>Latitude: {addr.referenceLocation ? addr.referenceLocation.latitude.toFixed(6) : '—'}</span>
+                    <span>Longitude: {addr.referenceLocation ? addr.referenceLocation.longitude.toFixed(6) : '—'}</span>
                   </div>
                 </div>
               ))}
@@ -181,17 +186,6 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
                     </div>
 
                     <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                      <button
-                        type="button"
-                        onClick={() => onOpenCustomerSimulator(session.token)}
-                        disabled={!session.token}
-                        className="px-2.5 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-colors"
-                        title={session.token ? 'Buka tampilan customer' : 'Token hanya tersedia saat link dibuat atau dirotasi'}
-                      >
-                        <Smartphone className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                        <span>Simulasi Customer</span>
-                      </button>
-
                       <button
                         type="button"
                         onClick={() => onSelectVerification(session.id)}

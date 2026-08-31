@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Activity,
   Calendar,
@@ -10,34 +10,34 @@ import {
   Search,
   Shield,
   User,
+  RefreshCw,
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { adminApi } from '../../lib/apiClient';
 import { AuditLog } from '../../types';
+import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 
 export const AuditLogsView: React.FC = () => {
-  const { auditLogs } = useApp();
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [total, setTotal] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [actorFilter, setActorFilter] = useState<string>('ALL');
   const [entityFilter, setEntityFilter] = useState<string>('ALL');
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<TablePageSize>(25);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredLogs = auditLogs.filter((log) => {
-    const matchesSearch =
-      log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.actorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.entityId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (log.reason && log.reason.toLowerCase().includes(searchTerm.toLowerCase()));
-
-    const matchesActor =
-      actorFilter === 'ALL' ||
-      (actorFilter === 'CUSTOMER' && log.actorUserId === 'customer') ||
-      (actorFilter === 'SYSTEM' && log.actorUserId === 'system') ||
-      (actorFilter === 'ADMIN' && log.actorUserId.startsWith('usr-admin'));
-
-    const matchesEntity = entityFilter === 'ALL' || log.entityType === entityFilter;
-
-    return matchesSearch && matchesActor && matchesEntity;
-  });
+  useEffect(() => setPage(1), [searchTerm, actorFilter, entityFilter]);
+  const load = async () => {
+    setLoading(true); setError(null);
+    try {
+      const response = await adminApi.auditLogs({ page, pageSize, search: searchTerm, status: entityFilter, actor: actorFilter });
+      setAuditLogs(response.items as unknown as AuditLog[]); setTotal(response.total);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Audit trail gagal dimuat.'); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void load(); }, [page, pageSize, searchTerm, actorFilter, entityFilter]);
 
   const getActionBadgeColor = (action: string) => {
     if (action.includes('VALID') || action.includes('APPROVE') || action.includes('CREATE')) {
@@ -67,8 +67,9 @@ export const AuditLogsView: React.FC = () => {
         </div>
 
         <div className="text-xs font-mono text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
-          Total Log: <span className="text-gray-900 dark:text-white font-semibold">{auditLogs.length}</span> entries
+          Total Log: <span className="text-gray-900 dark:text-white font-semibold">{total}</span> entries
         </div>
+        <button type="button" onClick={() => void load()} disabled={loading} className="rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" aria-label="Muat ulang audit trail" title="Muat ulang audit trail"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
       </div>
 
       {/* Filter / Search Bar */}
@@ -123,7 +124,7 @@ export const AuditLogsView: React.FC = () => {
       {/* Audit Logs List */}
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-xs">
         <div className="divide-y divide-gray-100 dark:divide-gray-800">
-          {filteredLogs.map((log) => {
+          {auditLogs.map((log) => {
             const isExpanded = expandedLogId === log.id;
 
             return (
@@ -192,9 +193,12 @@ export const AuditLogsView: React.FC = () => {
               </div>
             );
           })}
+          {loading && <div className="p-10 text-center text-xs text-gray-500">Memuat audit trail...</div>}
+          {!loading && error && <div className="p-10 text-center text-xs text-rose-600">{error}</div>}
+          {!loading && !error && !auditLogs.length && <div className="p-10 text-center text-xs text-gray-500">Belum ada audit log.</div>}
         </div>
+        <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} disabled={loading} />
       </div>
     </div>
   );
 };
-

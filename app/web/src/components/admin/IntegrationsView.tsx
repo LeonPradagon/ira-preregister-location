@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Activity,
   CheckCircle2,
@@ -11,9 +11,30 @@ import {
   Zap,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { adminApi } from '../../lib/apiClient';
+import { IntegrationOutboxEvent } from '../../types';
+import { TablePagination, TablePageSize } from '../common/AdminTable';
 
 export const IntegrationsView: React.FC = () => {
-  const { outboxEvents, integrationConfigs } = useApp();
+  const { integrationConfigs } = useApp();
+  const [outboxEvents, setOutboxEvents] = useState<IntegrationOutboxEvent[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<TablePageSize>(25);
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const load = async () => {
+    setLoading(true); setError(null);
+    try {
+      const response = await adminApi.outbox({ page, pageSize, search: searchTerm, status: statusFilter });
+      setOutboxEvents(response.items as unknown as IntegrationOutboxEvent[]); setTotal(response.total);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Outbox gagal dimuat.'); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => setPage(1), [searchTerm, statusFilter]);
+  useEffect(() => { void load(); }, [page, pageSize, searchTerm, statusFilter]);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -30,7 +51,7 @@ export const IntegrationsView: React.FC = () => {
         </div>
 
         <span className="text-xs font-mono px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg">
-          Outbox: {outboxEvents.length} Events
+          Outbox: {total} Events
         </span>
       </div>
 
@@ -49,7 +70,7 @@ export const IntegrationsView: React.FC = () => {
               </div>
             </div>
             <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-              PORT_READY (DISABLED)
+              {integrationConfigs.IRA_COVERAGE.status}
             </span>
           </div>
 
@@ -78,7 +99,7 @@ export const IntegrationsView: React.FC = () => {
               </div>
             </div>
             <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-              PORT_READY (DISABLED)
+              {integrationConfigs.TICKETING.status}
             </span>
           </div>
 
@@ -107,9 +128,12 @@ export const IntegrationsView: React.FC = () => {
               Event payloads terbit otomatis saat lokasi dinyatakan valid (LOCATION_VALID).
             </p>
           </div>
+          <button type="button" onClick={() => void load()} disabled={loading} className="rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" aria-label="Muat ulang outbox" title="Muat ulang outbox"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
         </div>
 
-        {outboxEvents.length > 0 ? (
+        <div className="flex flex-col gap-3 sm:flex-row"><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Cari event, aggregate, atau correlation ID..." className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-900 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white sm:w-96" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs dark:border-gray-700 dark:bg-gray-800"><option value="ALL">Semua status</option><option value="PENDING">PENDING</option><option value="PUBLISHED">PUBLISHED</option><option value="FAILED">FAILED</option></select></div>
+
+        {loading ? <div className="p-8 text-center text-xs text-gray-500">Memuat outbox...</div> : error ? <div className="p-8 text-center text-xs text-rose-600">{error}</div> : outboxEvents.length > 0 ? (
           <div className="space-y-4">
             {outboxEvents.map((evt) => (
               <div key={evt.id} className="bg-gray-50/70 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-xs space-y-3">
@@ -153,6 +177,7 @@ export const IntegrationsView: React.FC = () => {
             Belum ada event yang dipublikasikan. Selesaikan verifikasi lokasi untuk melihat payload Outbox.
           </div>
         )}
+        <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} disabled={loading} />
       </div>
     </div>
   );

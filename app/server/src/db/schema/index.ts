@@ -80,7 +80,16 @@ export const customers = pgTable('customers', {
   externalId: varchar('external_id', { length: 128 }).notNull().unique(),
   name: varchar('name', { length: 255 }).notNull(),
   phoneE164: varchar('phone_e164', { length: 32 }).notNull(),
+  whatsappOptInAt: timestamp('whatsapp_opt_in_at', { withTimezone: true }),
+  whatsappOptInSource: varchar('whatsapp_opt_in_source', { length: 128 }),
+  whatsappOptOutAt: timestamp('whatsapp_opt_out_at', { withTimezone: true }),
   status: varchar('status', { length: 48 }).notNull().default('ACTIVE'),
+  sourceRecordId: varchar('source_record_id', { length: 128 }).unique(),
+  sourceCreatedAt: timestamp('source_created_at', { withTimezone: true }),
+  isCoverBts: boolean('is_cover_bts'),
+  btsName: varchar('bts_name', { length: 255 }),
+  coverageStatus: varchar('coverage_status', { length: 64 }),
+  sourceMetadata: jsonb('source_metadata'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -91,6 +100,7 @@ export const customerAddresses = pgTable('customer_addresses', {
   addressType: varchar('address_type', { length: 32 }).notNull(),
   addressStatus: varchar('address_status', { length: 32 }).notNull(),
   rawAddress: text('raw_address').notNull(),
+  addressReference: text('address_reference'),
   province: varchar('province', { length: 128 }).notNull(),
   city: varchar('city', { length: 128 }).notNull(),
   district: varchar('district', { length: 128 }).notNull(),
@@ -120,10 +130,27 @@ export const customerAddresses = pgTable('customer_addresses', {
   updatedAt: updatedAt(),
 });
 
+export const verificationCampaigns = pgTable('verification_campaigns', {
+  id: id(),
+  name: varchar('name', { length: 255 }).notNull(),
+  status: varchar('status', { length: 32 }).notNull().default('DRAFT'),
+  timezone: varchar('timezone', { length: 64 }).notNull().default('Asia/Jakarta'),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+  targetCount: integer('target_count').notNull().default(0),
+  sentCount: integer('sent_count').notNull().default(0),
+  failedCount: integer('failed_count').notNull().default(0),
+  optedOutCount: integer('opted_out_count').notNull().default(0),
+  createdBy: text('created_by').notNull().references(() => authUsers.id),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 export const verificationSessions = pgTable('verification_sessions', {
   id: id(),
+  campaignId: uuid('campaign_id').references(() => verificationCampaigns.id),
   customerId: uuid('customer_id').notNull().references(() => customers.id),
   currentAddressId: uuid('current_address_id').notNull().references(() => customerAddresses.id),
+  tokenId: varchar('token_id', { length: 64 }).unique(),
   tokenHash: varchar('token_hash', { length: 128 }).notNull().unique(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
@@ -212,6 +239,32 @@ export const reminders = pgTable('reminders', {
   createdAt: createdAt(),
 });
 
+export const verificationCampaignItems = pgTable('verification_campaign_items', {
+  id: id(),
+  campaignId: uuid('campaign_id').notNull().references(() => verificationCampaigns.id, { onDelete: 'cascade' }),
+  customerId: uuid('customer_id').notNull().references(() => customers.id),
+  addressId: uuid('address_id').notNull().references(() => customerAddresses.id),
+  sessionId: uuid('session_id').notNull().references(() => verificationSessions.id),
+  status: varchar('status', { length: 32 }).notNull().default('PENDING'),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  providerMessageId: varchar('provider_message_id', { length: 255 }),
+  retryCount: integer('retry_count').notNull().default(0),
+  lastError: text('last_error'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const whatsappDeliveryLogs = pgTable('whatsapp_delivery_logs', {
+  id: id(),
+  phoneHash: varchar('phone_hash', { length: 64 }).notNull(),
+  messageType: varchar('message_type', { length: 32 }).notNull(),
+  idempotencyKey: varchar('idempotency_key', { length: 255 }).notNull().unique(),
+  providerMessageId: varchar('provider_message_id', { length: 255 }),
+  sentAt: timestamp('sent_at', { withTimezone: true }).notNull(),
+  createdAt: createdAt(),
+});
+
 export const integrationOutbox = pgTable('integration_outbox', {
   id: id(),
   eventId: uuid('event_id').defaultRandom().notNull().unique(),
@@ -275,12 +328,26 @@ export const addressRelations = relations(customerAddresses, ({ one, many }) => 
 }));
 
 export const verificationRelations = relations(verificationSessions, ({ one, many }) => ({
+  campaign: one(verificationCampaigns, { fields: [verificationSessions.campaignId], references: [verificationCampaigns.id] }),
   customer: one(customers, { fields: [verificationSessions.customerId], references: [customers.id] }),
   address: one(customerAddresses, { fields: [verificationSessions.currentAddressId], references: [customerAddresses.id] }),
   captures: many(locationCaptures),
   results: many(validationResults),
   reviews: many(verificationReviews),
   reminders: many(reminders),
+}));
+
+export const campaignRelations = relations(verificationCampaigns, ({ one, many }) => ({
+  creator: one(authUsers, { fields: [verificationCampaigns.createdBy], references: [authUsers.id] }),
+  sessions: many(verificationSessions),
+  items: many(verificationCampaignItems),
+}));
+
+export const campaignItemRelations = relations(verificationCampaignItems, ({ one }) => ({
+  campaign: one(verificationCampaigns, { fields: [verificationCampaignItems.campaignId], references: [verificationCampaigns.id] }),
+  customer: one(customers, { fields: [verificationCampaignItems.customerId], references: [customers.id] }),
+  address: one(customerAddresses, { fields: [verificationCampaignItems.addressId], references: [customerAddresses.id] }),
+  session: one(verificationSessions, { fields: [verificationCampaignItems.sessionId], references: [verificationSessions.id] }),
 }));
 
 export const authUserRelations = relations(authUsers, ({ many }) => ({

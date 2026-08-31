@@ -11,19 +11,28 @@ import { HttpGeocodingAdapter } from './integrations/geocoding/http-geocoding.ad
 import { WhatsAppPort } from './integrations/whatsapp/whatsapp.port.js';
 import { ConsoleWhatsAppAdapter } from './integrations/whatsapp/console-whatsapp.adapter.js';
 import { HttpWhatsAppAdapter } from './integrations/whatsapp/http-whatsapp.adapter.js';
+import { DisabledWhatsAppAdapter } from './integrations/whatsapp/disabled-whatsapp.adapter.js';
 import { RolesGuard } from './auth/roles.guard.js';
 import { ValidationConfigService } from './config/validation-config.service.js';
+import { CampaignController } from './modules/campaigns/campaign.controller.js';
+import { CampaignService } from './modules/campaigns/campaign.service.js';
+import { WhatsAppComplianceService } from './integrations/whatsapp/whatsapp-compliance.service.js';
+import { WhatsAppWebhookController } from './integrations/whatsapp/whatsapp-webhook.controller.js';
+import { CustomerImportService } from './modules/imports/customer-import.service.js';
 
 @Module({
   imports: [AuthModule],
-  controllers: [HealthController, PublicVerificationController, AdminController],
+  controllers: [HealthController, PublicVerificationController, AdminController, CampaignController, WhatsAppWebhookController],
   providers: [
     VerificationService,
     AdminService,
+    CampaignService,
+    WhatsAppComplianceService,
+    CustomerImportService,
     ValidationConfigService,
     RolesGuard,
     { provide: GeocodingPort, useFactory: () => process.env.GEOCODING_BASE_URL ? new HttpGeocodingAdapter() : new DisabledGeocodingAdapter() },
-    { provide: WhatsAppPort, useFactory: () => process.env.WHATSAPP_BASE_URL ? new HttpWhatsAppAdapter() : new ConsoleWhatsAppAdapter() },
+    { provide: WhatsAppPort, useFactory: () => process.env.WHATSAPP_BASE_URL && process.env.WHATSAPP_TEMPLATE_NAME ? new HttpWhatsAppAdapter() : process.env.NODE_ENV === 'production' ? new DisabledWhatsAppAdapter() : new ConsoleWhatsAppAdapter() },
   ],
 })
 export class AppModule {}

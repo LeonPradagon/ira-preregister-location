@@ -29,17 +29,16 @@ import { ReviewDecision, VerificationSession } from '../../types';
 import { VerificationMap } from '../maps/VerificationMap';
 import { buildGoogleMapsDeepLink, formatCoordinatePair } from '../../lib/validationEngine';
 import { hasCapability } from '../../lib/accessControl';
+import { AdminTable } from '../common/AdminTable';
 
 interface VerificationDetailViewProps {
   sessionId: string;
   onBack: () => void;
-  onOpenCustomerSimulator: (token: string) => void;
 }
 
 export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
   sessionId,
   onBack,
-  onOpenCustomerSimulator,
 }) => {
   const {
     verificationSessions,
@@ -168,18 +167,6 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* WhatsApp Simulator quick trigger */}
-          <button
-            type="button"
-            onClick={() => onOpenCustomerSimulator(session.token)}
-            disabled={!session.token}
-            className="px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
-            title={session.token ? 'Buka web pelanggan' : 'Token tidak disimpan di browser; gunakan kirim ulang untuk membuat link baru'}
-          >
-            <Smartphone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span>Buka Web Pelanggan</span>
-          </button>
-
           {/* Resend WhatsApp Link */}
           <button
             type="button"
@@ -560,7 +547,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
 
             {/* Interactive Leaflet Map (PRD Section 11.3 & AC-11) */}
             <div className="pt-2">
-              <VerificationMap
+          <VerificationMap
                 referenceLocation={refLoc}
                 referenceLabel={address.rawAddress}
                 referencePrecision={address.referencePrecision}
@@ -585,8 +572,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
               </span>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <AdminTable embedded minWidthClass="min-w-[760px]">
                 <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">
                   <tr>
                     <th className="px-3.5 py-2">Sinyal / Parameter</th>
@@ -598,7 +584,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-gray-700 dark:text-gray-300">
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Latitude</td>
-                    <td className="px-3.5 py-2 font-mono text-[11px]">{refLoc.latitude.toFixed(6)}</td>
+                    <td className="px-3.5 py-2 font-mono text-[11px]">{refLoc ? refLoc.latitude.toFixed(6) : 'Tidak tersedia'}</td>
                     <td className="px-3.5 py-2 font-mono text-[11px]">
                       {capturedLoc ? capturedLoc.latitude.toFixed(6) : '-'}
                     </td>
@@ -606,7 +592,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Longitude</td>
-                    <td className="px-3.5 py-2 font-mono text-[11px]">{refLoc.longitude.toFixed(6)}</td>
+                    <td className="px-3.5 py-2 font-mono text-[11px]">{refLoc ? refLoc.longitude.toFixed(6) : 'Tidak tersedia'}</td>
                     <td className="px-3.5 py-2 font-mono text-[11px]">
                       {capturedLoc ? capturedLoc.longitude.toFixed(6) : '-'}
                     </td>
@@ -673,8 +659,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                     </td>
                   </tr>
                 </tbody>
-              </table>
-            </div>
+            </AdminTable>
           </div>
         </div>
       </div>
@@ -802,7 +787,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                   <option value="MANUAL_APPROVAL_PRECISION_PASS">MANUAL_APPROVAL_PRECISION_PASS (Sesuai patokan satelit/cluster)</option>
                   <option value="STREET_ALIAS_VERIFIED">STREET_ALIAS_VERIFIED (Nama jalan memiliki alias resmi)</option>
                   <option value="LOCATION_MISMATCH_REJECTED">LOCATION_MISMATCH_REJECTED (Titik terlalu jauh dari master)</option>
-                  <option value="GPS_ACCURACY_INSUFFICIENT">GPS_ACCURACY_INSUFFICIENT (Akurasi buruk &gt; 30m)</option>
+                  <option value="GPS_ACCURACY_INSUFFICIENT">GPS_ACCURACY_INSUFFICIENT (Akurasi melewati konfigurasi)</option>
                   <option value="ADDRESS_UPDATE_REQUIRED">ADDRESS_UPDATE_REQUIRED (Alamat master tidak akurat)</option>
                 </select>
               </div>

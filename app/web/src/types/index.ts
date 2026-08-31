@@ -16,14 +16,25 @@ export interface Customer {
   externalId: string;
   name: string;
   phoneE164: string;
+  whatsappOptInAt?: string;
+  whatsappOptInSource?: string;
+  whatsappOptOutAt?: string;
   status: CustomerStatus;
+  sourceRecordId?: string;
+  sourceCreatedAt?: string;
+  isCoverBts?: boolean;
+  btsName?: string;
+  coverageStatus?: string;
+  sourceMetadata?: Record<string, unknown>;
+  activeAddress?: CustomerAddress | null;
+  latestVerification?: VerificationSession | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export type AddressType = 'MASTER' | 'PROPOSED' | 'VERIFIED_INSTALLATION' | 'HISTORICAL';
 export type AddressStatus = 'ACTIVE' | 'PROPOSED' | 'SUPERSEDED' | 'VERIFIED';
-export type ReferenceSource = 'MASTER_COORDINATE' | 'GEOCODED' | 'CUSTOMER_PROPOSED';
+export type ReferenceSource = 'MASTER_COORDINATE' | 'GEOCODED' | 'CUSTOMER_PROPOSED' | 'PREREG_IMPORT';
 export type ReferencePrecision =
   | 'EXACT_MASTER'
   | 'ROOFTOP'
@@ -44,6 +55,7 @@ export interface CustomerAddress {
   addressType: AddressType;
   addressStatus: AddressStatus;
   rawAddress: string;
+  addressReference?: string;
   province: string;
   city: string;
   district: string;
@@ -58,7 +70,7 @@ export interface CustomerAddress {
   unit?: string;
   addressDetail?: string;
   landmark?: string;
-  referenceLocation: Coordinate;
+  referenceLocation: Coordinate | null;
   referenceSource: ReferenceSource;
   referencePrecision: ReferencePrecision;
   referenceConfidence: number; // 0.0 - 1.0
@@ -177,8 +189,6 @@ export interface VerificationSession {
   id: string;
   customerId: string;
   currentAddressId: string;
-  token: string;
-  tokenHash: string;
   expiresAt: string;
   revokedAt?: string;
   verificationStatus: VerificationStatus;
@@ -192,6 +202,70 @@ export interface VerificationSession {
   locationVerifiedAt?: string;
   completedAt?: string;
   lastValidationResult?: ValidationResult;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerPage {
+  items: Customer[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface DashboardSummary {
+  generatedAt: string;
+  customers: {
+    total: number;
+    active: number;
+    verified: number;
+    whatsappOptedIn: number;
+    whatsappOptedOut: number;
+  };
+  verifications: {
+    total: number;
+    invitationsSent: number;
+    linksOpened: number;
+    customersConfirmed: number;
+    customersMismatch: number;
+    gpsCaptured: number;
+    lowGpsAccuracy: number;
+    waitingForHome: number;
+    addressChanged: number;
+    manualReview: number;
+    locationValid: number;
+    statusCounts: Record<string, number>;
+  };
+  reminders: {
+    total: number;
+    scheduled: number;
+    sent: number;
+    failed: number;
+    cancelled: number;
+    byNumber: Record<string, number>;
+  };
+  outbox: {
+    total: number;
+    pending: number;
+    published: number;
+    failed: number;
+  };
+}
+
+export type CampaignStatus = 'DRAFT' | 'RUNNING' | 'COMPLETED';
+export type CampaignItemStatus = 'PENDING' | 'PROCESSING' | 'SENT' | 'FAILED';
+
+export interface VerificationCampaign {
+  id: string;
+  name: string;
+  status: CampaignStatus;
+  timezone: string;
+  scheduledAt: string;
+  targetCount: number;
+  sentCount: number;
+  failedCount: number;
+  createdBy: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -213,7 +287,7 @@ export interface VerificationReview {
   createdAt: string;
 }
 
-export type ReminderStatus = 'SCHEDULED' | 'SENT' | 'CANCELLED' | 'LIMIT_REACHED';
+export type ReminderStatus = 'SCHEDULED' | 'PROCESSING' | 'SENT' | 'FAILED' | 'CANCELLED' | 'LIMIT_REACHED';
 export type ReminderPreference = 'IN_1_HOUR' | 'TONIGHT' | 'TOMORROW_MORNING' | 'DEFAULT';
 
 export interface Reminder {

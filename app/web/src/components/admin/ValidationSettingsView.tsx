@@ -15,9 +15,10 @@ import { useApp } from '../../context/AppContext';
 import { ValidationConfig } from '../../types';
 
 export const ValidationSettingsView: React.FC = () => {
-  const { validationConfig, updateValidationConfig, currentAdmin, resetAllDataToDefault } = useApp();
+  const { validationConfig, updateValidationConfig, currentAdmin } = useApp();
   const [formData, setFormData] = useState<ValidationConfig>(validationConfig);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setFormData(validationConfig);
@@ -36,9 +37,14 @@ export const ValidationSettingsView: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEditSettings) return;
-    await updateValidationConfig(formData);
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 3000);
+    setSaveError(null);
+    try {
+      await updateValidationConfig(formData);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Konfigurasi gagal disimpan.');
+    }
   };
 
   return (
@@ -69,6 +75,7 @@ export const ValidationSettingsView: React.FC = () => {
           <span>Konfigurasi berhasil diperbarui dan diterapkan ke mesin validasi spasial.</span>
         </div>
       )}
+      {saveError && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-medium text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300">{saveError}</div>}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* SPATIAL & GPS THRESHOLDS (PRD Section 16 & 27) */}
@@ -93,7 +100,7 @@ export const ValidationSettingsView: React.FC = () => {
                   onChange={(e) => handleChangeNumber('GPS_MAX_ACCURACY_METERS', parseInt(e.target.value) || 30)}
                   className="w-32 p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
                 />
-                <span className="text-gray-500 dark:text-gray-400">meter (Default: 30m)</span>
+                <span className="text-gray-500 dark:text-gray-400">meter</span>
               </div>
               <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
                 Tangkapan GPS dengan akurasi &gt; nilai ini akan ditolak (LOW_GPS_ACCURACY).
@@ -114,7 +121,7 @@ export const ValidationSettingsView: React.FC = () => {
                   onChange={(e) => handleChangeNumber('HOME_RADIUS_METERS', parseInt(e.target.value) || 50)}
                   className="w-32 p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
                 />
-                <span className="text-gray-500 dark:text-gray-400">meter (Default: 50m)</span>
+                <span className="text-gray-500 dark:text-gray-400">meter</span>
               </div>
               <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
                 Jarak antara koordinat referensi master dan titik customer.

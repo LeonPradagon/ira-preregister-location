@@ -17,40 +17,45 @@ Status checklist menunjukkan kondisi repository saat ini. Item provider/infrastr
 - [x] Docker Compose hybrid untuk PostgreSQL/PostGIS, Redis, dan worker; web/API dijalankan langsung dari host.
 - [x] Deployment Compose dipisah menjadi backend stack dan frontend static web stack.
 - [x] Better Auth boundary, database session, HttpOnly-cookie boundary, authentication guard, dan RBAC guard.
-- [x] Local seed command untuk Super Admin, customer, address master, dan integration config demo.
+- [x] Local seed command untuk Super Admin saja; customer/alamat/config bisnis diimport dari sumber data asli.
 - [x] Jalankan migration pada PostgreSQL/PostGIS Docker development dan simpan hasil smoke check `/v1/health`.
 
 ## P1 - core MVP
 
 - [x] Server-side coordinate validation: range, accuracy, timestamp, 3-5 samples, dan sample spread consistency.
 - [x] Public token API: context/status, customer confirmation, consent, GPS submit, wait-for-home, address change, dan reminder.
+- [x] Public reminder address check: customer mengonfirmasi alamat masih sama atau memulai address editing sebelum re-verifikasi.
 - [x] Admin API: me, customer, verification, resend/rotate token, manual review, reminders, audit, settings, dan integrations.
+- [x] Campaign API: create/start/list/detail/items dengan batch limit dan delivery status per customer.
 - [x] Verification state machine dengan transition policy dan invalid-transition response.
 - [x] Reminder policy maksimal 3 per session, unique session/number, schedule state, dan cancellation rules.
 - [x] Transactional verification flow: capture + result + session + verified address/customer + audit + outbox.
 - [x] Integration ports: geocoding, WhatsApp, dan safe disabled/console adapters.
 - [x] Frontend API client boundary dengan `VITE_API_URL` dan public `/v/:token` route compatibility.
-- [x] Public customer page API mode dengan `VITE_API_MODE=true`: confirmation, consent, 3 GPS samples, wait/retry, dan server result.
-- [x] Sambungkan seluruh React UI ke API server pada `VITE_API_MODE=true`; localStorage hanya demo fallback/fixture.
+- [x] Public customer page API-only pada `/v/:token`: confirmation, consent, 3 GPS samples, mismatch, wait/retry, proposed address, dan server result.
+- [x] Sambungkan seluruh React UI ke API server; localStorage hanya menyimpan preferensi tema.
 - [x] Tambahkan executable local HTTP integration smoke public/admin terhadap PostgreSQL/PostGIS dan Redis (`scripts/local-smoke.ps1`).
 - [ ] Tambahkan Playwright critical scenarios: confirmation, consent, 3 GPS samples, mismatch, retry, reminder #4 blocked, proposed address, dan manual review.
 
 ## P2 - production hardening and future integrations
 
 - [x] Durable Redis/BullMQ workers: pending outbox polling, idempotent event job ID, due-reminder queue, WhatsApp adapter dispatch, retry boundary, dan status update.
+- [x] Campaign invitation worker: asynchronous batch dispatch, rate limit, retry, idempotent claim, dan counter campaign.
+- [x] WhatsApp safety guardrails: opt-out suppression, approved-template payload, per-number cooldown, daily quota, dan provider-error circuit breaker. Gate opt-in aplikasi dinonaktifkan sesuai kebijakan bisnis; dasar persetujuan tetap menjadi tanggung jawab proses bisnis/provider.
 - [x] `location.verified.v1` event contract dengan event ID, correlation ID, dan idempotency key.
 - [x] Safe operational hooks: structured health response, correlation header, domain error code, dan no raw token audit.
 - [x] IRA coverage dan ticketing ports beserta disabled adapters.
 - [ ] Konfigurasikan provider geocoding nyata, timeout/retry, quota handling, dan precision/confidence mapping.
 - [ ] Konfigurasikan WhatsApp provider nyata, approved template, callback delivery, retry, dan dead-letter handling.
+- [ ] Hubungkan webhook quality/template/account provider nyata dan automatic pause/resume campaign.
 - [ ] Tambahkan OpenTelemetry/Sentry/metrics exporter dan dashboard operasional.
 - [ ] Tambahkan Testcontainers suite untuk PostgreSQL/PostGIS dan Redis/BullMQ.
 
 ## Current progress
 
-**24 / 29 tasks complete (83%)**
+**27 / 32 tasks complete (84%); remaining items are explicitly external/pending**
 
-Kode P0/P1/P2 yang dapat divalidasi lokal sudah dibuat dan typed. Migration, seed, worker, dan smoke API sudah lulus pada PostgreSQL/PostGIS + Redis Docker development. Sisa pekerjaan berada pada Playwright browser E2E, provider credential nyata, observability production, dan Testcontainers CI.
+Kode P0/P1/P2 yang dapat divalidasi lokal sudah dibuat dan typed. Migration, seed login-only, worker, bcrypt token hashing, dan smoke API sudah lulus pada PostgreSQL/PostGIS + Redis Docker development. Sisa pekerjaan berada pada Playwright browser E2E, provider credential/contract nyata, observability production, dan Testcontainers CI.
 
 ## Validation commands
 
@@ -75,6 +80,6 @@ Hasil smoke terakhir: PostgreSQL healthy di `localhost:5433`, Redis `PONG`, work
 
 P0 selesai ketika database fresh berhasil migrate dan `/v1/health` merespons `ok`.
 
-P1 selesai ketika UI memakai API, seluruh critical scenarios lulus integration/E2E, dan tidak ada localStorage sebagai source of truth.
+P1 selesai ketika UI memakai API, seluruh critical scenarios lulus integration/E2E, dan tidak ada localStorage sebagai source of truth. Implementasi frontend API-only sudah selesai; E2E masih pending.
 
 P2 selesai ketika provider nyata, monitoring, retry/dead-letter, dan Testcontainers CI sudah dikonfigurasi.

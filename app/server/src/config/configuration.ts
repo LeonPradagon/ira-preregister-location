@@ -18,6 +18,7 @@ export const envSchema = z.object({
   MAX_REMINDERS_PER_SESSION: z.coerce.number().int().min(1).max(3).default(3),
   COORDINATE_DISPLAY_DECIMALS: z.coerce.number().int().min(0).max(8).default(6),
   VERIFICATION_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
+  VERIFICATION_TOKEN_BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
   REMINDER_DEFAULT_1_HOURS: z.coerce.number().positive().default(2),
   REMINDER_DEFAULT_2_HOURS: z.coerce.number().positive().default(24),
   REMINDER_DEFAULT_3_HOURS: z.coerce.number().positive().default(24),
@@ -36,6 +37,17 @@ export const envSchema = z.object({
   WHATSAPP_BASE_URL: optionalUrl,
   WHATSAPP_API_KEY: optionalString,
   WHATSAPP_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+  WHATSAPP_TEMPLATE_NAME: optionalString,
+  WHATSAPP_TEMPLATE_LANGUAGE: z.string().min(2).default('id'),
+  WHATSAPP_WEBHOOK_SECRET: optionalString,
+  WHATSAPP_DAILY_SEND_LIMIT: z.coerce.number().int().positive().default(10000),
+  WHATSAPP_MIN_INTERVAL_MINUTES: z.coerce.number().int().positive().default(60),
+  WHATSAPP_CIRCUIT_MIN_ATTEMPTS: z.coerce.number().int().positive().default(50),
+  WHATSAPP_CIRCUIT_FAILURE_RATIO: z.coerce.number().min(0).max(1).default(0.3),
+  WHATSAPP_CIRCUIT_COOLDOWN_MINUTES: z.coerce.number().int().positive().default(15),
+  CAMPAIGN_MAX_BATCH_SIZE: z.coerce.number().int().positive().max(10000).default(10000),
+  WHATSAPP_RATE_LIMIT_PER_SECOND: z.coerce.number().int().positive().default(2),
+  REMINDER_TIMEZONE: z.string().min(1).default('Asia/Jakarta'),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

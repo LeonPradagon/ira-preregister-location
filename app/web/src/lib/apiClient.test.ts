@@ -45,4 +45,20 @@ describe('API client', () => {
       }),
     );
   });
+
+  it('requests paginated unverified customer candidates for campaigns', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ items: [], page: 2, pageSize: 100, total: 1000, totalPages: 10 }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await adminApi.customers({ page: 2, pageSize: 100, locationStatus: 'UNVERIFIED' });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/admin/customers?page=2&pageSize=100&locationStatus=UNVERIFIED'),
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
 });
