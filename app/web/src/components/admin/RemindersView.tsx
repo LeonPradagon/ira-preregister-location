@@ -16,6 +16,7 @@ import { api } from '../../lib/apiClient';
 import { Customer, Reminder, VerificationSession } from '../../types';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
+import { userFriendlyStatus } from '../../lib/statusLabels';
 
 interface RemindersViewProps {
   onSelectVerification: (sessionId: string) => void;
@@ -76,7 +77,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
 
       <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 text-xs shadow-xs dark:border-gray-800 dark:bg-gray-900 sm:flex-row">
         <div className="relative w-full sm:w-80"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder={t('reminders.search')} className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-9 pr-3 text-gray-900 outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white" /></div>
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"><option value="ALL">{t('reminders.allStatuses')}</option><option value="SCHEDULED">SCHEDULED</option><option value="PROCESSING">PROCESSING</option><option value="SENT">SENT</option><option value="FAILED">FAILED</option><option value="CANCELLED">CANCELLED</option></select>
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"><option value="ALL">{t('reminders.allStatuses')}</option><option value="SCHEDULED">{userFriendlyStatus('SCHEDULED')}</option><option value="PROCESSING">{userFriendlyStatus('PROCESSING')}</option><option value="SENT">{userFriendlyStatus('SENT')}</option><option value="FAILED">{userFriendlyStatus('FAILED')}</option><option value="CANCELLED">{userFriendlyStatus('CANCELLED')}</option></select>
       </div>
 
       {/* Reminders Table */}
@@ -126,7 +127,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
                             : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
                         }`}
                       >
-                        {rem.status}
+                        {userFriendlyStatus(rem.status)}
                       </span>
                     </td>
 

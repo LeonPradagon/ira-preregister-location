@@ -16,6 +16,7 @@ import { api } from '../../lib/apiClient';
 import { AuditLog } from '../../types';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
+import { userFriendlyAuditAction, userFriendlyAuditEntity } from '../../lib/statusLabels';
 
 export const AuditLogsView: React.FC = () => {
   const { t } = useTranslation();
@@ -97,9 +98,9 @@ export const AuditLogsView: React.FC = () => {
               className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none"
             >
               <option value="ALL">{t('audit.all')} {t('audit.actor')}</option>
-              <option value="CUSTOMER">Customer / Web Flow</option>
-              <option value="SYSTEM">System Engine / Worker</option>
-              <option value="ADMIN">Admin / Reviewer</option>
+              <option value="CUSTOMER">Pelanggan</option>
+              <option value="SYSTEM">Sistem</option>
+              <option value="ADMIN">Admin</option>
             </select>
           </div>
 
@@ -111,13 +112,13 @@ export const AuditLogsView: React.FC = () => {
               className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none"
             >
               <option value="ALL">{t('audit.all')} {t('audit.entity')}</option>
-              <option value="VERIFICATION_SESSION">VERIFICATION_SESSION</option>
-              <option value="VALIDATION">VALIDATION</option>
-              <option value="CUSTOMER">CUSTOMER</option>
-              <option value="ADDRESS">ADDRESS</option>
-              <option value="REMINDER">REMINDER</option>
-              <option value="REVIEW">REVIEW</option>
-              <option value="AUTH">AUTH</option>
+              <option value="VERIFICATION_SESSION">Pemeriksaan</option>
+              <option value="VALIDATION">Pemeriksaan lokasi</option>
+              <option value="CUSTOMER">Pelanggan</option>
+              <option value="ADDRESS">Alamat</option>
+              <option value="REMINDER">Pengingat</option>
+              <option value="REVIEW">Peninjauan</option>
+              <option value="AUTH">Akses akun</option>
             </select>
           </div>
         </div>
@@ -146,11 +147,11 @@ export const AuditLogsView: React.FC = () => {
                         log.action
                       )}`}
                     >
-                      {log.action}
+                      {userFriendlyAuditAction(log.action)}
                     </span>
 
                     <span className="font-mono text-[11px] text-gray-700 dark:text-gray-300">
-                      {log.entityType} <span className="text-gray-400 dark:text-gray-500">#{log.entityId}</span>
+                      {userFriendlyAuditEntity(log.entityType)} <span className="text-gray-400 dark:text-gray-500">#{log.entityId}</span>
                     </span>
                   </div>
 
@@ -174,7 +175,7 @@ export const AuditLogsView: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {log.before && (
                         <div className="bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700">
-                          <div className="text-[10px] text-gray-500 dark:text-gray-400 font-semibold mb-1">State Sebelum (Before):</div>
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 font-semibold mb-1">Data sebelum perubahan:</div>
                           <pre className="text-[10px] font-mono text-gray-800 dark:text-gray-200 overflow-x-auto">
                             {JSON.stringify(log.before, null, 2)}
                           </pre>

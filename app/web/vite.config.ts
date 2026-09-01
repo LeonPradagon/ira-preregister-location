@@ -1,6 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import {defineConfig} from 'vite';
+import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
@@ -13,7 +13,10 @@ export default defineConfig(() => {
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
       // Allows a public frontend tunnel to reach the local API through the
       // same origin when VITE_API_URL=/v1 is used.
-      allowedHosts: process.env.VITE_TUNNEL_HOST ? [process.env.VITE_TUNNEL_HOST] : [],
+      // This dev server is intentionally exposed through Cloudflare Tunnel.
+      // Vite's host check is disabled here because the tunnel hostname can be
+      // regenerated between runs; the backend CORS list remains restricted.
+      allowedHosts: true as const,
       proxy: {
         '/v1': {
           target: 'http://localhost:3000',

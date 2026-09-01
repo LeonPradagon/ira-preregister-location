@@ -22,6 +22,7 @@ import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable
 import { CustomerImportModal } from './CustomerImportModal';
 import { useTranslation } from '../../i18n';
 import { formatAddressForDisplay, isIncompleteAddress } from '../../lib/validationEngine';
+import { userFriendlyStatus } from '../../lib/statusLabels';
 
 interface CustomerListViewProps {
   onSelectCustomer: (customerId: string) => void;
@@ -406,7 +407,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
                       <span className={`inline-flex items-center rounded-md border px-2 py-1 text-[10px] font-semibold ${statusBadgeClass(cust.status)}`}>
                         {CUSTOMER_STATUS_LABEL[cust.status] || cust.status}
                       </span>
-                      <div className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 break-words whitespace-normal leading-4">Verifikasi sesi: {latestSession ? latestSession.verificationStatus === 'MESSAGE_SENT' ? 'Undangan terkirim' : latestSession.verificationStatus === 'LOCATION_VALID' ? 'Lokasi valid' : latestSession.verificationStatus === 'WAITING_FOR_HOME' ? 'Menunggu di rumah' : latestSession.verificationStatus : 'Belum ada sesi'}</div>
+                      <div className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 break-words whitespace-normal leading-4">Pemeriksaan: {latestSession ? userFriendlyStatus(latestSession.verificationStatus) : 'Belum ada pemeriksaan'}</div>
                       <div className={`mt-1 text-[10px] font-medium break-words whitespace-normal leading-4 ${masterAddr?.isVerified ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-500 dark:text-gray-400'}`}>Status lokasi GPS: {masterAddr?.isVerified || latestSession?.verificationStatus === 'LOCATION_VALID' ? 'Terverifikasi' : 'Belum diverifikasi'}</div>
                     </td>
 
@@ -542,7 +543,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
                     onChange={(e) => setNewCustHouseNo(e.target.value)}
                     className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400"
                    />
-                   <p className="mt-1 text-[10px] leading-4 text-gray-500">Jika memang tidak ada nomor resmi, kosongkan. Sistem akan menyimpannya sebagai TANPA NOMOR dan mengarahkannya ke manual review.</p>
+                   <p className="mt-1 text-[10px] leading-4 text-gray-500">Jika memang tidak ada nomor resmi, kosongkan. Alamat akan ditandai untuk diperiksa oleh tim.</p>
                 </div>
                 <div>
                   <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">Kode Pos</label>
@@ -572,7 +573,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
                   />
                 </div>
               </div>
-              <p className="text-[10px] leading-4 text-gray-500">Koordinat boleh dikosongkan. Alamat akan tersimpan sebagai CUSTOMER_PROPOSED dan perlu dilengkapi titik referensi sebelum dapat otomatis tervalidasi GPS.</p>
+              <p className="text-[10px] leading-4 text-gray-500">Titik lokasi boleh dikosongkan. Alamat tetap tersimpan dan dapat dilengkapi saat pemeriksaan lokasi.</p>
 
               {formError && <p className="text-xs text-rose-600">{formError}</p>}
 

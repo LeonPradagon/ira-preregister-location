@@ -117,7 +117,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                 </span>
               </div>
               <div className="text-[10px] text-gray-500 dark:text-gray-400 hidden sm:block">
-                Customer &amp; GPS Validation Portal
+            IRA Preregist
               </div>
             </div>
           </button>
@@ -315,11 +315,11 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           {/* Sidebar Footer Info */}
           <div className="hidden md:block pt-4 border-t border-gray-100 dark:border-gray-800 px-2 text-[11px] text-gray-500 dark:text-gray-400 space-y-1.5">
             <div className="flex items-center justify-between text-[10px]">
-              <span>Auth: Better Auth</span>
+              <span>Keamanan akun</span>
               <span className="text-emerald-600 dark:text-emerald-400 font-medium">{t('shell.online')}</span>
             </div>
             <div className="flex items-center justify-between text-[10px]">
-              <span>Spatial: PostGIS</span>
+              <span>Penyimpanan lokasi</span>
               <span className="text-gray-900 dark:text-gray-200 font-medium">{t('shell.ready')}</span>
             </div>
             <div className="flex items-center justify-between text-[10px]">

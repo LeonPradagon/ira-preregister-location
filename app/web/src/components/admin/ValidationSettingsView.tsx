@@ -90,7 +90,7 @@ export const ValidationSettingsView: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
               <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                {t('settings.gpsAccuracy')} (GPS_MAX_ACCURACY_METERS)
+                {t('settings.gpsAccuracy')}
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -105,13 +105,13 @@ export const ValidationSettingsView: React.FC = () => {
                 <span className="text-gray-500 dark:text-gray-400">meter</span>
               </div>
               <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
-                {t('settings.gpsAccuracyHelp')} (LOW_GPS_ACCURACY).
+                {t('settings.gpsAccuracyHelp')}
               </p>
             </div>
 
             <div>
               <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                {t('settings.homeRadius')} (HOME_RADIUS_METERS)
+                {t('settings.homeRadius')}
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -132,7 +132,7 @@ export const ValidationSettingsView: React.FC = () => {
 
             <div>
               <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                {t('settings.streetMatch')} (STREET_MATCH_THRESHOLD)
+                {t('settings.streetMatch')}
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -154,7 +154,7 @@ export const ValidationSettingsView: React.FC = () => {
 
             <div>
               <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                {t('settings.addressScore')} (ADDRESS_SCORE_THRESHOLD)
+                {t('settings.addressScore')}
               </label>
               <div className="flex items-center gap-2">
                 <input

@@ -18,7 +18,10 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   basePath: '/v1/api/auth',
   secret: process.env.BETTER_AUTH_SECRET,
-  trustedOrigins: [process.env.WEB_ORIGIN ?? 'http://localhost:5173'],
+  trustedOrigins: [
+    process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+    ...(process.env.CORS_ORIGINS ?? '').split(',').map((origin) => origin.trim()).filter(Boolean),
+  ],
   emailAndPassword: { enabled: true },
   session: {
     expiresIn: 60 * 60 * 8,

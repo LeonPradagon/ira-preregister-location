@@ -22,6 +22,7 @@ import { VerificationSession } from '../../types';
 import { hasCapability } from '../../lib/accessControl';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
+import { userFriendlyStatus } from '../../lib/statusLabels';
 
 type DashboardDestination = 'customers' | 'campaigns' | 'verifications' | 'reminders';
 
@@ -114,48 +115,48 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         return (
           <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
             <CheckCircle2 className="w-3 h-3" />
-            <span>LOCATION_VALID</span>
+            <span>{userFriendlyStatus(status)}</span>
           </span>
         );
       case 'WAITING_FOR_HOME':
         return (
           <span className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
             <Clock className="w-3 h-3" />
-            <span>WAITING_FOR_HOME</span>
+            <span>{userFriendlyStatus(status)}</span>
           </span>
         );
       case 'MANUAL_REVIEW':
         return (
           <span className="inline-flex items-center gap-1 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
             <ShieldCheck className="w-3 h-3" />
-            <span>MANUAL_REVIEW</span>
+            <span>{userFriendlyStatus(status)}</span>
           </span>
         );
       case 'LOW_GPS_ACCURACY':
         return (
           <span className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
             <AlertTriangle className="w-3 h-3" />
-            <span>LOW_GPS_ACCURACY</span>
+            <span>{userFriendlyStatus(status)}</span>
           </span>
         );
       case 'ADDRESS_PROPOSED':
         return (
           <span className="inline-flex items-center gap-1 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
             <MapPin className="w-3 h-3" />
-            <span>ADDRESS_PROPOSED</span>
+            <span>{userFriendlyStatus(status)}</span>
           </span>
         );
       case 'CUSTOMER_DATA_MISMATCH':
         return (
           <span className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
             <XCircle className="w-3 h-3" />
-            <span>DATA_MISMATCH</span>
+            <span>{userFriendlyStatus(status)}</span>
           </span>
         );
       default:
         return (
           <span className="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 px-2 py-0.5 rounded-md text-[11px] font-medium">
-            <span>{status}</span>
+            <span>{userFriendlyStatus(status)}</span>
           </span>
         );
     }
@@ -229,7 +230,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           onClick={() => onNavigate('verifications')}
         />
         <DashboardMetricCard
-          label="GPS Captured"
+          label={t('dashboard.gpsCaptured')}
           value={gpsCaptured}
           detail={t('dashboard.multiSample')}
           icon={Compass}
@@ -285,7 +286,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <button type="button" onClick={() => onNavigate('verifications')} className="w-full text-left bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between hover:border-gray-400 dark:hover:border-gray-600 transition-colors">
             <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span className="text-gray-700 dark:text-gray-300 font-medium">{t('dashboard.addressChanged')} (Proposed):</span>
+              <span className="text-gray-700 dark:text-gray-300 font-medium">{t('dashboard.addressChanged')}:</span>
             </div>
             <span className="font-semibold text-blue-700 dark:text-blue-400">{addressChangedCount}</span>
           </button>
@@ -312,16 +313,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <Radio className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-xs font-semibold text-gray-900 dark:text-white">IRA Coverage Integration</div>
-                <div className="text-[10px] text-gray-500 dark:text-gray-400">Network Polygon & Port Capacity</div>
+                <div className="text-xs font-semibold text-gray-900 dark:text-white">Pemeriksaan Jangkauan Jaringan</div>
+                <div className="text-[10px] text-gray-500 dark:text-gray-400">Ketersediaan jaringan di sekitar lokasi</div>
               </div>
             </div>
                 <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md border font-medium ${integrationConfigs.IRA_COVERAGE.enabled ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'}`}>
-              {integrationConfigs.IRA_COVERAGE.enabled ? 'ENABLED' : integrationConfigs.IRA_COVERAGE.status}
+              {integrationConfigs.IRA_COVERAGE.enabled ? 'Aktif' : userFriendlyStatus(integrationConfigs.IRA_COVERAGE.status)}
             </span>
           </div>
           <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
-            {integrationConfigs.IRA_COVERAGE.description}. Adapter event <code className="text-gray-900 dark:text-gray-200 font-mono">location.verified.v1</code> tetap tercatat melalui Outbox.
+            {integrationConfigs.IRA_COVERAGE.description}. Pembaruan pemeriksaan tetap dicatat untuk diteruskan saat koneksi tersedia.
           </p>
         </div>
 
@@ -333,16 +334,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <Activity className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-xs font-semibold text-gray-900 dark:text-white">Ticketing / Work Order System</div>
-                <div className="text-[10px] text-gray-500 dark:text-gray-400">Technician Dispatch & SLA</div>
+                <div className="text-xs font-semibold text-gray-900 dark:text-white">Tugas Pemasangan</div>
+                <div className="text-[10px] text-gray-500 dark:text-gray-400">Penerusan pekerjaan ke tim teknisi</div>
               </div>
             </div>
                 <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md border font-medium ${integrationConfigs.TICKETING.enabled ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'}`}>
-              {integrationConfigs.TICKETING.enabled ? 'ENABLED' : integrationConfigs.TICKETING.status}
+              {integrationConfigs.TICKETING.enabled ? 'Aktif' : userFriendlyStatus(integrationConfigs.TICKETING.status)}
             </span>
           </div>
           <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
-            {integrationConfigs.TICKETING.description}. Contract idempotency key dan correlation ID disiapkan untuk fase instalasi berikutnya.
+            {integrationConfigs.TICKETING.description}. Data akan siap diteruskan saat koneksi sistem tersedia.
           </p>
         </div>
       </div>

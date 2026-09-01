@@ -77,7 +77,7 @@ apiClient.interceptors.response.use(
         ? body.message
         : undefined;
     return Promise.reject(new ApiClientError(
-      body?.error?.message || topLevelMessage || `API request failed (${error.response?.status ?? 'network error'})`,
+      body?.error?.message || topLevelMessage || 'Permintaan tidak dapat diproses. Silakan coba lagi.',
       error.response?.status,
       body?.error?.code,
       typeof responseCorrelationId === 'string' ? responseCorrelationId : undefined,

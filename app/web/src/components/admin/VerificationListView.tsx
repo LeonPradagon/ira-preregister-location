@@ -19,6 +19,7 @@ import { Customer } from '../../types';
 import { VerificationSession, VerificationStatus } from '../../types';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
+import { userFriendlyStatus } from '../../lib/statusLabels';
 
 interface VerificationListViewProps {
   onSelectVerification: (sessionId: string) => void;
@@ -64,35 +65,35 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
         return (
           <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
             <CheckCircle2 className="w-3 h-3" />
-            <span>LOCATION_VALID</span>
+            <span>{userFriendlyStatus(status)}</span>
           </span>
         );
       case 'WAITING_FOR_HOME':
         return (
           <span className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
             <Clock className="w-3 h-3" />
-            <span>WAITING_FOR_HOME</span>
+            <span>{userFriendlyStatus(status)}</span>
           </span>
         );
       case 'MANUAL_REVIEW':
         return (
           <span className="inline-flex items-center gap-1 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
             <ShieldCheck className="w-3 h-3" />
-            <span>MANUAL_REVIEW</span>
+            <span>{userFriendlyStatus(status)}</span>
           </span>
         );
       case 'LOW_GPS_ACCURACY':
         return (
           <span className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
             <AlertTriangle className="w-3 h-3" />
-            <span>LOW_GPS_ACCURACY</span>
+            <span>{userFriendlyStatus(status)}</span>
           </span>
         );
       case 'ADDRESS_PROPOSED':
         return (
           <span className="inline-flex items-center gap-1 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
             <MapPin className="w-3 h-3" />
-            <span>ADDRESS_PROPOSED</span>
+            <span>{userFriendlyStatus(status)}</span>
           </span>
         );
       case 'CUSTOMER_DATA_MISMATCH':
@@ -105,7 +106,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
       default:
         return (
           <span className="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 px-2 py-0.5 rounded-md text-[11px] font-medium">
-            <span>{status}</span>
+            <span>{userFriendlyStatus(status)}</span>
           </span>
         );
     }
@@ -149,11 +150,11 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
             className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300"
           >
             <option value="ALL">{t('verifications.allStatuses')}</option>
-            <option value="LOCATION_VALID">LOCATION_VALID</option>
-            <option value="MANUAL_REVIEW">MANUAL_REVIEW</option>
-            <option value="WAITING_FOR_HOME">WAITING_FOR_HOME</option>
-            <option value="LOW_GPS_ACCURACY">LOW_GPS_ACCURACY</option>
-            <option value="ADDRESS_PROPOSED">ADDRESS_PROPOSED</option>
+            <option value="LOCATION_VALID">{userFriendlyStatus('LOCATION_VALID')}</option>
+            <option value="MANUAL_REVIEW">{userFriendlyStatus('MANUAL_REVIEW')}</option>
+            <option value="WAITING_FOR_HOME">{userFriendlyStatus('WAITING_FOR_HOME')}</option>
+            <option value="LOW_GPS_ACCURACY">{userFriendlyStatus('LOW_GPS_ACCURACY')}</option>
+            <option value="ADDRESS_PROPOSED">{userFriendlyStatus('ADDRESS_PROPOSED')}</option>
             <option value="CUSTOMER_DATA_MISMATCH">CUSTOMER_DATA_MISMATCH</option>
             <option value="MESSAGE_SENT">MESSAGE_SENT</option>
           </select>

@@ -28,6 +28,7 @@ import { useApp } from '../../context/AppContext';
 import { ReviewDecision, VerificationSession } from '../../types';
 import { VerificationMap } from '../maps/VerificationMap';
 import { buildGoogleMapsDeepLink, formatAddressForDisplay, formatCoordinatePair } from '../../lib/validationEngine';
+import { userFriendlyStatus } from '../../lib/statusLabels';
 import { hasCapability } from '../../lib/accessControl';
 import { AdminTable } from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
@@ -171,11 +172,11 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                 {customer.externalId}
               </span>
               <span className="text-[11px] font-mono font-medium px-2.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700">
-                {session.verificationStatus}
+                {userFriendlyStatus(session.verificationStatus)}
               </span>
             </div>
             <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-              Sesi ID: <code className="font-mono text-gray-700 dark:text-gray-300">{session.id}</code> • Dibuat:{' '}
+              Nomor pemeriksaan: <code className="font-mono text-gray-700 dark:text-gray-300">{session.id}</code> • Dibuat:{' '}
               {new Date(session.createdAt).toLocaleString('id-ID')}
             </div>
           </div>
@@ -204,7 +205,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
               className="px-3.5 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg text-xs font-medium shadow-xs flex items-center gap-1.5 transition-all"
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>Review Manual Ops</span>
+              <span>Buka pemeriksaan tim</span>
             </button>
           )}
         </div>
@@ -235,7 +236,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
             <div className="flex items-center justify-between pb-2.5 border-b border-gray-100 dark:border-gray-800">
               <div className="text-xs font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                 <User className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                <span>Identitas Pelanggan (Person Link)</span>
+                <span>Identitas Pelanggan</span>
               </div>
               <span
                 className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
@@ -246,7 +247,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'
                 }`}
               >
-                {session.customerConfirmationStatus}
+                {session.customerConfirmationStatus === 'CONFIRMED' ? 'Data sesuai' : session.customerConfirmationStatus === 'MISMATCH' ? 'Data tidak sesuai' : 'Belum dikonfirmasi'}
               </span>
             </div>
 
@@ -261,10 +262,10 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
               </div>
               <div>
                 <span className="text-gray-500 dark:text-gray-400 block text-[11px]">Status Akun</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{customer.status}</span>
+                <span className="font-semibold text-gray-900 dark:text-white">{userFriendlyStatus(customer.status)}</span>
               </div>
               <div>
-                <span className="text-gray-500 dark:text-gray-400 block text-[11px]">Masa Berlaku Token</span>
+                <span className="text-gray-500 dark:text-gray-400 block text-[11px]">Masa Berlaku Tautan</span>
                 <span className="text-gray-700 dark:text-gray-300 text-[11px]">
                   {new Date(session.expiresAt).toLocaleDateString('id-ID')}
                 </span>
@@ -320,7 +321,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                 <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-lg space-y-1">
                   <div className="text-xs font-semibold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
                     <Edit3 className="w-3.5 h-3.5 text-blue-700 dark:text-blue-400" />
-                    <span>Ada Usulan Alamat Baru (PROPOSED):</span>
+                    <span>Ada usulan alamat baru:</span>
                   </div>
                   <p className="text-[11px] text-blue-800 dark:text-blue-200 leading-relaxed">
                     {formatAddressForDisplay(proposedAddress.rawAddress)}
@@ -394,7 +395,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                   <div key={capture.id} className="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700 text-[11px]">
                     <div className="flex items-center justify-between font-mono text-gray-900 dark:text-white">
                       <span>Percobaan #{sessionCaptures.length - index}</span>
-                      <span>{capture.sampleCount} samples</span>
+                      <span>{capture.sampleCount} titik lokasi</span>
                     </div>
                     <div className="mt-1 text-gray-500 dark:text-gray-400">
                       {capture.latitude.toFixed(6)}, {capture.longitude.toFixed(6)} · ±{capture.accuracyMeters}m · {new Date(capture.serverTimestamp).toLocaleString('id-ID')}
@@ -403,7 +404,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                 ))}
               </div>
             ) : (
-              <div className="text-xs text-gray-400 dark:text-gray-500 italic">Belum ada evidence capture GPS.</div>
+              <div className="text-xs text-gray-400 dark:text-gray-500 italic">Belum ada riwayat pengambilan lokasi.</div>
             )}
           </div>
         </div>
@@ -430,7 +431,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-medium transition-colors shadow-xs"
                 >
-                  <span>Open in Google Maps</span>
+                  <span>Buka di Google Maps</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               )}
@@ -580,10 +581,10 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-xs">
             <div className="p-3.5 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
               <h3 className="text-xs font-semibold text-gray-900 dark:text-white uppercase tracking-wider">
-                Rincian Keputusan Mesin Validasi (Decision Breakdown)
+                Rincian Hasil Pemeriksaan
               </h3>
               <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400">
-                Engine v1.1.0 • Rule 2026-09
+                Aturan pemeriksaan lokasi
               </span>
             </div>
 
@@ -603,7 +604,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                     <td className="px-3.5 py-2 font-mono text-[11px]">
                       {capturedLoc ? capturedLoc.latitude.toFixed(6) : '-'}
                     </td>
-                    <td className="px-3.5 py-2 text-right font-mono text-[11px] text-gray-500 dark:text-gray-400">ST_Point(lng,lat)</td>
+                    <td className="px-3.5 py-2 text-right font-mono text-[11px] text-gray-500 dark:text-gray-400">Titik lokasi</td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Longitude</td>
@@ -611,7 +612,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                     <td className="px-3.5 py-2 font-mono text-[11px]">
                       {capturedLoc ? capturedLoc.longitude.toFixed(6) : '-'}
                     </td>
-                    <td className="px-3.5 py-2 text-right font-mono text-[11px] text-gray-500 dark:text-gray-400">PostGIS Geog</td>
+                    <td className="px-3.5 py-2 text-right font-mono text-[11px] text-gray-500 dark:text-gray-400">Data lokasi</td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Provinsi</td>
@@ -652,7 +653,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                           : 'text-rose-700 dark:text-rose-400'
                       }`}
                     >
-                      {lastVal == null ? '—' : lastVal.gpsAccuracyM <= validationConfig.GPS_MAX_ACCURACY_METERS ? 'PASS' : 'FAIL'}
+                      {lastVal == null ? 'Belum diperiksa' : lastVal.gpsAccuracyM <= validationConfig.GPS_MAX_ACCURACY_METERS ? 'Sesuai' : 'Perlu dicek'}
                     </td>
                   </tr>
                   <tr>
@@ -669,8 +670,8 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                       }`}
                     >
                       {lastVal?.distanceFromReferenceMeters != null && lastVal.distanceFromReferenceMeters <= validationConfig.HOME_RADIUS_METERS
-                        ? 'PASS'
-                        : 'FAIL'}
+                        ? 'Sesuai'
+                        : 'Perlu dicek'}
                     </td>
                   </tr>
                 </tbody>
@@ -689,7 +690,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                   <ShieldCheck className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Manual Review Keputusan Ops</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Pemeriksaan Tambahan oleh Tim</h3>
                   <p className="text-[11px] text-gray-500 dark:text-gray-400">
                     Kepatuhan Audit: Keputusan wajib menyertakan alasan dan catatan review.
                   </p>
@@ -712,7 +713,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
               )}
 
               <div>
-                <label className="block text-gray-700 dark:text-gray-300 font-semibold mb-1.5">Pilih Keputusan (Decision):</label>
+                <label className="block text-gray-700 dark:text-gray-300 font-semibold mb-1.5">Pilih hasil pemeriksaan:</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -727,7 +728,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span>APPROVE (Valid)</span>
+                      <span>Setujui - lokasi sesuai</span>
                       {reviewDecision === 'APPROVE' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
                     </div>
                     <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Setujui lokasi &amp; alamat valid</div>
@@ -746,7 +747,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span>REJECT (Mismatch)</span>
+                      <span>Tolak - lokasi tidak sesuai</span>
                       {reviewDecision === 'REJECT' && <XCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />}
                     </div>
                     <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Tolak hasil &amp; minta customer ke rumah</div>
@@ -765,7 +766,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span>REQUEST RETRY</span>
+                      <span>Minta pemeriksaan ulang</span>
                       {reviewDecision === 'REQUEST_RETRY' && <RefreshCw className="w-3.5 h-3.5 text-gray-900 dark:text-white" />}
                     </div>
                     <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Minta customer ambil GPS ulang</div>
@@ -784,7 +785,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span>REQUEST UPDATE</span>
+                      <span>Minta pembaruan alamat</span>
                       {reviewDecision === 'REQUEST_ADDRESS_UPDATE' && <Edit3 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />}
                     </div>
                     <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Minta customer update alamat</div>
@@ -793,17 +794,17 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-gray-700 dark:text-gray-300 font-semibold mb-1">Kode Alasan (Reason Code):</label>
+                <label className="block text-gray-700 dark:text-gray-300 font-semibold mb-1">Alasan pemeriksaan:</label>
                 <select
                   value={reviewReasonCode}
                   onChange={(e) => setReviewReasonCode(e.target.value)}
                   className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300"
                 >
-                  <option value="MANUAL_APPROVAL_PRECISION_PASS">MANUAL_APPROVAL_PRECISION_PASS (Sesuai patokan satelit/cluster)</option>
-                  <option value="STREET_ALIAS_VERIFIED">STREET_ALIAS_VERIFIED (Nama jalan memiliki alias resmi)</option>
-                  <option value="LOCATION_MISMATCH_REJECTED">LOCATION_MISMATCH_REJECTED (Titik terlalu jauh dari master)</option>
-                  <option value="GPS_ACCURACY_INSUFFICIENT">GPS_ACCURACY_INSUFFICIENT (Akurasi melewati konfigurasi)</option>
-                  <option value="ADDRESS_UPDATE_REQUIRED">ADDRESS_UPDATE_REQUIRED (Alamat master tidak akurat)</option>
+                  <option value="MANUAL_APPROVAL_PRECISION_PASS">Lokasi sesuai dengan alamat</option>
+                  <option value="STREET_ALIAS_VERIFIED">Nama jalan sesuai</option>
+                  <option value="LOCATION_MISMATCH_REJECTED">Lokasi terlalu jauh dari alamat</option>
+                  <option value="GPS_ACCURACY_INSUFFICIENT">Sinyal lokasi kurang akurat</option>
+                  <option value="ADDRESS_UPDATE_REQUIRED">Alamat perlu diperbarui</option>
                 </select>
               </div>
 

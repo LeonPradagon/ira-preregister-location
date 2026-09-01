@@ -96,15 +96,15 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
 
           {result && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
-              <div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="h-4 w-4" /> Import berhasil</div>
+              <div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="h-4 w-4" /> Data berhasil dimasukkan</div>
               <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
                 <span>Baris diproses: <strong>{formatNumber(result.rowsRead)}</strong></span>
                 <span>Customer: <strong>{formatNumber(result.customersUpserted)}</strong></span>
                 <span>Alamat baru: <strong>{formatNumber(result.addressesInserted)}</strong></span>
                 <span>Alamat diperbarui: <strong>{formatNumber(result.addressesUpdated)}</strong></span>
-                {result.incompleteAddressRows > 0 && <span className="col-span-2 text-amber-700 dark:text-amber-300">Alamat perlu dilengkapi/manual review: <strong>{formatNumber(result.incompleteAddressRows)}</strong></span>}
+                {result.incompleteAddressRows > 0 && <span className="col-span-2 text-amber-700 dark:text-amber-300">Alamat perlu dilengkapi dan diperiksa: <strong>{formatNumber(result.incompleteAddressRows)}</strong></span>}
               </div>
-              <p className="mt-2 text-[10px]">Opt-in WhatsApp tidak diubah oleh import ini.</p>
+              <p className="mt-2 text-[10px]">Pilihan menerima pesan WhatsApp tidak diubah oleh proses ini.</p>
             </div>
           )}
 

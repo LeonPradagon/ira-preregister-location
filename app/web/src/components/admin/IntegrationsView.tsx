@@ -15,6 +15,7 @@ import { useTranslation } from '../../i18n';
 import { api } from '../../lib/apiClient';
 import { IntegrationOutboxEvent } from '../../types';
 import { TablePagination, TablePageSize } from '../common/AdminTable';
+import { userFriendlyStatus } from '../../lib/statusLabels';
 
 export const IntegrationsView: React.FC = () => {
   const { t } = useTranslation();
@@ -67,12 +68,12 @@ export const IntegrationsView: React.FC = () => {
                 <Radio className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-xs font-semibold text-gray-900 dark:text-white">IRA Coverage GIS Adapter</h3>
+                <h3 className="text-xs font-semibold text-gray-900 dark:text-white">Pemeriksaan Jangkauan Jaringan</h3>
                 <div className="text-[10px] text-gray-500 dark:text-gray-400">{t('integrations.coverageSubtitle')}</div>
               </div>
             </div>
             <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-              {integrationConfigs.IRA_COVERAGE.status}
+              {userFriendlyStatus(integrationConfigs.IRA_COVERAGE.status)}
             </span>
           </div>
 
@@ -96,12 +97,12 @@ export const IntegrationsView: React.FC = () => {
                 <Activity className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-xs font-semibold text-gray-900 dark:text-white">Ticketing / Dispatch Adapter</h3>
+                <h3 className="text-xs font-semibold text-gray-900 dark:text-white">Tugas Pemasangan</h3>
                 <div className="text-[10px] text-gray-500 dark:text-gray-400">{t('integrations.ticketSubtitle')}</div>
               </div>
             </div>
             <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-              {integrationConfigs.TICKETING.status}
+              {userFriendlyStatus(integrationConfigs.TICKETING.status)}
             </span>
           </div>
 
@@ -124,16 +125,16 @@ export const IntegrationsView: React.FC = () => {
           <div>
             <h3 className="text-xs font-semibold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
               <Zap className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>Transactional Outbox Stream (location.verified.v1)</span>
+              <span>Riwayat Pembaruan Sistem</span>
             </h3>
             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-              {t('integrations.streamDescription')} (LOCATION_VALID).
+              {t('integrations.streamDescription')}
             </p>
           </div>
           <button type="button" onClick={() => void load()} disabled={loading} className="rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" aria-label={t('integrations.reload')} title={t('integrations.reload')}><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row"><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder={t('integrations.search')} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-900 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white sm:w-96" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs dark:bg-gray-800"><option value="ALL">{t('integrations.allStatuses')}</option><option value="PENDING">PENDING</option><option value="PUBLISHED">PUBLISHED</option><option value="FAILED">FAILED</option></select></div>
+        <div className="flex flex-col gap-3 sm:flex-row"><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder={t('integrations.search')} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-900 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white sm:w-96" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs dark:bg-gray-800"><option value="ALL">{t('integrations.allStatuses')}</option><option value="PENDING">Menunggu diproses</option><option value="PUBLISHED">Sudah diteruskan</option><option value="FAILED">Gagal</option></select></div>
 
         {loading ? <div className="p-8 text-center text-xs text-gray-500">{t('integrations.loading')}</div> : error ? <div className="p-8 text-center text-xs text-rose-600">{error}</div> : outboxEvents.length > 0 ? (
           <div className="space-y-4">
@@ -143,7 +144,7 @@ export const IntegrationsView: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{evt.eventType}</span>
                     <span className="text-[10px] font-mono bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 px-2 py-0.5 rounded">
-                      Status: {evt.status}
+                      Status: {userFriendlyStatus(evt.status)}
                     </span>
                   </div>
                   <div className="font-mono text-[10px] text-gray-500 dark:text-gray-400">
@@ -153,11 +154,11 @@ export const IntegrationsView: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-2 text-[11px] font-mono text-gray-600 dark:text-gray-400">
                   <div>
-                    <span className="text-gray-500">Idempotency Key:</span>{' '}
+                    <span className="text-gray-500">Nomor pembaruan:</span>{' '}
                     <span className="text-gray-800 dark:text-gray-200 font-medium">{evt.idempotencyKey}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">Correlation ID:</span>{' '}
+                    <span className="text-gray-500">Nomor pelacakan:</span>{' '}
                     <span className="text-gray-800 dark:text-gray-200 font-medium">{evt.correlationId}</span>
                   </div>
                 </div>

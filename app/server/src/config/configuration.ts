@@ -12,6 +12,7 @@ export const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.string().url(),
   WEB_ORIGIN: z.string().url(),
+  CORS_ORIGINS: optionalString,
   GPS_MAX_ACCURACY_METERS: z.coerce.number().positive().default(30),
   HOME_RADIUS_METERS: z.coerce.number().positive().default(50),
   MAX_LOCATION_ATTEMPTS: z.coerce.number().int().positive().default(5),

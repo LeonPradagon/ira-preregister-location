@@ -161,7 +161,7 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
       }).bindPopup(`
         <div class="p-1 font-sans">
           <div class="text-xs font-bold ${isMatch ? 'text-emerald-700' : 'text-rose-700'} flex items-center gap-1 mb-1">
-            <span>Titik B: GPS Capture Customer</span>
+            <span>Titik B: Lokasi pelanggan</span>
           </div>
           <div class="text-[11px] text-slate-700 leading-snug">${capturedLabel}</div>
           <div class="text-[10px] font-mono text-slate-500 mt-1">${capturedLocation.latitude.toFixed(6)}, ${capturedLocation.longitude.toFixed(6)}</div>
@@ -302,7 +302,7 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
               }`}
             />
             <span className="font-medium text-gray-800 dark:text-gray-200 truncate">
-              Marker B: GPS Capture (±{capturedLocation.accuracyMeters}m)
+              Marker B: Lokasi pelanggan (±{capturedLocation.accuracyMeters}m)
             </span>
           </div>
         )}
