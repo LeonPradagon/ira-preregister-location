@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { and, eq, gt, isNull, ne, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { customerAddresses, customers, integrationOutbox, locationCaptures, reminders, validationResults, verificationSessions, auditLogs } from '../../db/schema/index.js';
-import { AddressChangeInput, GpsSample, PublicVerificationContext } from '../../common/contracts.js';
+import { AddressChangeInput, AddressLookupInput, GpsSample, PublicVerificationContext } from '../../common/contracts.js';
 import { DomainError, NotFoundError } from '../../common/errors.js';
-import { GeocodingPort } from '../../integrations/geocoding/geocoding.port.js';
-import { decideValidation, AddressEvidence } from '../validation/engine.js';
+import { GeocodingPort, GeocodingResult } from '../../integrations/geocoding/geocoding.port.js';
+import { decideValidation, AddressEvidence, ReverseGeocodeEvidence } from '../validation/engine.js';
 import { assertTransition } from './state-machine.js';
 import { nextReminderNumber, ReminderPreference, scheduleReminderInTimezone } from '../reminders/reminder.policy.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
@@ -127,10 +127,35 @@ export class VerificationService {
     if (row.session.customerConfirmationStatus !== 'CONFIRMED' || !row.session.consentAt) throw new DomainError('Confirmation and consent are required before location capture');
     if (row.session.attemptCount >= config.MAX_LOCATION_ATTEMPTS) throw new DomainError('Maximum GPS attempts reached', 409, 'ATTEMPT_LIMIT_REACHED');
     const bestSample = [...samples].sort((left, right) => left.accuracyMeters - right.accuracyMeters)[0];
-    const geocode = await this.geocoding.reverse(bestSample.latitude, bestSample.longitude);
+    let geocode: ReverseGeocodeEvidence;
+    let geocodingAvailable = true;
+    try {
+      geocode = await this.geocoding.reverse(bestSample.latitude, bestSample.longitude);
+    } catch (error) {
+      if (!(error instanceof ServiceUnavailableException)) throw error;
+      if (row.session.verificationMode === 'SIMULATION') {
+        // E2E simulation still exercises the real GPS/radius/accuracy pipeline
+        // when no external reverse-geocoding provider is configured.
+        geocode = {
+          province: row.address.province,
+          city: row.address.city,
+          district: row.address.district,
+          subdistrict: row.address.subdistrict,
+          street: row.address.street,
+          houseNumber: row.address.houseNumber,
+          postalCode: row.address.postalCode,
+          formattedAddress: row.address.rawAddress,
+        };
+      } else {
+        // Live sessions fail closed: capture the GPS but route it to manual
+        // review instead of returning 503 or treating it as address proof.
+        geocodingAvailable = false;
+        geocode = { province: '', city: '', district: '', subdistrict: '', street: '', formattedAddress: '' };
+      }
+    }
     const decision = decideValidation(samples, {
       id: row.address.id, province: row.address.province, city: row.address.city, district: row.address.district,
-      subdistrict: row.address.subdistrict, street: row.address.street, houseNumber: row.address.houseNumber,
+      subdistrict: row.address.subdistrict, street: row.address.street, houseNumber: row.address.houseNumber, postalCode: row.address.postalCode,
       referenceLatitude: row.referenceLatitude == null ? null : Number(row.referenceLatitude), referenceLongitude: row.referenceLongitude == null ? null : Number(row.referenceLongitude),
       referencePrecision: row.address.referencePrecision as AddressEvidence['referencePrecision'],
     }, geocode, {
@@ -139,6 +164,20 @@ export class VerificationService {
       streetMatchThreshold: config.STREET_MATCH_THRESHOLD,
       addressScoreThreshold: config.ADDRESS_SCORE_THRESHOLD,
     });
+    if (!geocodingAvailable) {
+      decision.result = 'MANUAL_REVIEW';
+      decision.reasonCodes = [...decision.reasonCodes, 'GEOCODING_UNAVAILABLE', 'MANUAL_REVIEW_REQUIRED'];
+    }
+    if (decision.result === 'LOCATION_VALID' && config.ENABLE_MANUAL_REVIEW) {
+      // A passing engine result is evidence for Ops, not the final customer
+      // decision. Address/customer records change only after reviewer approval.
+      decision.result = 'MANUAL_REVIEW';
+      decision.reasonCodes = [
+        ...decision.reasonCodes.filter((reasonCode) => reasonCode !== 'LOCATION_VALID'),
+        'AUTOMATED_VALIDATION_PASSED',
+        'MANUAL_REVIEW_REQUIRED',
+      ];
+    }
     const captureId = randomUUID();
     const resultId = randomUUID();
     const timestamp = now();
@@ -161,7 +200,7 @@ export class VerificationService {
         houseNumberMatch: decision.houseNumberMatch, gpsAccuracyMeters: decision.bestSample.accuracyMeters.toFixed(2),
         distanceToReferenceMeters: decision.distanceFromReferenceMeters == null ? null : decision.distanceFromReferenceMeters.toFixed(2), addressScore: decision.addressScore.toFixed(3),
         result: decision.result, reasonCodes: decision.reasonCodes, reverseGeocode: decision.reverseGeocode,
-        referencePrecision: decision.referencePrecision, engineVersion: '1.0.0', configVersion: 'env',
+        referencePrecision: decision.referencePrecision, engineVersion: '1.1.0', configVersion: 'env',
         capturedLatitude: decision.bestSample.latitude.toFixed(7), capturedLongitude: decision.bestSample.longitude.toFixed(7),
         referenceLatitude: row.referenceLatitude == null ? null : Number(row.referenceLatitude).toFixed(7), referenceLongitude: row.referenceLongitude == null ? null : Number(row.referenceLongitude).toFixed(7), createdAt: timestamp,
       });
@@ -190,21 +229,23 @@ export class VerificationService {
     return { id: resultId, ...decision, capturedLocation: { ...decision.bestSample, coordinateText: `${decision.bestSample.latitude.toFixed(6)}, ${decision.bestSample.longitude.toFixed(6)}`, googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${decision.bestSample.latitude},${decision.bestSample.longitude}` } };
   }
 
-  async waitForHome(token: string, preference: ReminderPreference) {
+  async waitForHome(token: string, preference?: ReminderPreference, scheduledAtInput?: string) {
     const row = await this.findByToken(token);
     const config = await this.validationConfig.get();
     const max = config.MAX_REMINDERS_PER_SESSION;
     if (!config.ENABLE_REMINDERS || row.session.reminderCount >= max) throw new DomainError('Reminder limit reached', 409, 'REMINDER_LIMIT_REACHED');
     const reminderNumber = nextReminderNumber(row.session.reminderCount, max);
     if (!reminderNumber) throw new DomainError('Reminder limit reached', 409, 'REMINDER_LIMIT_REACHED');
-    const scheduledAt = scheduleReminderInTimezone(preference, now(), process.env.REMINDER_TIMEZONE ?? 'Asia/Jakarta');
+    const currentTime = now();
+    const scheduledAt = scheduledAtInput ? new Date(scheduledAtInput) : scheduleReminderInTimezone(preference ?? 'DEFAULT', currentTime, process.env.REMINDER_TIMEZONE ?? 'Asia/Jakarta');
+    if (Number.isNaN(scheduledAt.getTime()) || scheduledAt <= currentTime) throw new DomainError('Reminder time must be in the future', 422, 'REMINDER_TIME_INVALID');
     const nextStatus = reminderNumber >= max ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME';
     assertTransition(row.session.verificationStatus, nextStatus);
     await db.transaction(async (tx) => {
       const timestamp = now();
       await tx.insert(reminders).values({ id: randomUUID(), sessionId: row.session.id, reminderNumber, channel: 'WHATSAPP', scheduledAt, status: 'SCHEDULED', messageText: `Halo ${row.customer.name}, pengingat ${reminderNumber} dari ${max}. Tautan verifikasi dibuat saat pengiriman.`, retryCount: 0, createdAt: timestamp });
       await tx.update(verificationSessions).set({ reminderCount: reminderNumber, verificationStatus: nextStatus, updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
-      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'WAITING_FOR_HOME_SELECTED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, after: { preference, reminderNumber, scheduledAt: scheduledAt.toISOString() }, timestamp });
+      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'WAITING_FOR_HOME_SELECTED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, after: { preference: preference ?? 'CUSTOM', reminderNumber, scheduledAt: scheduledAt.toISOString() }, timestamp });
       await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Reminder Scheduler', action: 'REMINDER_SCHEDULED', entityType: 'REMINDER', entityId: row.session.id, after: { reminderNumber, scheduledAt: scheduledAt.toISOString() }, timestamp });
     });
     return { status: reminderNumber >= max ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME', reminderNumber };
@@ -235,16 +276,28 @@ export class VerificationService {
     if (!config.ENABLE_ADDRESS_EDIT) throw new DomainError('Address edit is disabled', 409);
     if (row.session.verificationStatus !== 'ADDRESS_EDITING') assertTransition(row.session.verificationStatus, 'ADDRESS_EDITING');
     assertTransition('ADDRESS_EDITING', 'ADDRESS_PROPOSED');
-    const geocode = await this.geocoding.forward(input);
+    const houseNumber = input.houseNumber?.trim() || 'TANPA NOMOR';
+    let geocode: GeocodingResult | null = null;
+    try {
+      geocode = await this.geocoding.forward(input);
+    } catch (error) {
+      if (!(error instanceof ServiceUnavailableException)) throw error;
+    }
     const timestamp = now();
     const addressId = randomUUID();
     await db.transaction(async (tx) => {
       await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'ADDRESS_CHANGE_STARTED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, before: { addressId: row.address.id, status: row.session.verificationStatus }, after: { status: 'ADDRESS_EDITING' }, timestamp });
       await tx.update(customerAddresses).set({ addressStatus: 'SUPERSEDED', isActive: false, validTo: timestamp, updatedAt: timestamp }).where(and(eq(customerAddresses.customerId, row.customer.id), eq(customerAddresses.addressType, 'PROPOSED'), eq(customerAddresses.isActive, true)));
-      await tx.insert(customerAddresses).values({ ...input, id: addressId, customerId: row.customer.id, addressType: 'PROPOSED', addressStatus: 'PROPOSED', rawAddress: [input.street, `No. ${input.houseNumber}`, input.block && `Blok ${input.block}`, input.subdistrict, input.district, input.city, input.province, input.postalCode].filter(Boolean).join(', '), referenceLocation: { latitude: geocode.latitude, longitude: geocode.longitude }, referenceSource: 'GEOCODED', referencePrecision: geocode.precision, referenceConfidence: geocode.confidence.toFixed(3), geocodingProvider: geocode.provider, providerPlaceId: geocode.providerPlaceId, geocodedAt: timestamp, isActive: true, isVerified: false, validFrom: timestamp, createdAt: timestamp, updatedAt: timestamp });
+      await tx.insert(customerAddresses).values({ ...input, houseNumber, id: addressId, customerId: row.customer.id, addressType: 'PROPOSED', addressStatus: 'PROPOSED', rawAddress: [input.street, houseNumber !== 'TANPA NOMOR' && `No. ${houseNumber}`, input.block && `Blok ${input.block}`, input.subdistrict, input.district, input.city, input.province, input.postalCode].filter(Boolean).join(', '), referenceLocation: geocode ? { latitude: geocode.latitude, longitude: geocode.longitude } : null, referenceSource: geocode ? 'GEOCODED' : 'CUSTOMER_PROPOSED', referencePrecision: geocode?.precision ?? 'UNKNOWN', referenceConfidence: geocode?.confidence.toFixed(3) ?? '0.000', geocodingProvider: geocode?.provider ?? null, providerPlaceId: geocode?.providerPlaceId ?? null, geocodedAt: geocode ? timestamp : null, isActive: true, isVerified: false, validFrom: timestamp, createdAt: timestamp, updatedAt: timestamp });
       await tx.update(verificationSessions).set({ currentAddressId: addressId, verificationStatus: 'ADDRESS_PROPOSED', updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
       await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'ADDRESS_PROPOSED', entityType: 'ADDRESS', entityId: addressId, after: { sessionId: row.session.id, status: 'PROPOSED' }, timestamp });
     });
     return { id: addressId, status: 'PROPOSED' };
+  }
+
+  async lookupAddress(token: string, input: AddressLookupInput) {
+    await this.findByToken(token);
+    const result = await this.geocoding.forward(input);
+    return { postalCode: result.postalCode ?? null, formattedAddress: result.formattedAddress };
   }
 }

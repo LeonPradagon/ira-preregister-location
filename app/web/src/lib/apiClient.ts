@@ -1,10 +1,11 @@
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000/v1').replace(/\/$/, '');
 const API_TIMEOUT_MS = 15_000;
 
 export interface ApiErrorBody {
   error?: { code?: string; message?: string };
+  message?: string | string[] | { [key: string]: unknown };
 }
 
 export class ApiClientError extends Error {
@@ -24,7 +25,7 @@ export interface PublicVerificationContextApi {
   customer: { id: string; name: string; phoneE164: string };
   address: {
     id: string; rawAddress: string; province: string; city: string; district: string; subdistrict: string;
-    street: string; houseNumber: string; referencePrecision: string;
+    street: string; houseNumber: string; referencePrecision: string; referenceLocation?: { latitude: number; longitude: number } | null; simulationConfig?: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number; manualReview?: boolean };
   };
 }
 
@@ -70,8 +71,13 @@ apiClient.interceptors.response.use(
     const responseCorrelationId = typeof responseHeaders?.get === 'function'
       ? responseHeaders.get('x-correlation-id')
       : responseHeaders?.['x-correlation-id'];
+    const topLevelMessage = Array.isArray(body?.message)
+      ? body.message.join(', ')
+      : typeof body?.message === 'string'
+        ? body.message
+        : undefined;
     return Promise.reject(new ApiClientError(
-      body?.error?.message || `API request failed (${error.response?.status ?? 'network error'})`,
+      body?.error?.message || topLevelMessage || `API request failed (${error.response?.status ?? 'network error'})`,
       error.response?.status,
       body?.error?.code,
       typeof responseCorrelationId === 'string' ? responseCorrelationId : undefined,
@@ -79,13 +85,16 @@ apiClient.interceptors.response.use(
   },
 );
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+type ApiRequestOptions = Pick<AxiosRequestConfig, 'method' | 'headers' | 'timeout'> & { body?: unknown };
+
+async function request<T>(path: string, init: ApiRequestOptions = {}): Promise<T> {
   if (!path.startsWith('/')) throw new Error('API path must be relative to the configured API base URL');
   const response = await apiClient.request<T>({
     url: path,
     method: init.method || 'GET',
     data: init.body,
-    headers: init.headers ? Object.fromEntries(new Headers(init.headers).entries()) : undefined,
+    headers: init.headers,
+    timeout: init.timeout,
   });
   return response.status === 204 ? (undefined as T) : response.data;
 }
@@ -152,6 +161,8 @@ export interface CustomerImportApiResult {
   addressesInserted: number;
   duplicatePhoneRows: number;
   missingPostalCodeRowsStoredAs00000: number;
+  missingCoordinateRows: number;
+  incompleteAddressRows: number;
   coveredBtsRows: number;
   coverageStatusCounts: Record<string, number>;
   whatsappOptIn: string;
@@ -198,12 +209,19 @@ const authApi = {
 };
 
 const publicVerificationApi = {
+  regions: {
+    provinces: () => request<Array<{ code: string; name: string; postalCode?: string | null }>>('/public/regions/provinces'),
+    regencies: (provinceCode: string) => request<Array<{ code: string; name: string; postalCode?: string | null }>>(`/public/regions/regencies/${encodeURIComponent(provinceCode)}`),
+    districts: (regencyCode: string) => request<Array<{ code: string; name: string; postalCode?: string | null }>>(`/public/regions/districts/${encodeURIComponent(regencyCode)}`),
+    villages: (districtCode: string) => request<Array<{ code: string; name: string; postalCode?: string | null }>>(`/public/regions/villages/${encodeURIComponent(districtCode)}`),
+  },
   context: (token: string) => request<PublicVerificationContextApi>(`/public/verifications/${encodeURIComponent(token)}`),
   confirm: (token: string, confirmed: boolean) => request<{ status: string }>(`/public/verifications/${encodeURIComponent(token)}/customer-confirmation`, { method: 'POST', body: JSON.stringify({ confirmed }) }),
   consent: (token: string) => request<{ status: string }>(`/public/verifications/${encodeURIComponent(token)}/consent`, { method: 'POST' }),
   submitLocation: (token: string, samples: unknown[]) => request<ServerValidationDecision>(`/public/verifications/${encodeURIComponent(token)}/location`, { method: 'POST', body: JSON.stringify({ samples }) }),
-  waitForHome: (token: string, reminderPreference: string) => request<{ status: string; reminderNumber: number }>(`/public/verifications/${encodeURIComponent(token)}/wait-for-home`, { method: 'POST', body: JSON.stringify({ reminderPreference }) }),
+  waitForHome: (token: string, reminder: { scheduledAt?: string; reminderPreference?: string }) => request<{ status: string; reminderNumber: number }>(`/public/verifications/${encodeURIComponent(token)}/wait-for-home`, { method: 'POST', body: JSON.stringify(reminder) }),
   changeAddress: (token: string, address: unknown) => request<{ id: string; status: string }>(`/public/verifications/${encodeURIComponent(token)}/address-change`, { method: 'POST', body: JSON.stringify(address) }),
+  lookupAddress: (token: string, address: unknown) => request<{ postalCode: string | null; formattedAddress: string }>(`/public/verifications/${encodeURIComponent(token)}/address-lookup`, { method: 'POST', body: JSON.stringify(address) }),
   addressStatus: (token: string, sameAddress: boolean) => request<{ status: string; sameAddress: boolean }>(`/public/verifications/${encodeURIComponent(token)}/address-status`, { method: 'POST', body: JSON.stringify({ sameAddress }) }),
 };
 
@@ -228,11 +246,12 @@ const adminApi = {
   importCustomers: (file: File) => {
     const body = new FormData();
     body.append('file', file);
-    return request<CustomerImportApiResult>('/admin/customers/import', { method: 'POST', body });
+    return request<CustomerImportApiResult>('/admin/customers/import', { method: 'POST', body, timeout: 5 * 60 * 1000 });
   },
   verifications: (query: AdminListQuery = {}) => request<AdminPageApi<{ session: Record<string, unknown>; customer: Record<string, unknown> }>>(`/admin/verifications${queryString(query)}`),
   verification: (id: string) => request<Record<string, unknown>>(`/admin/verifications/${encodeURIComponent(id)}`),
   createVerification: (customerId: string, addressId: string) => request<{ sessionId: string; verificationLink: string; expiresAt: string }>(`/admin/customers/${encodeURIComponent(customerId)}/verifications`, { method: 'POST', body: JSON.stringify({ addressId }) }),
+  createSimulationVerification: (customerId: string, addressId: string) => request<{ simulation: boolean; sessionId: string; recipient: { name: string; phoneE164: string }; templateName: string; language: string; message: string; verificationLink: string; referenceLocation: { latitude: number; longitude: number } | null; referencePrecision: string | null; simulationConfig: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number }; expiresAt: string }>(`/admin/customers/${encodeURIComponent(customerId)}/verifications/simulation`, { method: 'POST', body: JSON.stringify({ addressId }) }),
   resend: (id: string) => request<{ status: string; verificationLink: string; expiresAt: string }>(`/admin/verifications/${encodeURIComponent(id)}/resend`, { method: 'POST' }),
   revoke: (id: string) => request<{ status: string }>(`/admin/verifications/${encodeURIComponent(id)}/revoke`, { method: 'POST' }),
   reminder: (id: string) => request<{ status: string; reminderNumber: number }>(`/admin/verifications/${encodeURIComponent(id)}/reminders`, { method: 'POST' }),
@@ -247,6 +266,7 @@ const adminApi = {
   campaign: (id: string) => request<Record<string, unknown>>(`/admin/campaigns/${encodeURIComponent(id)}`),
   campaignItems: (id: string, query: AdminListQuery = {}) => request<AdminPageApi<Record<string, unknown>>>(`/admin/campaigns/${encodeURIComponent(id)}/items${queryString(query)}`),
   createCampaign: (body: unknown) => request<Record<string, unknown>>('/admin/campaigns', { method: 'POST', body: JSON.stringify(body) }),
+  previewWhatsApp: (body: { customerName: string; phoneE164: string; address?: string; referenceLatitude?: number; referenceLongitude?: number; referencePrecision?: string }) => request<{ simulation: boolean; recipient: { name: string; phoneE164: string }; templateName: string; language: string; message: string; verificationLink: string; referenceLocation: { latitude: number; longitude: number } | null; referencePrecision: string | null; simulationConfig: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number } }>('/admin/campaigns/preview-whatsapp', { method: 'POST', body: JSON.stringify(body) }),
   startCampaign: (id: string) => request<{ id: string; status: string }>(`/admin/campaigns/${encodeURIComponent(id)}/start`, { method: 'POST' }),
   optOutCustomer: (id: string) => request<{ customerId: string; status: string }>(`/admin/customers/${encodeURIComponent(id)}/whatsapp-opt-out`, { method: 'POST' }),
 };

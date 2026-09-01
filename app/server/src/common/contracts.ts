@@ -14,7 +14,11 @@ export const locationSamplesSchema = z.object({
 export const confirmationSchema = z.object({ confirmed: z.boolean() });
 
 export const reminderSchema = z.object({
-  reminderPreference: z.enum(['IN_1_HOUR', 'TONIGHT', 'TOMORROW_MORNING', 'DEFAULT']),
+  reminderPreference: z.enum(['IN_1_HOUR', 'TONIGHT', 'TOMORROW_MORNING', 'DEFAULT']).optional(),
+  scheduledAt: z.string().datetime().optional(),
+}).refine((input) => Boolean(input.reminderPreference) !== Boolean(input.scheduledAt), {
+  message: 'Provide either reminderPreference or scheduledAt',
+  path: ['scheduledAt'],
 });
 
 export const addressStatusSchema = z.object({ sameAddress: z.boolean() });
@@ -45,7 +49,9 @@ export const addressChangeSchema = z.object({
   subdistrict: z.string().trim().min(1).max(128),
   postalCode: z.string().trim().min(3).max(16),
   street: z.string().trim().min(1).max(255),
-  houseNumber: z.string().trim().min(1).max(64),
+  // Some Indonesian addresses genuinely have no official house number.
+  // Store those explicitly as TANPA NOMOR and route them to manual review.
+  houseNumber: z.string().trim().max(64).optional(),
   rt: z.string().trim().max(8).optional(),
   rw: z.string().trim().max(8).optional(),
   building: z.string().trim().max(255).optional(),
@@ -53,6 +59,12 @@ export const addressChangeSchema = z.object({
   unit: z.string().trim().max(64).optional(),
   addressDetail: z.string().trim().max(1000).optional(),
   landmark: z.string().trim().max(1000).optional(),
+});
+
+export const addressLookupSchema = addressChangeSchema.extend({
+  postalCode: z.string().trim().max(16).optional(),
+  street: z.string().trim().max(255).optional(),
+  houseNumber: z.string().trim().max(64).optional(),
 });
 
 export const customerCreateSchema = z.object({
@@ -66,11 +78,34 @@ export const customerCreateSchema = z.object({
     referenceLocation: z.object({
       latitude: z.number().finite().min(-90).max(90),
       longitude: z.number().finite().min(-180).max(180),
-    }),
-    referenceSource: z.enum(['MASTER_COORDINATE', 'GEOCODED', 'CUSTOMER_PROPOSED']).default('MASTER_COORDINATE'),
-    referencePrecision: z.enum(['EXACT_MASTER', 'ROOFTOP', 'HOUSE', 'STREET', 'AREA', 'DISTRICT', 'CITY']).default('EXACT_MASTER'),
-    referenceConfidence: z.number().finite().min(0).max(1).default(1),
-  }),
+    }).optional(),
+    referenceSource: z.enum(['MASTER_COORDINATE', 'GEOCODED', 'CUSTOMER_PROPOSED']).optional(),
+    referencePrecision: z.enum(['EXACT_MASTER', 'ROOFTOP', 'HOUSE', 'STREET', 'AREA', 'DISTRICT', 'CITY', 'UNKNOWN']).optional(),
+    referenceConfidence: z.number().finite().min(0).max(1).optional(),
+  }).superRefine((input, context) => {
+    // Coordinates are optional, but a partially filled pair is ambiguous and
+    // must not silently be stored as a valid reference.
+    if (input.referenceLocation && (input.referenceLocation.latitude == null || input.referenceLocation.longitude == null)) {
+      context.addIssue({ code: 'custom', path: ['referenceLocation'], message: 'Latitude dan longitude harus diisi bersamaan' });
+    }
+  }).transform((input) => ({
+    ...input,
+    referenceSource: input.referenceSource ?? (input.referenceLocation ? 'MASTER_COORDINATE' : 'CUSTOMER_PROPOSED'),
+    referencePrecision: input.referencePrecision ?? (input.referenceLocation ? 'EXACT_MASTER' : 'UNKNOWN'),
+    referenceConfidence: input.referenceConfidence ?? (input.referenceLocation ? 1 : 0),
+  })),
+});
+
+export const whatsappPreviewSchema = z.object({
+  customerName: z.string().trim().min(1).max(255),
+  phoneE164: z.string().regex(/^\+[1-9]\d{7,14}$/),
+  address: z.string().trim().max(1000).optional(),
+  referenceLatitude: z.number().finite().min(-90).max(90).optional(),
+  referenceLongitude: z.number().finite().min(-180).max(180).optional(),
+  referencePrecision: z.enum(['EXACT_MASTER', 'ROOFTOP', 'HOUSE', 'STREET', 'AREA', 'DISTRICT', 'CITY']).optional(),
+}).refine((input) => (input.referenceLatitude == null) === (input.referenceLongitude == null), {
+  message: 'referenceLatitude and referenceLongitude must be provided together',
+  path: ['referenceLatitude'],
 });
 
 export const customerUpdateSchema = z.object({
@@ -136,6 +171,7 @@ export const validationConfigSchema = z.object({
 
 export type GpsSample = z.infer<typeof coordinateSchema>;
 export type AddressChangeInput = z.infer<typeof addressChangeSchema>;
+export type AddressLookupInput = z.infer<typeof addressLookupSchema>;
 export type CustomerCreateInput = z.infer<typeof customerCreateSchema>;
 export type CustomerUpdateInput = z.infer<typeof customerUpdateSchema>;
 export type CustomerListQueryInput = z.infer<typeof customerListQuerySchema>;
@@ -145,6 +181,7 @@ export type ValidationConfigInput = z.infer<typeof validationConfigSchema>;
 export type AddressStatusInput = z.infer<typeof addressStatusSchema>;
 export type CampaignCreateInput = z.infer<typeof campaignCreateSchema>;
 export type CampaignTargetFilterInput = z.infer<typeof campaignTargetFilterSchema>;
+export type WhatsAppPreviewInput = z.infer<typeof whatsappPreviewSchema>;
 export type WhatsAppDeliveryStatusInput = z.infer<typeof whatsappDeliveryStatusSchema>;
 
 export interface PublicVerificationContext {

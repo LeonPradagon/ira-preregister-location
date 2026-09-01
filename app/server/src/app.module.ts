@@ -8,6 +8,8 @@ import { AdminService } from './modules/admin/admin.service.js';
 import { GeocodingPort } from './integrations/geocoding/geocoding.port.js';
 import { DisabledGeocodingAdapter } from './integrations/geocoding/disabled-geocoding.adapter.js';
 import { HttpGeocodingAdapter } from './integrations/geocoding/http-geocoding.adapter.js';
+import { OsmGeocodingAdapter } from './integrations/geocoding/osm-geocoding.adapter.js';
+import { FallbackGeocodingAdapter } from './integrations/geocoding/fallback-geocoding.adapter.js';
 import { WhatsAppPort } from './integrations/whatsapp/whatsapp.port.js';
 import { ConsoleWhatsAppAdapter } from './integrations/whatsapp/console-whatsapp.adapter.js';
 import { HttpWhatsAppAdapter } from './integrations/whatsapp/http-whatsapp.adapter.js';
@@ -19,23 +21,31 @@ import { CampaignService } from './modules/campaigns/campaign.service.js';
 import { WhatsAppComplianceService } from './integrations/whatsapp/whatsapp-compliance.service.js';
 import { WhatsAppWebhookController } from './integrations/whatsapp/whatsapp-webhook.controller.js';
 import { CustomerImportService } from './modules/imports/customer-import.service.js';
+import { RegionsController } from './modules/regions/regions.controller.js';
+import { RegionsService } from './modules/regions/regions.service.js';
 
 @Module({
   imports: [AuthModule],
-  controllers: [HealthController, PublicVerificationController, AdminController, CampaignController, WhatsAppWebhookController],
+  controllers: [HealthController, PublicVerificationController, RegionsController, AdminController, CampaignController, WhatsAppWebhookController],
   providers: [
     VerificationService,
     AdminService,
     CampaignService,
     WhatsAppComplianceService,
     CustomerImportService,
+    RegionsService,
     ValidationConfigService,
     RolesGuard,
-    { provide: GeocodingPort, useFactory: () => process.env.GEOCODING_BASE_URL ? new HttpGeocodingAdapter() : new DisabledGeocodingAdapter() },
+    { provide: GeocodingPort, useFactory: () => {
+      const osmEnabled = process.env.OSM_NOMINATIM_ENABLED !== 'false';
+      if (!osmEnabled) return process.env.GEOCODING_BASE_URL ? new HttpGeocodingAdapter() : new DisabledGeocodingAdapter();
+      const osm = new OsmGeocodingAdapter();
+      return process.env.GEOCODING_BASE_URL ? new FallbackGeocodingAdapter(new HttpGeocodingAdapter(), osm) : osm;
+    } },
     { provide: WhatsAppPort, useFactory: () => {
       const provider = process.env.WHATSAPP_PROVIDER ?? (process.env.NODE_ENV === 'production' ? 'disabled' : 'generic');
       if (provider === 'disabled' || provider === 'mekari') return new DisabledWhatsAppAdapter();
-      if (process.env.WHATSAPP_BASE_URL && process.env.WHATSAPP_TEMPLATE_NAME) return new HttpWhatsAppAdapter();
+      if (process.env.WHATSAPP_BASE_URL && (provider === 'meta' || provider === 'generic')) return new HttpWhatsAppAdapter();
       return process.env.NODE_ENV === 'production' ? new DisabledWhatsAppAdapter() : new ConsoleWhatsAppAdapter();
     } },
   ],

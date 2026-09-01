@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { adminListQuerySchema, campaignCreateSchema } from '../../common/contracts.js';
+import { adminListQuerySchema, campaignCreateSchema, whatsappPreviewSchema } from '../../common/contracts.js';
 import { BetterAuthGuard } from '../../auth/auth.guard.js';
 import { RolesGuard } from '../../auth/roles.guard.js';
 import { Roles } from '../../common/roles.js';
@@ -10,6 +10,14 @@ import { CampaignService } from './campaign.service.js';
 @UseGuards(BetterAuthGuard, RolesGuard)
 export class CampaignController {
   constructor(private readonly campaigns: CampaignService) {}
+
+  @Post('preview-whatsapp')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  previewWhatsApp(@Body() body: unknown) {
+    const parsed = whatsappPreviewSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.campaigns.previewWhatsApp(parsed.data);
+  }
 
   @Post()
   @Roles('SUPER_ADMIN', 'ADMIN')

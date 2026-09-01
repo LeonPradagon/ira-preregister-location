@@ -12,6 +12,8 @@ import { WhatsAppPort } from './integrations/whatsapp/whatsapp.port.js';
 import { hashPhone, nextAllowedSendAt, nextUtcMidnight } from './integrations/whatsapp/whatsapp.policy.js';
 import { createVerificationToken } from './modules/verification/verification-token.js';
 import { CampaignService } from './modules/campaigns/campaign.service.js';
+import { ValidationConfigService } from './config/validation-config.service.js';
+import { getWhatsAppTemplate } from './integrations/whatsapp/whatsapp.templates.js';
 
 const connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null });
 const outboxQueueName = 'exact-location-outbox';
@@ -21,16 +23,16 @@ const outboxQueue = new Queue(outboxQueueName, { connection });
 const reminderQueue = new Queue(reminderQueueName, { connection });
 const campaignQueue = new Queue(campaignQueueName, { connection });
 const whatsappProvider = process.env.WHATSAPP_PROVIDER ?? (process.env.NODE_ENV === 'production' ? 'disabled' : 'generic');
+const invitationTemplate = getWhatsAppTemplate('INVITATION');
+const reminderTemplate = getWhatsAppTemplate('REMINDER');
 const whatsapp: WhatsAppPort = whatsappProvider === 'disabled' || whatsappProvider === 'mekari'
   ? new DisabledWhatsAppAdapter()
-  : process.env.WHATSAPP_BASE_URL && process.env.WHATSAPP_TEMPLATE_NAME
+  : process.env.WHATSAPP_BASE_URL && (whatsappProvider === 'meta' || process.env.WHATSAPP_TEMPLATE_NAME || invitationTemplate.name || reminderTemplate.name)
     ? new HttpWhatsAppAdapter()
     : process.env.NODE_ENV === 'production'
       ? new DisabledWhatsAppAdapter()
       : new ConsoleWhatsAppAdapter();
-const templateName = process.env.WHATSAPP_TEMPLATE_NAME ?? 'location_verification';
-const templateLanguage = process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? 'id';
-const campaigns = new CampaignService();
+const campaigns = new CampaignService(new ValidationConfigService());
 
 const circuitBucket = () => `whatsapp:outcomes:${Math.floor(Date.now() / 60000)}`;
 const isCircuitOpen = async () => (await connection.get('whatsapp:circuit:open')) === '1';
@@ -131,7 +133,7 @@ const reminderWorker = new Worker(
       const expiresAt = new Date(Date.now() + Number(process.env.VERIFICATION_TOKEN_TTL_DAYS ?? 7) * 86400000);
       await db.update(verificationSessions).set({ tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, expiresAt, updatedAt: new Date() }).where(eq(verificationSessions.id, target.session.id));
       const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
-      const sent = await whatsapp.send({ phoneE164: target.customer.phoneE164, templateName, templateLanguage, templateParameters: [target.customer.name, verificationLink], idempotencyKey: `reminder:${reminderId}` });
+      const sent = await whatsapp.send({ phoneE164: target.customer.phoneE164, templateName: reminderTemplate.name, templateLanguage: reminderTemplate.language, templateParameters: [target.customer.name, verificationLink], idempotencyKey: `reminder:${reminderId}` });
       await recordProviderOutcome(true);
       await db.update(reminders).set({ status: 'SENT', sentAt: new Date(), providerMessageId: sent.providerMessageId }).where(eq(reminders.id, reminderId));
       await recordDelivery(target.customer.phoneE164, 'REMINDER', `reminder:${reminderId}`, sent.providerMessageId);
@@ -210,7 +212,7 @@ const campaignWorker = new Worker(
       const expiresAt = new Date(Date.now() + Number(process.env.VERIFICATION_TOKEN_TTL_DAYS ?? 7) * 86400000);
       await db.update(verificationSessions).set({ tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, expiresAt, verificationStatus: 'MESSAGE_SENT', updatedAt: new Date() }).where(eq(verificationSessions.id, target.session.id));
       const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
-      const sent = await whatsapp.send({ phoneE164: target.customer.phoneE164, templateName, templateLanguage, templateParameters: [target.customer.name, verificationLink], idempotencyKey: `campaign-invitation:${itemId}` });
+       const sent = await whatsapp.send({ phoneE164: target.customer.phoneE164, templateName: invitationTemplate.name, templateLanguage: invitationTemplate.language, templateParameters: [target.customer.name, verificationLink], idempotencyKey: `campaign-invitation:${itemId}` });
       await recordProviderOutcome(true);
       await db.update(verificationCampaignItems).set({ status: 'SENT', sentAt: new Date(), providerMessageId: sent.providerMessageId, lastError: null, updatedAt: new Date() }).where(eq(verificationCampaignItems.id, itemId));
       await recordDelivery(target.customer.phoneE164, 'CAMPAIGN_INVITATION', `campaign-invitation:${itemId}`, sent.providerMessageId);

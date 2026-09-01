@@ -1,5 +1,5 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { AddressChangeInput } from '../../common/contracts.js';
+import { AddressLookupInput } from '../../common/contracts.js';
 import { GeocodingPort } from './geocoding.port.js';
 
 @Injectable()
@@ -8,7 +8,7 @@ export class DisabledGeocodingAdapter extends GeocodingPort {
     return Promise.reject(new ServiceUnavailableException('Geocoding provider is not configured'));
   }
 
-  forward(_address: AddressChangeInput): Promise<never> {
+  forward(_address: AddressLookupInput): Promise<never> {
     return Promise.reject(new ServiceUnavailableException('Geocoding provider is not configured'));
   }
 }

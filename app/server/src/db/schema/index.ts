@@ -94,6 +94,18 @@ export const customers = pgTable('customers', {
   updatedAt: updatedAt(),
 });
 
+export const administrativeRegions = pgTable('administrative_regions', {
+  code: varchar('code', { length: 13 }).primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  parentCode: varchar('parent_code', { length: 13 }),
+  level: integer('level').notNull(),
+});
+
+export const regionPostalCodes = pgTable('region_postal_codes', {
+  regionCode: varchar('region_code', { length: 13 }).primaryKey(),
+  postalCode: varchar('postal_code', { length: 5 }),
+});
+
 export const customerAddresses = pgTable('customer_addresses', {
   id: id(),
   customerId: uuid('customer_id').notNull().references(() => customers.id),
@@ -158,6 +170,7 @@ export const verificationSessions = pgTable('verification_sessions', {
   currentAddressId: uuid('current_address_id').notNull().references(() => customerAddresses.id),
   tokenId: varchar('token_id', { length: 64 }).unique(),
   tokenHash: varchar('token_hash', { length: 128 }).unique(),
+  verificationMode: varchar('verification_mode', { length: 16 }).notNull().default('LIVE'),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
   verificationStatus: varchar('verification_status', { length: 48 }).notNull().default('CREATED'),

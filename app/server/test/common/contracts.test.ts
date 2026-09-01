@@ -48,6 +48,26 @@ describe('API contracts', () => {
     expect(samples.success).toBe(false);
   });
 
+  it('accepts a master address without coordinates and marks its reference as unknown', () => {
+    const result = customerCreateSchema.safeParse({
+      externalId: 'CUST-002',
+      name: 'Customer Two',
+      phoneE164: '+6281234567890',
+      address: {
+        province: 'DKI Jakarta', city: 'Jakarta Barat', district: 'Palmerah', subdistrict: 'Palmerah',
+        postalCode: '11540', street: 'Jl. KH Syahdan', houseNumber: '10A',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.address.referenceLocation).toBeUndefined();
+      expect(result.data.address.referenceSource).toBe('CUSTOMER_PROPOSED');
+      expect(result.data.address.referencePrecision).toBe('UNKNOWN');
+      expect(result.data.address.referenceConfidence).toBe(0);
+    }
+  });
+
   it('accepts a filter campaign without sending customer IDs to the API', () => {
     const result = campaignCreateSchema.safeParse({ name: 'All unverified', targetFilter: { locationStatus: 'UNVERIFIED' } });
     expect(result.success).toBe(true);

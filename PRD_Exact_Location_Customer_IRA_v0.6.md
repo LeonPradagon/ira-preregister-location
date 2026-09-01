@@ -1,4 +1,4 @@
-# PRD — Exact Location Customer Validation
+# PRD — IRA Preregist
 
 **Versi:** 0.6  
 **Status:** Draft untuk Product & Technical Review  
@@ -11,7 +11,7 @@
 
 # 1. Ringkasan Produk
 
-Aplikasi ini bertujuan memastikan bahwa customer yang akan diproses untuk pemasangan memiliki **alamat dan exact location yang benar**, serta customer melakukan verifikasi **ketika benar-benar berada di rumah/lokasi pemasangan**.
+Aplikasi ini bertujuan memastikan bahwa customer yang akan diproses untuk pemasangan memiliki **alamat dan lokasi pemasangan yang akurat**, serta customer melakukan verifikasi **ketika benar-benar berada di rumah/lokasi pemasangan**.
 
 Fokus MVP bukan ticketing dan bukan pengecekan coverage IRA secara aktif. Fokus MVP adalah menghasilkan data berikut dengan tingkat keyakinan tinggi:
 
@@ -468,7 +468,7 @@ flowchart TD
     P -->|Sudah di rumah tapi mismatch| V[Retry / Manual Review]
     V --> J
 
-    O --> W[Save Verified Address + Exact Location]
+    O --> W[Save Verified Address + Verified Location]
     W --> X[Create location.verified.v1 Outbox Event]
 
     X -. Future .-> Y[IRA Coverage Adapter]
@@ -2363,7 +2363,7 @@ Ticketing baru dipanggil setelah business flow future menentukan customer eligib
 ## 36.4 Integration Boundary
 
 ```text
-Exact Location Database
+IRA Preregist Database
         X
         X  tidak boleh direct shared table
         X
@@ -3679,4 +3679,3 @@ Aturan penting:
 8. `app/web` tidak boleh melakukan direct database access.
 9. `app/server` menjadi satu-satunya owner business validation dan database.
 10. Docker Compose adalah environment orchestration, bukan tempat menyimpan business configuration hardcoded.
-

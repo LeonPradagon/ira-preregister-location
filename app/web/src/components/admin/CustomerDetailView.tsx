@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { VerificationMap } from '../maps/VerificationMap';
+import { useTranslation } from '../../i18n';
+import { buildGoogleMapsDeepLink, formatAddressForDisplay, isIncompleteAddress } from '../../lib/validationEngine';
 
 interface CustomerDetailViewProps {
   customerId: string;
@@ -32,6 +34,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
   onCreateVerification,
 }) => {
   const { customers, addresses, verificationSessions, optOutCustomer } = useApp();
+  const { t } = useTranslation();
 
   const customer = customers.find((c) => c.id === customerId);
   const custAddresses = addresses.filter((a) => a.customerId === customerId);
@@ -40,9 +43,9 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
   if (!customer) {
     return (
       <div className="p-8 text-center bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 shadow-xs">
-        Pelanggan tidak ditemukan.
+        {t('detail.notFound')}
         <button onClick={onBack} className="block mx-auto mt-4 px-4 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg text-xs font-medium">
-          Kembali
+          {t('detail.back')}
         </button>
       </div>
     );
@@ -65,7 +68,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
           <div>
             <div>
               <h1 className="text-base font-semibold text-gray-900 dark:text-white tracking-tight">{customer.name}</h1>
-              <div className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">ID pelanggan: <span className="font-mono text-indigo-700 dark:text-indigo-400">{customer.externalId}</span></div>
+              <div className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">{t('detail.customerId')}: <span className="font-mono text-indigo-700 dark:text-indigo-400">{customer.externalId}</span></div>
             </div>
             <div className="flex items-center gap-2 mt-2">
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
@@ -96,7 +99,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
             className="inline-flex items-center gap-2 px-3.5 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg text-xs font-medium shadow-xs transition-colors"
           >
             <Plus className="w-4 h-4" />
-            <span>Generate Sesi Verifikasi Baru</span>
+            <span>{t('detail.generate')}</span>
           </button>
         )}
       </div>
@@ -108,7 +111,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-xs space-y-3">
             <h2 className="text-xs font-semibold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
               <Home className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <span>Daftar Alamat Pelanggan ({custAddresses.length})</span>
+              <span>{t('detail.addresses')} ({custAddresses.length})</span>
             </h2>
 
             <div className="space-y-3">
@@ -128,7 +131,8 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
                     </span>
                   </div>
 
-                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed font-medium">{addr.rawAddress}</p>
+                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed font-medium">{formatAddressForDisplay(addr.rawAddress)}</p>
+                  {isIncompleteAddress(addr) && <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[10px] font-medium leading-4 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">{t('detail.addressIncomplete')}</div>}
                   <div className="grid grid-cols-2 gap-1 text-[10px] text-gray-500 dark:text-gray-400">
                     <span>Provinsi: {addr.province || '—'}</span><span>Kota: {addr.city || '—'}</span>
                     <span>Kecamatan: {addr.district || '—'}</span><span>Kelurahan: {addr.subdistrict || '—'}</span>
@@ -138,6 +142,18 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
                   <div className="text-[10px] font-mono text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-x-3 gap-y-1">
                     <span>Latitude: {addr.referenceLocation ? addr.referenceLocation.latitude.toFixed(6) : '—'}</span>
                     <span>Longitude: {addr.referenceLocation ? addr.referenceLocation.longitude.toFixed(6) : '—'}</span>
+                    {addr.referenceLocation && (
+                      <a
+                        href={buildGoogleMapsDeepLink(addr.referenceLocation.latitude, addr.referenceLocation.longitude)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={t('detail.openGoogleMaps')}
+                        className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 font-sans font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        {t('detail.openGoogleMaps')}
+                      </a>
+                    )}
                   </div>
                 </div>
               ))}
@@ -150,7 +166,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-xs space-y-3">
             <h2 className="text-xs font-semibold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
               <Compass className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>Riwayat Sesi Verifikasi ({custSessions.length})</span>
+              <span>{t('detail.sessions')} ({custSessions.length})</span>
             </h2>
 
             {custSessions.length > 0 ? (
@@ -191,7 +207,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
                         onClick={() => onSelectVerification(session.id)}
                         className="px-3 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg text-[11px] font-medium shadow-xs transition-colors"
                       >
-                        Buka Detail Peta &amp; Validasi &rarr;
+                        {t('detail.openMap')} &rarr;
                       </button>
                     </div>
                   </div>
@@ -199,7 +215,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
               </div>
             ) : (
               <div className="text-xs text-gray-400 dark:text-gray-500 italic text-center py-6">
-                Belum ada sesi verifikasi untuk pelanggan ini.
+                {t('detail.noSessions')}
               </div>
             )}
           </div>

@@ -102,6 +102,7 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
                 <span>Customer: <strong>{formatNumber(result.customersUpserted)}</strong></span>
                 <span>Alamat baru: <strong>{formatNumber(result.addressesInserted)}</strong></span>
                 <span>Alamat diperbarui: <strong>{formatNumber(result.addressesUpdated)}</strong></span>
+                {result.incompleteAddressRows > 0 && <span className="col-span-2 text-amber-700 dark:text-amber-300">Alamat perlu dilengkapi/manual review: <strong>{formatNumber(result.incompleteAddressRows)}</strong></span>}
               </div>
               <p className="mt-2 text-[10px]">Opt-in WhatsApp tidak diubah oleh import ini.</p>
             </div>

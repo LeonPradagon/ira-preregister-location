@@ -1,4 +1,4 @@
-# Exact Location Customer Validation
+# IRA Preregist
 
 Monorepo untuk platform verifikasi lokasi customer berdasarkan PRD v0.6. Aplikasi ini mengirim link unik melalui WhatsApp Business, menerima bukti lokasi GPS dari customer, lalu memperbarui status verifikasi alamat berdasarkan hasil validasi backend.
 

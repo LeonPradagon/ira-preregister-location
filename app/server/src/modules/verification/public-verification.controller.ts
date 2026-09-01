@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Param, Post } from '@nestjs/common';
-import { addressChangeSchema, addressStatusSchema, confirmationSchema, locationSamplesSchema, reminderSchema } from '../../common/contracts.js';
+import { addressChangeSchema, addressLookupSchema, addressStatusSchema, confirmationSchema, locationSamplesSchema, reminderSchema } from '../../common/contracts.js';
 import { VerificationService } from './verification.service.js';
 
 @Controller('public/verifications')
@@ -39,7 +39,7 @@ export class PublicVerificationController {
   async waitForHome(@Param('token') token: string, @Body() body: unknown) {
     const parsed = reminderSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
-    return this.verification.waitForHome(token, parsed.data.reminderPreference);
+    return this.verification.waitForHome(token, parsed.data.reminderPreference, parsed.data.scheduledAt);
   }
 
   @Post(':token/address-change')
@@ -47,6 +47,13 @@ export class PublicVerificationController {
     const parsed = addressChangeSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
     return this.verification.changeAddress(token, parsed.data);
+  }
+
+  @Post(':token/address-lookup')
+  async addressLookup(@Param('token') token: string, @Body() body: unknown) {
+    const parsed = addressLookupSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.verification.lookupAddress(token, parsed.data);
   }
 
   @Post(':token/address-status')
@@ -60,6 +67,6 @@ export class PublicVerificationController {
   async reminder(@Param('token') token: string, @Body() body: unknown) {
     const parsed = reminderSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
-    return this.verification.waitForHome(token, parsed.data.reminderPreference);
+    return this.verification.waitForHome(token, parsed.data.reminderPreference, parsed.data.scheduledAt);
   }
 }

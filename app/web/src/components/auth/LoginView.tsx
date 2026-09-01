@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { Lock, Mail, Shield, ArrowRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useTranslation } from '../../i18n';
+import { LanguageSwitcher } from '../common/LanguageSwitcher';
 
 export const LoginView: React.FC = () => {
   const { loginAdmin } = useApp();
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -12,7 +15,7 @@ export const LoginView: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
-      setError('Email dan kata sandi wajib diisi.');
+      setError(t('auth.emailPasswordRequired'));
       return;
     }
     setIsLoading(true);
@@ -21,10 +24,10 @@ export const LoginView: React.FC = () => {
     try {
       const authenticated = await loginAdmin(email, password);
       if (!authenticated) {
-        setError('Autentikasi gagal. Silakan periksa email dan kata sandi Anda.');
+        setError(t('auth.invalidCredentials'));
       }
     } catch {
-      setError('Autentikasi gagal. Silakan periksa kembali email Anda.');
+      setError(t('auth.emailCheck'));
     } finally {
       setIsLoading(false);
     }
@@ -32,19 +35,20 @@ export const LoginView: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
+      <div className="fixed right-4 top-4"><LanguageSwitcher /></div>
       <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-800">
         {/* Top Branding */}
         <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-8 text-center border-b border-gray-100 dark:border-gray-800">
           <div className="w-12 h-12 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-xs">
             <Shield className="w-6 h-6" />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white">Exact Location Ops</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white">IRA Preregist Ops</h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Customer Validation & Dispatch Verification Portal
+            {t('auth.portalSubtitle')}
           </p>
           <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-full border border-gray-200 dark:border-gray-700 text-[11px] text-gray-600 dark:text-gray-300 font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Better Auth Session Guard Active</span>
+            <span>{t('auth.sessionGuard')}</span>
           </div>
         </div>
 
@@ -58,12 +62,12 @@ export const LoginView: React.FC = () => {
             )}
 
             <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg text-xs text-blue-800 dark:text-blue-300">
-              Gunakan kredensial Better Auth yang dibuat melalui seed atau administrasi platform.
+              {t('auth.seedHint')}
             </div>
 
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Email Perusahaan
+                {t('auth.companyEmail')}
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -80,7 +84,7 @@ export const LoginView: React.FC = () => {
 
             <div>
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Kata Sandi
+                {t('auth.password')}
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -101,10 +105,10 @@ export const LoginView: React.FC = () => {
               className="w-full py-2.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white active:scale-[0.99] text-white rounded-lg text-xs font-medium shadow-xs transition-all flex items-center justify-center gap-2"
             >
               {isLoading ? (
-                <span>Memverifikasi Sesi...</span>
+                <span>{t('auth.signingIn')}</span>
               ) : (
                 <>
-                  <span>Masuk ke Dashboard Ops</span>
+                  <span>{t('auth.signInDashboard')}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -115,7 +119,7 @@ export const LoginView: React.FC = () => {
 
         {/* Footer */}
         <div className="bg-gray-50 dark:bg-gray-950 px-6 py-3 border-t border-gray-100 dark:border-gray-800 text-center text-[11px] text-gray-500 dark:text-gray-400">
-          Protected by Better Auth • PostgreSQL / PostGIS Spatial Engine
+          {t('auth.protectedBy')}
         </div>
       </div>
     </div>

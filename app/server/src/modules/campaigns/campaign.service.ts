@@ -3,9 +3,11 @@ import { and, asc, desc, eq, gt, ilike, inArray, isNull, ne, or, sql } from 'dri
 import { randomUUID } from 'node:crypto';
 import { db } from '../../db/client.js';
 import { auditLogs, customerAddresses, customers, verificationCampaignItems, verificationCampaigns, verificationSessions } from '../../db/schema/index.js';
-import { AdminListQueryInput, CampaignCreateInput, CampaignTargetFilterInput } from '../../common/contracts.js';
+import { AdminListQueryInput, CampaignCreateInput, CampaignTargetFilterInput, WhatsAppPreviewInput } from '../../common/contracts.js';
 import { DomainError, NotFoundError } from '../../common/errors.js';
 import { RequestAdmin } from '../../common/request-user.js';
+import { ValidationConfigService } from '../../config/validation-config.service.js';
+import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/whatsapp/whatsapp.templates.js';
 
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
@@ -34,6 +36,34 @@ function filtersForTarget(target: StoredTargetFilter, cursor?: string) {
 
 @Injectable()
 export class CampaignService {
+  constructor(private readonly validationConfig: ValidationConfigService) {}
+
+  async previewWhatsApp(input: WhatsAppPreviewInput) {
+    const template = getWhatsAppTemplate('INVITATION');
+    const query = new URLSearchParams({ name: input.customerName });
+    if (input.address) query.set('address', input.address);
+    if (input.referenceLatitude != null && input.referenceLongitude != null) {
+      query.set('referenceLatitude', String(input.referenceLatitude));
+      query.set('referenceLongitude', String(input.referenceLongitude));
+    }
+    if (input.referencePrecision) query.set('referencePrecision', input.referencePrecision);
+    const config = await this.validationConfig.get();
+    query.set('homeRadiusMeters', String(config.HOME_RADIUS_METERS));
+    query.set('gpsMaxAccuracyMeters', String(config.GPS_MAX_ACCURACY_METERS));
+    const verificationLink = `${process.env.WEB_ORIGIN ?? 'http://localhost:5173'}/v/simulasi-${randomUUID()}?${query.toString()}`;
+    return {
+      simulation: true,
+      recipient: { name: input.customerName, phoneE164: input.phoneE164 },
+      templateName: template.name,
+      language: template.language,
+      message: renderWhatsAppTemplate('INVITATION', input.customerName, verificationLink),
+      verificationLink,
+      referenceLocation: input.referenceLatitude == null || input.referenceLongitude == null ? null : { latitude: input.referenceLatitude, longitude: input.referenceLongitude },
+      referencePrecision: input.referencePrecision ?? null,
+      simulationConfig: { homeRadiusMeters: config.HOME_RADIUS_METERS, gpsMaxAccuracyMeters: config.GPS_MAX_ACCURACY_METERS },
+    };
+  }
+
   async create(admin: RequestAdmin, input: CampaignCreateInput) {
     if (!canManage(admin.role)) throw new DomainError('Role cannot create a campaign', 403, 'FORBIDDEN');
     const ids = input.customerIds ?? [];

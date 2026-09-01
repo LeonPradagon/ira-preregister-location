@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, gt, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
-import { auditLogs, customerAddresses, customers, integrationConfigs, integrationOutbox, locationCaptures, reminders, validationResults, verificationReviews, verificationSessions, whatsappDeliveryLogs } from '../../db/schema/index.js';
+import { auditLogs, customerAddresses, customers, integrationConfigs, integrationOutbox, locationCaptures, reminders, spatialPointSql, validationResults, verificationReviews, verificationSessions, whatsappDeliveryLogs } from '../../db/schema/index.js';
 import { AddressChangeInput, AdminListQueryInput, CustomerCreateInput, CustomerListQueryInput, CustomerUpdateInput, ReviewInput, ValidationConfigInput } from '../../common/contracts.js';
 import { DomainError, NotFoundError } from '../../common/errors.js';
 import { RequestAdmin } from '../../common/request-user.js';
@@ -11,13 +11,14 @@ import { assertTransition } from '../verification/state-machine.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
 import { hashPhone, nextAllowedSendAt } from '../../integrations/whatsapp/whatsapp.policy.js';
 import { createVerificationToken } from '../verification/verification-token.js';
+import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/whatsapp/whatsapp.templates.js';
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
 
 function formatRawAddress(address: CustomerCreateInput['address']) {
   return [
     address.street,
-    `No. ${address.houseNumber}`,
+    address.houseNumber && `No. ${address.houseNumber}`,
     address.block && `Blok ${address.block}`,
     address.subdistrict,
     address.district,
@@ -127,7 +128,7 @@ export class AdminService {
       address: customerAddresses,
       referenceLatitude: sql<number>`ST_Y(${customerAddresses.referenceLocation}::geometry)`,
       referenceLongitude: sql<number>`ST_X(${customerAddresses.referenceLocation}::geometry)`,
-    }).from(customerAddresses).where(and(inArray(customerAddresses.customerId, customerIds), eq(customerAddresses.isActive, true)));
+    }).from(customerAddresses).where(and(inArray(customerAddresses.customerId, customerIds), eq(customerAddresses.isActive, true))).orderBy(desc(customerAddresses.updatedAt), desc(customerAddresses.createdAt));
     const sessionRows = await db.select().from(verificationSessions).where(inArray(verificationSessions.customerId, customerIds)).orderBy(desc(verificationSessions.updatedAt));
     const addressByCustomer = new Map<string, Record<string, unknown>>();
     for (const row of addressRows) if (!addressByCustomer.has(row.address.customerId)) addressByCustomer.set(row.address.customerId, {
@@ -178,7 +179,7 @@ export class AdminService {
         subdistrict: address.subdistrict,
         postalCode: address.postalCode,
         street: address.street,
-        houseNumber: address.houseNumber,
+        houseNumber: address.houseNumber?.trim() || 'TANPA NOMOR',
         rt: address.rt,
         rw: address.rw,
         building: address.building,
@@ -186,7 +187,7 @@ export class AdminService {
         unit: address.unit,
         addressDetail: address.addressDetail,
         landmark: address.landmark,
-        referenceLocation: address.referenceLocation,
+        referenceLocation: address.referenceLocation ?? null,
         referenceSource: address.referenceSource,
         referencePrecision: address.referencePrecision,
         referenceConfidence: address.referenceConfidence.toFixed(3),
@@ -207,7 +208,7 @@ export class AdminService {
       });
       return { customer, address: createdAddress };
     });
-    return { ...result, address: { ...result.address, referenceLocation: address.referenceLocation } };
+    return { ...result, address: { ...result.address, referenceLocation: address.referenceLocation ?? null } };
   }
 
   async customer(id: string) {
@@ -259,7 +260,7 @@ export class AdminService {
           subdistrict: nextAddress.subdistrict,
           postalCode: nextAddress.postalCode,
           street: nextAddress.street,
-          houseNumber: nextAddress.houseNumber,
+          houseNumber: nextAddress.houseNumber?.trim() || 'TANPA NOMOR',
           rt: nextAddress.rt,
           rw: nextAddress.rw,
           building: nextAddress.building,
@@ -267,7 +268,7 @@ export class AdminService {
           unit: nextAddress.unit,
           addressDetail: nextAddress.addressDetail,
           landmark: nextAddress.landmark,
-          referenceLocation: nextAddress.referenceLocation,
+          referenceLocation: nextAddress.referenceLocation ?? null,
           referenceSource: nextAddress.referenceSource,
           referencePrecision: nextAddress.referencePrecision,
           referenceConfidence: nextAddress.referenceConfidence.toFixed(3),
@@ -331,11 +332,63 @@ export class AdminService {
       createdAt: created, updatedAt: created,
     }).returning();
     const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
-    await this.whatsapp.send({ phoneE164: customer.phoneE164, templateName: process.env.WHATSAPP_TEMPLATE_NAME ?? 'location_verification', templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? 'id', templateParameters: [customer.name, verificationLink], idempotencyKey: `invitation:${session.id}` });
-    await this.recordManualDelivery(customer.phoneE164, `invitation:${session.id}`, 'CAMPAIGN_INVITATION');
+    const invitationTemplate = getWhatsAppTemplate('INVITATION');
+    let sent;
+    try {
+      sent = await this.whatsapp.send({ phoneE164: customer.phoneE164, templateName: invitationTemplate.name, templateLanguage: invitationTemplate.language, templateParameters: [customer.name, verificationLink], idempotencyKey: `invitation:${session.id}` });
+    } catch (error) {
+      await db.update(verificationSessions).set({ verificationStatus: 'CREATED', updatedAt: timestamp() }).where(eq(verificationSessions.id, session.id));
+      throw error;
+    }
+    await this.recordManualDelivery(customer.phoneE164, `invitation:${session.id}`, 'CAMPAIGN_INVITATION', sent.providerMessageId);
     await db.update(verificationSessions).set({ verificationStatus: 'MESSAGE_SENT', updatedAt: timestamp() }).where(eq(verificationSessions.id, session.id));
     await db.insert(auditLogs).values({ actorUserId: admin.id, actorName: admin.name, action: 'VERIFICATION_CREATED', entityType: 'VERIFICATION_SESSION', entityId: session.id, after: { customerId, addressId, tokenStoredAsHash: true }, timestamp: created });
     return { sessionId: session.id, verificationLink, expiresAt: session.expiresAt };
+  }
+
+  async createSimulationVerification(admin: RequestAdmin, customerId: string, addressId: string) {
+    if (!canManage(admin.role)) throw new DomainError('Role cannot create a verification session', 403, 'FORBIDDEN');
+    const config = await this.validationConfig.get();
+    const [customer] = await db.select().from(customers).where(eq(customers.id, customerId));
+    const [addressRow] = await db
+      .select({
+        address: customerAddresses,
+        referenceLatitude: sql<number>`ST_Y(${customerAddresses.referenceLocation}::geometry)`,
+        referenceLongitude: sql<number>`ST_X(${customerAddresses.referenceLocation}::geometry)`,
+      })
+      .from(customerAddresses)
+      .where(and(eq(customerAddresses.id, addressId), eq(customerAddresses.customerId, customerId), eq(customerAddresses.isActive, true)));
+    if (!customer || !addressRow) throw new NotFoundError('Customer or active address not found');
+    if (customer.whatsappOptOutAt) throw new DomainError('Customer has opted out of WhatsApp messages', 422, 'CUSTOMER_OPTED_OUT');
+
+    const verificationToken = await createVerificationToken();
+    const created = timestamp();
+    const [session] = await db.insert(verificationSessions).values({
+      id: randomUUID(), customerId, currentAddressId: addressId, tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash,
+      verificationMode: 'SIMULATION',
+      expiresAt: new Date(Date.now() + config.VERIFICATION_TOKEN_TTL_DAYS * 86400000),
+      verificationStatus: 'MESSAGE_SENT', customerConfirmationStatus: 'UNCONFIRMED', registeredPhoneSnapshot: customer.phoneE164,
+      createdAt: created, updatedAt: created,
+    }).returning();
+    const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
+    const invitationTemplate = getWhatsAppTemplate('INVITATION');
+    await db.insert(auditLogs).values({
+      actorUserId: admin.id, actorName: admin.name, action: 'VERIFICATION_SIMULATION_CREATED', entityType: 'VERIFICATION_SESSION', entityId: session.id,
+      after: { customerId, addressId, tokenStoredAsHash: true, whatsappSkipped: true }, timestamp: created,
+    });
+    return {
+      simulation: true,
+      sessionId: session.id,
+      recipient: { name: customer.name, phoneE164: customer.phoneE164 },
+      templateName: invitationTemplate.name,
+      language: invitationTemplate.language,
+      message: renderWhatsAppTemplate('INVITATION', customer.name, verificationLink),
+      verificationLink,
+      referenceLocation: addressRow.referenceLatitude == null || addressRow.referenceLongitude == null ? null : { latitude: Number(addressRow.referenceLatitude), longitude: Number(addressRow.referenceLongitude) },
+      referencePrecision: addressRow.address.referencePrecision,
+      simulationConfig: { homeRadiusMeters: config.HOME_RADIUS_METERS, gpsMaxAccuracyMeters: config.GPS_MAX_ACCURACY_METERS },
+      expiresAt: session.expiresAt,
+    };
   }
 
   async verifications(query: AdminListQueryInput) {
@@ -390,8 +443,9 @@ export class AdminService {
     await db.update(verificationSessions).set({ tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, expiresAt, updatedAt }).where(eq(verificationSessions.id, id));
     const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
     const idempotencyKey = `invitation-resend:${id}:${verificationToken.tokenId}`;
-    await this.whatsapp.send({ phoneE164: detail.customer.phoneE164, templateName: process.env.WHATSAPP_TEMPLATE_NAME ?? 'location_verification', templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? 'id', templateParameters: [detail.customer.name, verificationLink], idempotencyKey });
-    await this.recordManualDelivery(detail.customer.phoneE164, idempotencyKey, 'INVITATION_RESEND');
+    const invitationTemplate = getWhatsAppTemplate('INVITATION');
+    const sent = await this.whatsapp.send({ phoneE164: detail.customer.phoneE164, templateName: invitationTemplate.name, templateLanguage: invitationTemplate.language, templateParameters: [detail.customer.name, verificationLink], idempotencyKey });
+    await this.recordManualDelivery(detail.customer.phoneE164, idempotencyKey, 'INVITATION_RESEND', sent.providerMessageId);
     await db.insert(auditLogs).values({ actorUserId: admin.id, actorName: admin.name, action: 'INVITATION_RESENT', entityType: 'VERIFICATION_SESSION', entityId: id, after: { tokenRotated: true, tokenStoredAsHash: true, expiresAt: expiresAt.toISOString() }, timestamp: updatedAt });
     return { status: 'SENT', verificationLink, expiresAt };
   }
@@ -471,7 +525,19 @@ export class AdminService {
       await tx.insert(auditLogs).values({ actorUserId: admin.id, actorName: admin.name, action: input.decision === 'APPROVE' ? 'MANUAL_REVIEW_APPROVED' : input.decision === 'REJECT' ? 'MANUAL_REVIEW_REJECTED' : 'MANUAL_REVIEW_COMPLETED', entityType: 'REVIEW', entityId: id, before: { status: detail.session.verificationStatus }, after: { status: nextStatus, decision: input.decision, reasonCode: input.reasonCode }, reason: input.reviewNote, timestamp: reviewedAt });
       if (input.decision === 'APPROVE') {
         await tx.update(customerAddresses).set({ addressStatus: 'SUPERSEDED', addressType: 'HISTORICAL', isActive: false, validTo: reviewedAt, updatedAt: reviewedAt }).where(and(eq(customerAddresses.customerId, detail.customer.id), eq(customerAddresses.isActive, true), ne(customerAddresses.id, detail.address.id)));
-        await tx.update(customerAddresses).set({ isVerified: true, addressStatus: 'VERIFIED', addressType: 'VERIFIED_INSTALLATION', updatedAt: reviewedAt }).where(eq(customerAddresses.id, detail.address.id));
+        const approvedResult = detail.results[0];
+        await tx.update(customerAddresses).set({
+          // Manual approval turns the captured, reviewed GPS point into the
+          // durable reference for the verified installation address.
+          referenceLocation: approvedResult ? spatialPointSql(Number(approvedResult.capturedLatitude), Number(approvedResult.capturedLongitude)) : undefined,
+          referenceSource: approvedResult ? 'MASTER_COORDINATE' : undefined,
+          referencePrecision: approvedResult ? 'HOUSE' : undefined,
+          referenceConfidence: approvedResult ? '0.980' : undefined,
+          isVerified: true,
+          addressStatus: 'VERIFIED',
+          addressType: 'VERIFIED_INSTALLATION',
+          updatedAt: reviewedAt,
+        }).where(eq(customerAddresses.id, detail.address.id));
         await tx.update(customers).set({ status: 'VERIFIED', updatedAt: reviewedAt }).where(eq(customers.id, detail.customer.id));
         const eventId = randomUUID();
         await tx.insert(integrationOutbox).values({ id: randomUUID(), eventId, eventType: 'location.verified.v1', aggregateType: 'VERIFICATION_SESSION', aggregateId: id, correlationId: id, idempotencyKey: `location-verified:${id}`, payload: { eventId, eventType: 'location.verified.v1', occurredAt: reviewedAt.toISOString(), correlationId: id, idempotencyKey: `location-verified:${id}`, customer: { externalId: detail.customer.externalId, name: detail.customer.name }, verifiedAddress: { addressId: detail.address.id, fullAddress: detail.address.rawAddress }, verifiedLocation: { latitude: Number(detail.results[0].capturedLatitude), longitude: Number(detail.results[0].capturedLongitude), accuracyMeters: Number(detail.results[0].gpsAccuracyMeters), verifiedAt: reviewedAt.toISOString() } }, status: 'PENDING', attemptCount: 0, createdAt: reviewedAt, updatedAt: reviewedAt }).onConflictDoNothing({ target: integrationOutbox.idempotencyKey });
@@ -543,7 +609,7 @@ export class AdminService {
     if (Number(daily.total) >= Number(process.env.WHATSAPP_DAILY_SEND_LIMIT ?? 10000)) throw new DomainError('WhatsApp daily send limit reached', 429, 'WHATSAPP_DAILY_LIMIT_REACHED');
   }
 
-  private async recordManualDelivery(phoneE164: string, idempotencyKey: string, messageType: string) {
-    await db.insert(whatsappDeliveryLogs).values({ id: randomUUID(), phoneHash: hashPhone(phoneE164), messageType, idempotencyKey, providerMessageId: idempotencyKey, sentAt: new Date(), createdAt: new Date() }).onConflictDoNothing({ target: whatsappDeliveryLogs.idempotencyKey });
+  private async recordManualDelivery(phoneE164: string, idempotencyKey: string, messageType: string, providerMessageId: string) {
+    await db.insert(whatsappDeliveryLogs).values({ id: randomUUID(), phoneHash: hashPhone(phoneE164), messageType, idempotencyKey, providerMessageId, status: 'ACCEPTED', sentAt: new Date(), createdAt: new Date() }).onConflictDoNothing({ target: whatsappDeliveryLogs.idempotencyKey });
   }
 }

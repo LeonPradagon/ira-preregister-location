@@ -11,11 +11,13 @@ import {
   Zap,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useTranslation } from '../../i18n';
 import { api } from '../../lib/apiClient';
 import { IntegrationOutboxEvent } from '../../types';
 import { TablePagination, TablePageSize } from '../common/AdminTable';
 
 export const IntegrationsView: React.FC = () => {
+  const { t } = useTranslation();
   const { integrationConfigs } = useApp();
   const [outboxEvents, setOutboxEvents] = useState<IntegrationOutboxEvent[]>([]);
   const [total, setTotal] = useState(0);
@@ -30,7 +32,7 @@ export const IntegrationsView: React.FC = () => {
     try {
       const response = await api.outbox({ page, pageSize, search: searchTerm, status: statusFilter });
       setOutboxEvents(response.items as unknown as IntegrationOutboxEvent[]); setTotal(response.total);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Outbox gagal dimuat.'); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : t('integrations.loadError')); }
     finally { setLoading(false); }
   };
   useEffect(() => setPage(1), [searchTerm, statusFilter]);
@@ -43,15 +45,15 @@ export const IntegrationsView: React.FC = () => {
         <div>
           <h1 className="text-base font-semibold text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
             <Radio className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            <span>Event Outbox &amp; Kontrak Integrasi Eksternal</span>
+            <span>{t('integrations.title')}</span>
           </h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Publikasi domain event <code className="text-indigo-600 dark:text-indigo-400 font-mono font-medium">location.verified.v1</code> dengan jaminan idempotency key dan correlation tracking.
+            {t('integrations.description')} <code className="text-indigo-600 dark:text-indigo-400 font-mono font-medium">location.verified.v1</code>
           </p>
         </div>
 
         <span className="text-xs font-mono px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg">
-          Outbox: {total} Events
+          {t('integrations.outboxCount', { count: total })}
         </span>
       </div>
 
@@ -66,7 +68,7 @@ export const IntegrationsView: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-xs font-semibold text-gray-900 dark:text-white">IRA Coverage GIS Adapter</h3>
-                <div className="text-[10px] text-gray-500 dark:text-gray-400">Fiber Polygon &amp; FAT Capacity Check</div>
+                <div className="text-[10px] text-gray-500 dark:text-gray-400">{t('integrations.coverageSubtitle')}</div>
               </div>
             </div>
             <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
@@ -75,7 +77,7 @@ export const IntegrationsView: React.FC = () => {
           </div>
 
           <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-            Menyediakan antarmuka standard untuk query coverage map setelah exact coordinate terverifikasi.
+            {t('integrations.coverageDescription')}
           </p>
 
           <div className="bg-gray-50 dark:bg-gray-800/60 p-3 rounded-lg border border-gray-200 dark:border-gray-700 text-[11px] font-mono space-y-1">
@@ -95,7 +97,7 @@ export const IntegrationsView: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-xs font-semibold text-gray-900 dark:text-white">Ticketing / Dispatch Adapter</h3>
-                <div className="text-[10px] text-gray-500 dark:text-gray-400">Work Order &amp; Field Technician SLA</div>
+                <div className="text-[10px] text-gray-500 dark:text-gray-400">{t('integrations.ticketSubtitle')}</div>
               </div>
             </div>
             <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
@@ -104,7 +106,7 @@ export const IntegrationsView: React.FC = () => {
           </div>
 
           <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-            Menerima event terverifikasi untuk trigger pembuatan Surat Tugas dan reservasi teknisi pasang baru.
+            {t('integrations.ticketDescription')}
           </p>
 
           <div className="bg-gray-50 dark:bg-gray-800/60 p-3 rounded-lg border border-gray-200 dark:border-gray-700 text-[11px] font-mono space-y-1">
@@ -125,15 +127,15 @@ export const IntegrationsView: React.FC = () => {
               <span>Transactional Outbox Stream (location.verified.v1)</span>
             </h3>
             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-              Event payloads terbit otomatis saat lokasi dinyatakan valid (LOCATION_VALID).
+              {t('integrations.streamDescription')} (LOCATION_VALID).
             </p>
           </div>
-          <button type="button" onClick={() => void load()} disabled={loading} className="rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" aria-label="Muat ulang outbox" title="Muat ulang outbox"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
+          <button type="button" onClick={() => void load()} disabled={loading} className="rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" aria-label={t('integrations.reload')} title={t('integrations.reload')}><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row"><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Cari event, aggregate, atau correlation ID..." className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-900 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white sm:w-96" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs dark:border-gray-700 dark:bg-gray-800"><option value="ALL">Semua status</option><option value="PENDING">PENDING</option><option value="PUBLISHED">PUBLISHED</option><option value="FAILED">FAILED</option></select></div>
+        <div className="flex flex-col gap-3 sm:flex-row"><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder={t('integrations.search')} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-900 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white sm:w-96" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs dark:bg-gray-800"><option value="ALL">{t('integrations.allStatuses')}</option><option value="PENDING">PENDING</option><option value="PUBLISHED">PUBLISHED</option><option value="FAILED">FAILED</option></select></div>
 
-        {loading ? <div className="p-8 text-center text-xs text-gray-500">Memuat outbox...</div> : error ? <div className="p-8 text-center text-xs text-rose-600">{error}</div> : outboxEvents.length > 0 ? (
+        {loading ? <div className="p-8 text-center text-xs text-gray-500">{t('integrations.loading')}</div> : error ? <div className="p-8 text-center text-xs text-rose-600">{error}</div> : outboxEvents.length > 0 ? (
           <div className="space-y-4">
             {outboxEvents.map((evt) => (
               <div key={evt.id} className="bg-gray-50/70 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-xs space-y-3">
@@ -163,7 +165,7 @@ export const IntegrationsView: React.FC = () => {
                 <div className="bg-white dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
                   <div className="text-[10px] text-indigo-700 dark:text-indigo-400 font-semibold mb-1 flex items-center gap-1">
                     <Code className="w-3 h-3" />
-                    <span>Payload Data (JSON):</span>
+                    <span>{t('integrations.payload')}:</span>
                   </div>
                   <pre className="text-[10px] font-mono text-gray-800 dark:text-gray-200 overflow-x-auto">
                     {JSON.stringify(evt.payload, null, 2)}
@@ -174,7 +176,7 @@ export const IntegrationsView: React.FC = () => {
           </div>
         ) : (
           <div className="p-8 text-center text-gray-400 dark:text-gray-500 text-xs italic">
-            Belum ada event yang dipublikasikan. Selesaikan verifikasi lokasi untuk melihat payload Outbox.
+            {t('integrations.empty')}
           </div>
         )}
         <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} disabled={loading} />

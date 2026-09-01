@@ -15,8 +15,10 @@ import {
 import { api } from '../../lib/apiClient';
 import { AuditLog } from '../../types';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
+import { useTranslation } from '../../i18n';
 
 export const AuditLogsView: React.FC = () => {
+  const { t } = useTranslation();
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [total, setTotal] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,7 +36,7 @@ export const AuditLogsView: React.FC = () => {
     try {
       const response = await api.auditLogs({ page, pageSize, search: searchTerm, status: entityFilter, actor: actorFilter });
       setAuditLogs(response.items as unknown as AuditLog[]); setTotal(response.total);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Audit trail gagal dimuat.'); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : t('audit.loadError')); }
     finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, [page, pageSize, searchTerm, actorFilter, entityFilter]);
@@ -59,17 +61,17 @@ export const AuditLogsView: React.FC = () => {
         <div>
           <h1 className="text-base font-semibold text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
             <History className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-            <span>Audit Trail &amp; Kepatuhan Operasional</span>
+            <span>{t('audit.title')}</span>
           </h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Log rekaman seluruh interaksi sistem, GPS captures, audit event, dan keputusan review manual.
+            {t('audit.description')}
           </p>
         </div>
 
         <div className="text-xs font-mono text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
-          Total Log: <span className="text-gray-900 dark:text-white font-semibold">{total}</span> entries
+          {t('audit.total')}: <span className="text-gray-900 dark:text-white font-semibold">{total}</span> {t('audit.entries')}
         </div>
-        <button type="button" onClick={() => void load()} disabled={loading} className="rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" aria-label="Muat ulang audit trail" title="Muat ulang audit trail"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
+        <button type="button" onClick={() => void load()} disabled={loading} className="rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" aria-label={t('audit.refresh')} title={t('audit.refresh')}><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
       </div>
 
       {/* Filter / Search Bar */}
@@ -80,7 +82,7 @@ export const AuditLogsView: React.FC = () => {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Cari aksi, nama actor, entity ID, alasan..."
+            placeholder={t('audit.search')}
             className="w-full pl-9 pr-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300"
           />
         </div>
@@ -88,13 +90,13 @@ export const AuditLogsView: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <div className="flex items-center gap-1.5">
             <Filter className="w-3.5 h-3.5 text-gray-400" />
-            <span className="text-gray-500 dark:text-gray-400 font-medium">Actor:</span>
+            <span className="text-gray-500 dark:text-gray-400 font-medium">{t('audit.actor')}:</span>
             <select
               value={actorFilter}
               onChange={(e) => setActorFilter(e.target.value)}
               className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none"
             >
-              <option value="ALL">Semua Actor</option>
+              <option value="ALL">{t('audit.all')} {t('audit.actor')}</option>
               <option value="CUSTOMER">Customer / Web Flow</option>
               <option value="SYSTEM">System Engine / Worker</option>
               <option value="ADMIN">Admin / Reviewer</option>
@@ -102,13 +104,13 @@ export const AuditLogsView: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="text-gray-500 dark:text-gray-400 font-medium">Entity:</span>
+            <span className="text-gray-500 dark:text-gray-400 font-medium">{t('audit.entity')}:</span>
             <select
               value={entityFilter}
               onChange={(e) => setEntityFilter(e.target.value)}
               className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-2.5 py-1.5 focus:outline-none"
             >
-              <option value="ALL">Semua Entity</option>
+              <option value="ALL">{t('audit.all')} {t('audit.entity')}</option>
               <option value="VERIFICATION_SESSION">VERIFICATION_SESSION</option>
               <option value="VALIDATION">VALIDATION</option>
               <option value="CUSTOMER">CUSTOMER</option>

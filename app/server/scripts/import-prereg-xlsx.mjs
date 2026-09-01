@@ -11,11 +11,38 @@ import pg from 'pg';
 const { Pool } = pg;
 const sourcePath = process.argv[2] ? resolve(process.argv[2]) : null;
 const batchSize = Number(process.env.IMPORT_BATCH_SIZE ?? 500);
-const requiredHeaders = [
-  'id', 'full_name', 'effective_phone_number', 'effective_address', 'address_reference',
-  'effective_longitude', 'effective_latitude', 'effective_province', 'effective_kota',
-  'effective_kecamatan', 'effective_kelurahan', 'created_at', 'is_cover_bts', 'bts_name', 'coverage_status',
-];
+const headerAliases = {
+  id: ['id', 'source_id', 'customer_id', 'customer_code'],
+  full_name: ['full_name', 'fullname', 'name', 'nama', 'nama_lengkap'],
+  effective_phone_number: ['effective_phone_number', 'phone', 'phone_number', 'phone_e164', 'nomor_hp', 'no_hp', 'whatsapp'],
+  effective_address: ['effective_address', 'address', 'alamat', 'alamat_lengkap'],
+  address_reference: ['address_reference', 'landmark', 'patokan', 'address_detail'],
+  effective_longitude: ['effective_longitude', 'longitude', 'lon', 'lng', 'koordinat_longitude'],
+  effective_latitude: ['effective_latitude', 'latitude', 'lat', 'koordinat_latitude'],
+  effective_province: ['effective_province', 'province', 'provinsi'],
+  effective_kota: ['effective_kota', 'city', 'regency', 'kota', 'kabupaten', 'kota_kabupaten'],
+  effective_kecamatan: ['effective_kecamatan', 'district', 'kecamatan'],
+  effective_kelurahan: ['effective_kelurahan', 'subdistrict', 'village', 'kelurahan', 'desa'],
+  created_at: ['created_at', 'created', 'tanggal_dibuat'],
+  is_cover_bts: ['is_cover_bts', 'cover_bts', 'covered_bts'],
+  bts_name: ['bts_name', 'bts', 'nama_bts'],
+  coverage_status: ['coverage_status', 'coverage', 'status_coverage'],
+};
+
+const requiredHeaders = ['id', 'full_name', 'effective_phone_number'];
+const canonicalHeader = (value) => text(value).replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+const buildHeaderMap = (headers, rowNumber = 1) => {
+  const indexes = new Map(headers.map((header, index) => [canonicalHeader(header), index]));
+  const resolved = {};
+  for (const [field, aliases] of Object.entries(headerAliases)) {
+    const index = aliases.map(canonicalHeader).map((alias) => indexes.get(alias)).find((candidate) => candidate !== undefined);
+    if (index !== undefined) resolved[field] = index;
+  }
+  const missing = requiredHeaders.filter((field) => resolved[field] === undefined);
+  if (missing.length) throw new Error(`Row ${rowNumber}: header wajib tidak ditemukan: ${missing.join(', ')}`);
+  return resolved;
+};
 
 if (!sourcePath || !existsSync(sourcePath)) throw new Error('Usage: npm run import:prereg -- /absolute/path/to/file.xlsx-or-file.csv');
 if (!Number.isInteger(batchSize) || batchSize < 100 || batchSize > 5000) throw new Error('IMPORT_BATCH_SIZE must be between 100 and 5000');
@@ -45,6 +72,7 @@ const normalizePhone = (value) => {
 };
 
 const parseCoordinate = (value, label, rowNumber) => {
+  if (!text(value)) return null;
   const number = Number(text(value));
   if (!Number.isFinite(number)) throw new Error(`Row ${rowNumber}: ${label} is not numeric`);
   if (label === 'longitude' && (number < -180 || number > 180)) throw new Error(`Row ${rowNumber}: longitude is out of range`);
@@ -54,9 +82,21 @@ const parseCoordinate = (value, label, rowNumber) => {
 
 const postalCodeFromAddress = (address) => address.match(/\b(\d{5})\b/)?.[1] ?? '00000';
 
+// Plus Codes in the source export are sometimes concatenated with the next
+// address token (for example `M8VF+Q5FBulurejo`). Keep the raw address, but
+// recognize and remove the code when deriving structured street data.
+const plusCodePattern = /[23456789cfghjmpqrvwx]{4,8}\+(?:[23456789cfghjmpqrvwx]{3}\d|[23456789cfghjmpqrvwx]{4})(?=$|[\s,])|[23456789cfghjmpqrvwx]{4,8}\+[23456789cfghjmpqrvwx]{2,3}/i;
+const isPlusCode = (value) => Boolean(value?.trim() && plusCodePattern.test(value));
+const removePlusCode = (value) => value.replace(plusCodePattern, ' ').replace(/\s+/g, ' ').trim();
+
+const isAdministrativePart = (value) => /^(rt\.?|rw\.?|kec\.?|kecamatan|kel\.?|kelurahan|desa|kab\.?|kabupaten|kota|jawa|indonesia)\b/i.test(value.trim());
+const isStreetPrefixOnly = (value) => /^(jl\.?|jalan|jln\.?|gg\.?|gang|komplek|komp\.?)$/i.test(value.trim());
+
 const streetFromAddress = (address) => {
-  const parts = address.split(',').map((part) => part.trim()).filter(Boolean);
-  return (parts.find((part) => /^(jl\.?|jalan|jln\.?|gg\.?|gang|komplek|komp\.?|kampung|kp\.?|dusun|desa)\b/i.test(part)) ?? parts[0] ?? 'UNKNOWN').slice(0, 255);
+  const parts = address.split(',').map((part) => removePlusCode(part)).filter(Boolean);
+  return (parts.find((part) => !isPlusCode(part) && !isStreetPrefixOnly(part) && /^(jl\.?|jalan|jln\.?|gg\.?|gang|komplek|komp\.?|kampung|kp\.?|dusun)\b/i.test(part))
+    ?? parts.find((part) => !isPlusCode(part) && !isStreetPrefixOnly(part) && !isAdministrativePart(part) && !/^rt\.?\s*\d|^rw\.?\s*\d/i.test(part))
+    ?? 'UNKNOWN').slice(0, 255);
 };
 
 const houseNumberFromAddress = (address) => address.match(/\b(?:no|nomor)\.?\s*([0-9]+[a-z]?(?:[/-][a-z0-9]+)*)/i)?.[1] ?? 'UNKNOWN';
@@ -126,12 +166,12 @@ const parseCsv = (source) => {
   return rows;
 };
 
-const createStats = () => ({ rows: 0, duplicatePhones: 0, missingPostalCodes: 0, coverage: new Map(), coveredBts: 0 });
+const createStats = () => ({ rows: 0, duplicatePhones: 0, missingPostalCodes: 0, missingCoordinates: 0, incompleteAddresses: 0, coverage: new Map(), coveredBts: 0 });
 
-const parseDataRow = (headers, sourceValues, rowNumber, seenIds, seenPhones, stats) => {
-  const values = Object.fromEntries(requiredHeaders.map((header, index) => [header, text(sourceValues[index])]));
-  if (requiredHeaders.some((header, index) => headers[index] !== header)) throw new Error(`Unexpected headers. Expected: ${requiredHeaders.join(', ')}`);
-  if (!values.id || !values.full_name || !values.effective_address || !values.effective_province || !values.effective_kota || !values.effective_kecamatan || !values.effective_kelurahan) throw new Error(`Row ${rowNumber}: required identity/address field is empty`);
+const parseDataRow = (headers, sourceValues, rowNumber, seenIds, seenPhones, stats, headerMap = buildHeaderMap(headers, rowNumber)) => {
+  const valueOf = (field) => text(headerMap[field] === undefined ? '' : sourceValues[headerMap[field]]);
+  const values = Object.fromEntries(Object.keys(headerAliases).map((field) => [field, valueOf(field)]));
+  if (!values.id || !values.full_name || !values.effective_phone_number) throw new Error(`Row ${rowNumber}: id, full_name, dan effective_phone_number wajib diisi`);
   if (seenIds.has(values.id)) throw new Error(`Row ${rowNumber}: duplicate source id ${values.id}`);
   seenIds.add(values.id);
   const phoneE164 = normalizePhone(values.effective_phone_number);
@@ -140,15 +180,20 @@ const parseDataRow = (headers, sourceValues, rowNumber, seenIds, seenPhones, sta
   seenPhones.add(phoneE164);
   const longitude = parseCoordinate(values.effective_longitude, 'longitude', rowNumber);
   const latitude = parseCoordinate(values.effective_latitude, 'latitude', rowNumber);
-  const postalCode = postalCodeFromAddress(values.effective_address);
+  if (longitude == null || latitude == null) stats.missingCoordinates += 1;
+  const rawAddress = values.effective_address || 'UNKNOWN ADDRESS';
+  const postalCode = postalCodeFromAddress(rawAddress);
+  const street = streetFromAddress(rawAddress);
+  const houseNumber = houseNumberFromAddress(rawAddress);
   if (postalCode === '00000') stats.missingPostalCodes += 1;
+  if (postalCode === '00000' || street === 'UNKNOWN' || houseNumber === 'UNKNOWN' || !values.effective_province || !values.effective_kota || !values.effective_kecamatan || !values.effective_kelurahan || longitude == null || latitude == null) stats.incompleteAddresses += 1;
   const coverageStatus = values.coverage_status || 'UNKNOWN';
   stats.coverage.set(coverageStatus, (stats.coverage.get(coverageStatus) ?? 0) + 1);
   if (parseBoolean(values.is_cover_bts)) stats.coveredBts += 1;
   const sourceCreatedAt = values.created_at ? new Date(values.created_at) : null;
   if (sourceCreatedAt && Number.isNaN(sourceCreatedAt.getTime())) throw new Error(`Row ${rowNumber}: invalid created_at`);
   stats.rows += 1;
-  return { sourceId: values.id, externalId: `PREREG-NON-CUSTOMER-${values.id}`, fullName: values.full_name, phoneE164, rawAddress: values.effective_address, landmark: values.address_reference || null, longitude, latitude, province: values.effective_province, city: values.effective_kota, district: values.effective_kecamatan, subdistrict: values.effective_kelurahan, postalCode, street: streetFromAddress(values.effective_address), houseNumber: houseNumberFromAddress(values.effective_address), sourceCreatedAt, coverageStatus, isCoverBts: parseBoolean(values.is_cover_bts), btsName: values.bts_name || null };
+  return { sourceId: values.id, externalId: `PREREG-NON-CUSTOMER-${values.id}`, fullName: values.full_name, phoneE164, rawAddress, landmark: values.address_reference || null, longitude, latitude, province: values.effective_province || 'UNKNOWN', city: values.effective_kota || 'UNKNOWN', district: values.effective_kecamatan || 'UNKNOWN', subdistrict: values.effective_kelurahan || 'UNKNOWN', postalCode, street, houseNumber, sourceCreatedAt, coverageStatus, isCoverBts: parseBoolean(values.is_cover_bts), btsName: values.bts_name || null };
 };
 
 const parseCsvLine = (line, delimiter) => {
@@ -212,20 +257,43 @@ const parseRows = (matrix) => {
   return { rows, stats };
 };
 
+const readRepairedXlsxRows = async function* (stats, originalError) {
+  const workbook = new ExcelJS.Workbook();
+  try { await workbook.xlsx.load(await repairWorkbookXml(await readFile(sourcePath))); }
+  catch (error) { throw originalError ?? error; }
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) throw new Error('Workbook has no worksheet');
+  const matrix = [];
+  for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1) matrix.push(worksheet.getRow(rowNumber).values.slice(1));
+  const repaired = parseRows(matrix);
+  Object.assign(stats, repaired.stats);
+  yield* repaired.rows;
+};
+
+const streamXlsxRowsWithFallback = async function* (stats) {
+  let yieldedRows = false;
+  try {
+    for await (const row of streamXlsxRows(stats)) {
+      yieldedRows = true;
+      yield row;
+    }
+  } catch (error) {
+    // Some Excel exports contain malformed namespace XML. ExcelJS's streaming
+    // reader may throw lazily, so only retry before yielding data to avoid a
+    // partial import being duplicated.
+    if (yieldedRows) throw error;
+    yield* readRepairedXlsxRows(stats, error);
+    return;
+  }
+  // A prefixed namespace workbook can also fail silently and emit zero rows.
+  // Treat that result as unreadable and use the same XML repair path.
+  if (!yieldedRows) yield* readRepairedXlsxRows(stats);
+};
+
 const readRows = async () => {
   const stats = createStats();
   if (sourcePath.toLowerCase().endsWith('.csv')) return { rows: streamCsvRows(stats), stats };
-  try { return { rows: streamXlsxRows(stats), stats }; }
-  catch (error) {
-    const workbook = new ExcelJS.Workbook();
-    try { await workbook.xlsx.load(await repairWorkbookXml(await readFile(sourcePath))); }
-    catch { throw error; }
-    const worksheet = workbook.worksheets[0];
-    if (!worksheet) throw new Error('Workbook has no worksheet');
-    const matrix = [];
-    for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1) matrix.push(worksheet.getRow(rowNumber).values.slice(1));
-    return parseRows(matrix);
-  }
+  return { rows: streamXlsxRowsWithFallback(stats), stats };
 };
 
 const stageColumns = ['source_id', 'external_id', 'full_name', 'phone_e164', 'raw_address', 'landmark', 'longitude', 'latitude', 'province', 'city', 'district', 'subdistrict', 'postal_code', 'street', 'house_number', 'source_created_at', 'coverage_status', 'is_cover_bts', 'bts_name'];
@@ -253,8 +321,8 @@ const importRows = async ({ rows, stats }) => {
       phone_e164 varchar(32) NOT NULL,
       raw_address text NOT NULL,
       landmark text,
-      longitude numeric(10,7) NOT NULL,
-      latitude numeric(10,7) NOT NULL,
+      longitude numeric(10,7),
+      latitude numeric(10,7),
       province varchar(128) NOT NULL,
       city varchar(128) NOT NULL,
       district varchar(128) NOT NULL,
@@ -310,9 +378,9 @@ const importRows = async ({ rows, stats }) => {
           house_number = stage.house_number,
           landmark = stage.landmark,
           address_reference = stage.landmark,
-          reference_location = ST_SetSRID(ST_MakePoint(stage.longitude, stage.latitude), 4326)::geography,
-          reference_source = 'PREREG_IMPORT',
-          reference_precision = 'STREET',
+          reference_location = CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN ST_SetSRID(ST_MakePoint(stage.longitude, stage.latitude), 4326)::geography ELSE NULL END,
+          reference_source = CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN 'PREREG_IMPORT' ELSE 'CUSTOMER_PROPOSED' END,
+          reference_precision = CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN 'STREET' ELSE 'UNKNOWN' END,
           reference_confidence = 0.000,
           is_verified = false,
           updated_at = $1
@@ -329,8 +397,10 @@ const importRows = async ({ rows, stats }) => {
       )
       SELECT customer.id, 'MASTER', 'ACTIVE', stage.raw_address, stage.province, stage.city, stage.district, stage.subdistrict, stage.postal_code,
         stage.street, stage.house_number, stage.landmark, stage.landmark,
-        ST_SetSRID(ST_MakePoint(stage.longitude, stage.latitude), 4326)::geography,
-        'PREREG_IMPORT', 'STREET', 0.000, true, false, COALESCE(stage.source_created_at, $1), COALESCE(stage.source_created_at, $1), $1
+        CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN ST_SetSRID(ST_MakePoint(stage.longitude, stage.latitude), 4326)::geography ELSE NULL END,
+        CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN 'PREREG_IMPORT' ELSE 'CUSTOMER_PROPOSED' END,
+        CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN 'STREET' ELSE 'UNKNOWN' END,
+        0.000, true, false, COALESCE(stage.source_created_at, $1), COALESCE(stage.source_created_at, $1), $1
       FROM prereg_import_stage stage
       INNER JOIN customers customer ON customer.external_id = stage.external_id
       WHERE NOT EXISTS (
@@ -361,6 +431,8 @@ console.info(JSON.stringify({
   addressesInserted: result.addressesInserted,
   duplicatePhoneRows: stats.duplicatePhones,
   missingPostalCodeRowsStoredAs00000: stats.missingPostalCodes,
+  missingCoordinateRows: stats.missingCoordinates,
+  incompleteAddressRows: stats.incompleteAddresses,
   coveredBtsRows: stats.coveredBts,
   coverageStatusCounts: Object.fromEntries(stats.coverage),
   whatsappOptIn: 'not set; explicit opt-in import is required before campaign blast',

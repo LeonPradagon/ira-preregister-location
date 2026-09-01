@@ -18,6 +18,7 @@ import { api } from '../../lib/apiClient';
 import { Customer } from '../../types';
 import { VerificationSession, VerificationStatus } from '../../types';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
+import { useTranslation } from '../../i18n';
 
 interface VerificationListViewProps {
   onSelectVerification: (sessionId: string) => void;
@@ -27,6 +28,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
   onSelectVerification,
 }) => {
   const { validationConfig } = useApp();
+  const { t } = useTranslation();
   const [rows, setRows] = useState<Array<{ session: VerificationSession; customer: Customer }>>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -51,7 +53,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
         return { session, customer: mapApiCustomer(row.customer) };
       }));
       setRows(mapped); setTotal(response.total);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Daftar sesi gagal dimuat.'); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : t('verifications.loadError')); }
     finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, [page, pageSize, searchTerm, statusFilter]);
@@ -116,13 +118,13 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
         <div>
           <h1 className="text-base font-semibold text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
             <Compass className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-            <span>Daftar Sesi Verifikasi Lokasi</span>
+            <span>{t('verifications.title')}</span>
           </h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Monitoring seluruh verification session, state machine, percobaan GPS, dan status pengingat.
+            {t('verifications.description')}
           </p>
         </div>
-        <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />Muat ulang</button>
+        <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />{t('verifications.refresh')}</button>
       </div>
 
       {/* Filter / Search */}
@@ -133,20 +135,20 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Cari sesi, nama customer, nomor HP..."
+            placeholder={t('verifications.search')}
             className="w-full pl-9 pr-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300"
           />
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <Filter className="w-4 h-4 text-gray-400" />
-          <span className="text-gray-500 dark:text-gray-400 font-medium">Filter Status:</span>
+          <span className="text-gray-500 dark:text-gray-400 font-medium">{t('verifications.filterStatus')}:</span>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300"
           >
-            <option value="ALL">Semua Status</option>
+            <option value="ALL">{t('verifications.allStatuses')}</option>
             <option value="LOCATION_VALID">LOCATION_VALID</option>
             <option value="MANUAL_REVIEW">MANUAL_REVIEW</option>
             <option value="WAITING_FOR_HOME">WAITING_FOR_HOME</option>
@@ -165,12 +167,12 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
       >
             <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">
               <tr>
-                <th className="px-4 py-2.5">Sesi ID &amp; Pelanggan</th>
-                <th className="px-4 py-2.5">Status Verifikasi</th>
-                <th className="px-4 py-2.5">Hasil GPS &amp; Jarak</th>
-                <th className="px-4 py-2.5">Percobaan</th>
-                <th className="px-4 py-2.5">Pengingat (Max 3)</th>
-                <th className="px-4 py-2.5 text-right">Aksi</th>
+                <th className="px-4 py-2.5">{t('table.sessionCustomer')}</th>
+                <th className="px-4 py-2.5">{t('table.verificationStatus')}</th>
+                <th className="px-4 py-2.5">{t('table.gpsDistance')}</th>
+                <th className="px-4 py-2.5">{t('table.attempts')}</th>
+                <th className="px-4 py-2.5">{t('table.reminders')}</th>
+                <th className="px-4 py-2.5 text-right">{t('table.action')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -228,9 +230,9 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
                   </tr>
                 );
               })}
-              {loading && <tr><td colSpan={6} className="px-4 py-10 text-center text-xs text-gray-500">Memuat sesi...</td></tr>}
+              {loading && <tr><td colSpan={6} className="px-4 py-10 text-center text-xs text-gray-500">{t('table.loadingSessions')}</td></tr>}
               {!loading && error && <tr><td colSpan={6} className="px-4 py-10 text-center text-xs text-rose-600">{error}</td></tr>}
-              {!loading && !error && !rows.length && <tr><td colSpan={6} className="px-4 py-10 text-center text-xs text-gray-400 dark:text-gray-500">Tidak ada sesi yang sesuai.</td></tr>}
+              {!loading && !error && !rows.length && <tr><td colSpan={6} className="px-4 py-10 text-center text-xs text-gray-400 dark:text-gray-500">{t('table.noMatchingSessions')}</td></tr>}
             </tbody>
       </AdminTable>
     </div>

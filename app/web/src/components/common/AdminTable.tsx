@@ -1,5 +1,6 @@
 import React, { ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useTranslation } from '../../i18n';
 
 export const TABLE_PAGE_SIZE_OPTIONS = [5, 10, 25, 50, 100] as const;
 export type TablePageSize = (typeof TABLE_PAGE_SIZE_OPTIONS)[number];
@@ -38,6 +39,7 @@ function pageNumbers(page: number, totalPages: number): Array<number | 'ellipsis
 }
 
 export const TablePagination: React.FC<TablePaginationProps> = ({ page, pageSize, total, onPageChange, onPageSizeChange, disabled = false }) => {
+  const { t } = useTranslation();
   const totalPages = Math.ceil(total / pageSize);
   const currentPage = totalPages ? Math.min(Math.max(page, 1), totalPages) : 1;
   const firstItem = total ? (currentPage - 1) * pageSize + 1 : 0;
@@ -46,7 +48,7 @@ export const TablePagination: React.FC<TablePaginationProps> = ({ page, pageSize
   return (
     <div className="flex flex-col gap-3 border-t border-gray-200 px-4 py-3 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="table-page-size" className="whitespace-nowrap">Tampilkan</label>
+        <label htmlFor="table-page-size" className="whitespace-nowrap">{t('table.show')}</label>
         <select
           id="table-page-size"
           value={pageSize}
@@ -56,18 +58,18 @@ export const TablePagination: React.FC<TablePaginationProps> = ({ page, pageSize
         >
           {TABLE_PAGE_SIZE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
-        <span>data per halaman</span>
-        <span className="ml-1 font-medium text-gray-700 dark:text-gray-300">{firstItem}-{lastItem} dari {total}</span>
+        <span>{t('table.perPage')}</span>
+        <span className="ml-1 font-medium text-gray-700 dark:text-gray-300">{firstItem}-{lastItem} {t('table.of')} {total}</span>
       </div>
 
-      <nav aria-label="Navigasi halaman tabel" className="flex flex-wrap items-center gap-1">
+      <nav aria-label={t('table.navigation')} className="flex flex-wrap items-center gap-1">
         <button
           type="button"
-          aria-label="Halaman sebelumnya"
+          aria-label={t('table.previous')}
           disabled={disabled || currentPage <= 1}
           onClick={() => onPageChange(currentPage - 1)}
           className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-          title="Halaman sebelumnya"
+          title={t('table.previous')}
         >
           <ChevronLeft className="h-3.5 w-3.5" />
         </button>
@@ -77,7 +79,7 @@ export const TablePagination: React.FC<TablePaginationProps> = ({ page, pageSize
           <button
             key={value}
             type="button"
-            aria-label={`Buka halaman ${value}`}
+            aria-label={`${t('table.openPage')} ${value}`}
             aria-current={value === currentPage ? 'page' : undefined}
             disabled={disabled}
             onClick={() => onPageChange(value)}
@@ -88,11 +90,11 @@ export const TablePagination: React.FC<TablePaginationProps> = ({ page, pageSize
         ))}
         <button
           type="button"
-          aria-label="Halaman berikutnya"
+          aria-label={t('table.next')}
           disabled={disabled || !totalPages || currentPage >= totalPages}
           onClick={() => onPageChange(currentPage + 1)}
           className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-          title="Halaman berikutnya"
+          title={t('table.next')}
         >
           <ChevronRight className="h-3.5 w-3.5" />
         </button>

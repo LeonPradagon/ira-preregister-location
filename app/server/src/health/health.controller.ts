@@ -7,6 +7,6 @@ export class HealthController {
   @Get()
   async check() {
     await db.execute(sql`select 1`);
-    return { status: 'ok', service: 'exact-location-server', timestamp: new Date().toISOString() };
+    return { status: 'ok', service: 'ira-preregist-server', timestamp: new Date().toISOString() };
   }
 }

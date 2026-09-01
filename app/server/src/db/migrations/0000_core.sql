@@ -23,6 +23,20 @@ CREATE TABLE IF NOT EXISTS "customers" (
   "updated_at" timestamptz DEFAULT now() NOT NULL
 );
 -- statement-breakpoint
+CREATE TABLE IF NOT EXISTS "administrative_regions" (
+  "code" varchar(13) PRIMARY KEY NOT NULL,
+  "name" varchar(100) NOT NULL,
+  "parent_code" varchar(13),
+  "level" integer NOT NULL
+);
+CREATE INDEX IF NOT EXISTS "administrative_regions_parent_idx" ON "administrative_regions" ("parent_code");
+CREATE INDEX IF NOT EXISTS "administrative_regions_name_idx" ON "administrative_regions" ("name");
+-- statement-breakpoint
+CREATE TABLE IF NOT EXISTS "region_postal_codes" (
+  "region_code" varchar(13) PRIMARY KEY NOT NULL,
+  "postal_code" varchar(5)
+);
+-- statement-breakpoint
 CREATE TABLE IF NOT EXISTS "customer_addresses" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "customer_id" uuid NOT NULL REFERENCES "customers"("id"),
@@ -63,6 +77,7 @@ CREATE TABLE IF NOT EXISTS "verification_sessions" (
   "customer_id" uuid NOT NULL REFERENCES "customers"("id"),
   "current_address_id" uuid NOT NULL REFERENCES "customer_addresses"("id"),
   "token_hash" varchar(128) NOT NULL UNIQUE,
+  "verification_mode" varchar(16) DEFAULT 'LIVE' NOT NULL,
   "expires_at" timestamptz NOT NULL,
   "revoked_at" timestamptz,
   "verification_status" varchar(48) DEFAULT 'CREATED' NOT NULL,
@@ -267,6 +282,7 @@ CREATE TABLE IF NOT EXISTS "verification_campaigns" (
 );
 -- statement-breakpoint
 ALTER TABLE "verification_sessions" ADD COLUMN IF NOT EXISTS "campaign_id" uuid REFERENCES "verification_campaigns"("id");
+ALTER TABLE "verification_sessions" ADD COLUMN IF NOT EXISTS "verification_mode" varchar(16) DEFAULT 'LIVE' NOT NULL;
 -- statement-breakpoint
 CREATE TABLE IF NOT EXISTS "verification_campaign_items" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

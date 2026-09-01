@@ -1,6 +1,8 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import axios from 'axios';
 import { z } from 'zod';
-import { AddressChangeInput } from '../../common/contracts.js';
+import { providerErrorMessage, providerHttpClient } from '../../common/http/provider-http.client.js';
+import { AddressLookupInput } from '../../common/contracts.js';
 import { GeocodingPort, GeocodingResult } from './geocoding.port.js';
 
 const resultSchema = z.object({
@@ -24,32 +26,27 @@ export class HttpGeocodingAdapter extends GeocodingPort {
     if (!this.baseUrl) throw new ServiceUnavailableException('Geocoding provider is not configured');
     let lastError: unknown;
     for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
       try {
-        const response = await fetch(`${this.baseUrl}${path}?${new URLSearchParams(query)}`, {
-          headers: { accept: 'application/json', ...(process.env.GEOCODING_API_KEY ? { authorization: `Bearer ${process.env.GEOCODING_API_KEY}` } : {}) },
-          signal: controller.signal,
+        const response = await providerHttpClient.get<unknown>(`${this.baseUrl}${path}`, {
+          params: query,
+          timeout: this.timeoutMs,
+          headers: process.env.GEOCODING_API_KEY ? { authorization: `Bearer ${process.env.GEOCODING_API_KEY}` } : undefined,
         });
-        if (response.ok) return resultSchema.parse(await response.json());
-        lastError = new Error(`Geocoding provider returned HTTP ${response.status}`);
-        if (response.status < 500) break;
-        if (attempt === this.maxRetries) break;
+        return resultSchema.parse(response.data);
       } catch (error) {
         lastError = error;
+        if (axios.isAxiosError(error) && error.response && error.response.status < 500) break;
         if (attempt === this.maxRetries) break;
-      } finally {
-        clearTimeout(timeout);
       }
     }
-    throw new ServiceUnavailableException(`Geocoding provider unavailable: ${lastError instanceof Error ? lastError.message : 'unknown error'}`);
+    throw new ServiceUnavailableException(`Geocoding provider unavailable: ${providerErrorMessage(lastError)}`);
   }
 
   reverse(latitude: number, longitude: number): Promise<GeocodingResult> {
     return this.request('/reverse', { latitude: String(latitude), longitude: String(longitude) });
   }
 
-  forward(address: AddressChangeInput): Promise<GeocodingResult> {
+  forward(address: AddressLookupInput): Promise<GeocodingResult> {
     return this.request('/forward', Object.fromEntries(Object.entries(address).filter((entry): entry is [string, string] => typeof entry[1] === 'string')));
   }
 }

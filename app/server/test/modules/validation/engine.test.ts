@@ -62,4 +62,39 @@ describe('server validation engine', () => {
     expect(decision.distanceFromReferenceMeters).toBeNull();
     expect(decision.reasonCodes).toContain('REFERENCE_LOCATION_MISSING');
   });
+
+  it('normalizes Indonesian administrative aliases and adjacent OSM levels', () => {
+    const decision = decideValidation([
+      sample(-6.2, 106.784), sample(-6.20001, 106.78401, 12, 1), sample(-6.19999, 106.78399, 14, 2),
+    ], {
+      ...address,
+      province: 'Daerah Khusus Ibukota Jakarta', city: 'Kota Administrasi Jakarta Barat', district: 'Pal Merah', subdistrict: 'Palmerah',
+      street: 'JL KH Syahdan', houseNumber: 'No.10A', referenceLatitude: -6.2, referenceLongitude: 106.784,
+    }, {
+      province: '', city: 'Daerah Khusus Ibukota Jakarta', district: 'Jakarta Barat', subdistrict: 'Palmerah', street: 'Jalan KH. Syahdan', formattedAddress: 'Jalan KH. Syahdan, Palmerah, Jakarta Barat',
+    }, config);
+    expect(decision.provinceMatch).toBe(true);
+    expect(decision.cityMatch).toBe(true);
+    expect(decision.districtMatch).toBe(true);
+    expect(decision.subdistrictMatch).toBe(true);
+    expect(decision.result).toBe('LOCATION_VALID');
+  });
+
+  it('routes an address without a trusted reference to manual review, not mismatch', () => {
+    const decision = decideValidation([
+      sample(-6.2, 106.784), sample(-6.20001, 106.78401, 12, 1), sample(-6.19999, 106.78399, 14, 2),
+    ], { ...address, referenceLatitude: null, referenceLongitude: null, referencePrecision: 'UNKNOWN' }, {
+      province: 'Daerah Khusus Ibukota Jakarta', city: 'Jakarta Barat', district: 'Palmerah', subdistrict: 'Palmerah', street: 'Jalan KH Syahdan', formattedAddress: 'Jalan KH Syahdan, Palmerah',
+    }, config);
+    expect(decision.result).toBe('MANUAL_REVIEW');
+    expect(decision.reasonCodes).toContain('REFERENCE_LOCATION_MISSING');
+  });
+
+  it('routes incomplete addresses to manual review even when GPS and reference match', () => {
+    const decision = decideValidation([
+      sample(-6.884, 107.613), sample(-6.88401, 107.61301, 12, 1), sample(-6.88399, 107.61299, 14, 2),
+    ], { ...address, houseNumber: 'UNKNOWN', postalCode: '00000' }, reverseGeocode, config);
+    expect(decision.result).toBe('MANUAL_REVIEW');
+    expect(decision.reasonCodes).toContain('ADDRESS_INCOMPLETE');
+  });
 });

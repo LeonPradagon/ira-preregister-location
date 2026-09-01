@@ -1,4 +1,4 @@
-import { AddressChangeInput } from '../../common/contracts.js';
+import { AddressLookupInput } from '../../common/contracts.js';
 import { ReverseGeocodeEvidence } from '../../modules/validation/engine.js';
 
 export interface GeocodingResult extends ReverseGeocodeEvidence {
@@ -12,5 +12,5 @@ export interface GeocodingResult extends ReverseGeocodeEvidence {
 
 export abstract class GeocodingPort {
   abstract reverse(latitude: number, longitude: number): Promise<GeocodingResult>;
-  abstract forward(address: AddressChangeInput): Promise<GeocodingResult>;
+  abstract forward(address: AddressLookupInput): Promise<GeocodingResult>;
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -27,9 +27,10 @@ import {
 import { useApp } from '../../context/AppContext';
 import { ReviewDecision, VerificationSession } from '../../types';
 import { VerificationMap } from '../maps/VerificationMap';
-import { buildGoogleMapsDeepLink, formatCoordinatePair } from '../../lib/validationEngine';
+import { buildGoogleMapsDeepLink, formatAddressForDisplay, formatCoordinatePair } from '../../lib/validationEngine';
 import { hasCapability } from '../../lib/accessControl';
 import { AdminTable } from '../common/AdminTable';
+import { useTranslation } from '../../i18n';
 
 interface VerificationDetailViewProps {
   sessionId: string;
@@ -47,12 +48,26 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
     reminders,
     locationCaptures,
     auditLogs,
+    loadVerificationDetail,
     currentAdmin,
     performManualReview,
     resendInvitation,
     sendManualReminder,
     validationConfig,
   } = useApp();
+  const { t } = useTranslation();
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setDetailLoading(true);
+    setDetailError(null);
+    void loadVerificationDetail(sessionId)
+      .catch((cause) => { if (active) setDetailError(cause instanceof Error ? cause.message : 'Detail sesi gagal dimuat.'); })
+      .finally(() => { if (active) setDetailLoading(false); });
+    return () => { active = false; };
+  }, [sessionId]);
 
   const session = verificationSessions.find((s) => s.id === sessionId);
   const customer = session ? customers.find((c) => c.id === session.customerId) : null;
@@ -86,7 +101,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
   if (!session || !customer || !address) {
     return (
       <div className="p-8 text-center bg-slate-950 rounded-2xl border border-slate-800 text-slate-400">
-        Sesi verifikasi tidak ditemukan.
+        {detailLoading || !detailError ? 'Memuat detail sesi verifikasi...' : `Detail sesi tidak dapat dimuat: ${detailError}`}
         <button onClick={onBack} className="block mx-auto mt-4 px-4 py-2 bg-slate-800 text-white rounded-xl text-xs">
           Kembali
         </button>
@@ -274,7 +289,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                 <span className="text-[11px] text-gray-500 dark:text-gray-400 block mb-1">
                   Alamat Aktif Saat Ini ({address.addressType}):
                 </span>
-                <p className="font-medium text-gray-900 dark:text-white leading-relaxed">{address.rawAddress}</p>
+                <p className="font-medium text-gray-900 dark:text-white leading-relaxed">{formatAddressForDisplay(address.rawAddress)}</p>
               </div>
 
               {address.landmark && (
@@ -308,7 +323,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                     <span>Ada Usulan Alamat Baru (PROPOSED):</span>
                   </div>
                   <p className="text-[11px] text-blue-800 dark:text-blue-200 leading-relaxed">
-                    {proposedAddress.rawAddress}
+                    {formatAddressForDisplay(proposedAddress.rawAddress)}
                   </p>
                 </div>
               )}
@@ -549,7 +564,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
             <div className="pt-2">
           <VerificationMap
                 referenceLocation={refLoc}
-                referenceLabel={address.rawAddress}
+                referenceLabel={formatAddressForDisplay(address.rawAddress)}
                 referencePrecision={address.referencePrecision}
                 capturedLocation={capturedLoc}
                 capturedLabel={`Customer: ${customer.name}`}
@@ -568,17 +583,17 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                 Rincian Keputusan Mesin Validasi (Decision Breakdown)
               </h3>
               <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400">
-                Engine v1.0.0 • Rule 2026-08
+                Engine v1.1.0 • Rule 2026-09
               </span>
             </div>
 
             <AdminTable embedded minWidthClass="min-w-[760px]">
                 <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">
                   <tr>
-                    <th className="px-3.5 py-2">Sinyal / Parameter</th>
-                    <th className="px-3.5 py-2">Data Referensi Master</th>
-                    <th className="px-3.5 py-2">Data Perangkat / Reverse Geo</th>
-                    <th className="px-3.5 py-2 text-right">Hasil Evaluasi</th>
+                    <th className="px-3.5 py-2">{t('table.signal')}</th>
+                    <th className="px-3.5 py-2">{t('table.masterReference')}</th>
+                    <th className="px-3.5 py-2">{t('table.deviceGeo')}</th>
+                    <th className="px-3.5 py-2 text-right">{t('table.evaluation')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-gray-700 dark:text-gray-300">

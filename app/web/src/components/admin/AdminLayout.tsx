@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ThemeMode } from '../../types';
+import { useTranslation } from '../../i18n';
+import { LanguageSwitcher } from '../common/LanguageSwitcher';
 
 export type AdminTab =
   | 'dashboard'
@@ -60,6 +62,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     setTheme,
     toggleTheme,
   } = useApp();
+  const { t } = useTranslation();
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -69,20 +72,20 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   const validLocationsCount = dashboardSummary.verifications.locationValid;
 
   const navItems = [
-    { id: 'dashboard' as AdminTab, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'customers' as AdminTab, label: 'Pelanggan & Alamat', icon: Users },
-    { id: 'campaigns' as AdminTab, label: 'Campaign Blast', icon: Megaphone },
+    { id: 'dashboard' as AdminTab, label: t('nav.dashboard'), icon: LayoutDashboard },
+    { id: 'customers' as AdminTab, label: t('nav.customers'), icon: Users },
+    { id: 'campaigns' as AdminTab, label: t('nav.campaigns'), icon: Megaphone },
     {
       id: 'verifications' as AdminTab,
-      label: 'Sesi Verifikasi',
+      label: t('nav.verifications'),
       icon: Compass,
       badge: pendingReviewsCount > 0 ? pendingReviewsCount : undefined,
       badgeColor: 'bg-amber-500 text-white',
     },
-    { id: 'reminders' as AdminTab, label: 'Pengingat (Reminders)', icon: Bell },
-    { id: 'audit-logs' as AdminTab, label: 'Audit Trail', icon: History },
-    { id: 'settings' as AdminTab, label: 'Aturan Validasi', icon: Settings },
-    { id: 'integrations' as AdminTab, label: 'Outbox & Integrasi', icon: Radio },
+    { id: 'reminders' as AdminTab, label: t('nav.reminders'), icon: Bell },
+    { id: 'audit-logs' as AdminTab, label: t('nav.auditLogs'), icon: History },
+    { id: 'settings' as AdminTab, label: t('nav.validationRules'), icon: Settings },
+    { id: 'integrations' as AdminTab, label: t('nav.integrations'), icon: Radio },
   ];
 
   const handleNavClick = (tab: AdminTab) => {
@@ -108,13 +111,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             </div>
             <div>
               <div className="font-semibold text-sm text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
-                <span>Exact Location</span>
+                <span>IRA Preregist</span>
                 <span className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-[10px] font-mono px-1.5 py-0.5 rounded font-medium border border-gray-200 dark:border-gray-700">
                   v0.6 MVP
                 </span>
               </div>
               <div className="text-[10px] text-gray-500 dark:text-gray-400 hidden sm:block">
-                Customer &amp; Exact GPS Validation Portal
+                Customer &amp; GPS Validation Portal
               </div>
             </div>
           </button>
@@ -124,17 +127,17 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
         <div className="hidden xl:flex items-center gap-3 bg-gray-50 dark:bg-gray-800/60 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-gray-500 dark:text-gray-400">Verified Locations:</span>
+            <span className="text-gray-500 dark:text-gray-400">{t('shell.verifiedLocations')}:</span>
             <span className="font-semibold text-emerald-700 dark:text-emerald-400">{validLocationsCount}</span>
           </div>
           <span className="text-gray-300 dark:text-gray-600">|</span>
           <div className="flex items-center gap-1.5">
-            <span className="text-gray-500 dark:text-gray-400">Needs Review:</span>
+            <span className="text-gray-500 dark:text-gray-400">{t('shell.needsReview')}:</span>
             <span className="font-semibold text-amber-700 dark:text-amber-400">{pendingReviewsCount}</span>
           </div>
           <span className="text-gray-300 dark:text-gray-600">|</span>
           <div className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
-            Radius: <span className="text-gray-900 dark:text-gray-200 font-semibold">{validationConfig.HOME_RADIUS_METERS}m</span> • Acc: <span className="text-gray-900 dark:text-gray-200 font-semibold">&le;{validationConfig.GPS_MAX_ACCURACY_METERS}m</span>
+            {t('shell.radius')}: <span className="text-gray-900 dark:text-gray-200 font-semibold">{validationConfig.HOME_RADIUS_METERS}m</span> • {t('shell.accuracy')}: <span className="text-gray-900 dark:text-gray-200 font-semibold">&le;{validationConfig.GPS_MAX_ACCURACY_METERS}m</span>
           </div>
         </div>
 
@@ -146,7 +149,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               type="button"
               onClick={() => setThemeDropdownOpen(!themeDropdownOpen)}
               className="p-1.5 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors border border-gray-200 dark:border-gray-700 flex items-center gap-1.5 text-xs font-medium"
-              title={`Mode Tampilan: ${theme === 'dark' ? 'Gelap (Dark)' : theme === 'light' ? 'Terang (Light)' : 'Sistem'}`}
+              title={`${t('shell.theme')}: ${theme === 'dark' ? t('shell.dark') : theme === 'light' ? t('shell.light') : t('shell.system')}`}
             >
               {isDarkMode ? (
                 <Moon className="w-4 h-4 text-indigo-400" />
@@ -154,7 +157,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                 <Sun className="w-4 h-4 text-amber-500" />
               )}
               <span className="hidden md:inline capitalize text-[11px]">
-                {theme === 'system' ? 'Auto' : theme}
+                {theme === 'system' ? t('shell.system') : theme === 'dark' ? t('shell.dark') : t('shell.light')}
               </span>
               <ChevronDown className="w-3 h-3 text-gray-400" />
             </button>
@@ -162,7 +165,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             {themeDropdownOpen && (
               <div className="absolute right-0 mt-2 w-36 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-lg py-1.5 z-50 text-xs animate-in fade-in">
                 <div className="px-2.5 py-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                  Tema Tampilan:
+                  {t('shell.theme')}:
                 </div>
                 <button
                   type="button"
@@ -178,7 +181,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <Sun className="w-3.5 h-3.5 text-amber-500" />
-                    <span>Terang (Light)</span>
+                    <span>{t('shell.light')}</span>
                   </div>
                   {theme === 'light' && <CheckCircle2 className="w-3 h-3 text-amber-600 dark:text-amber-400" />}
                 </button>
@@ -197,7 +200,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <Moon className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Gelap (Dark)</span>
+                    <span>{t('shell.dark')}</span>
                   </div>
                   {theme === 'dark' && <CheckCircle2 className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />}
                 </button>
@@ -218,13 +221,15 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                     <span className="w-3.5 h-3.5 flex items-center justify-center font-mono text-[10px] border border-gray-400 rounded">
                       S
                     </span>
-                    <span>Sistem (Auto)</span>
+                    <span>{t('shell.system')}</span>
                   </div>
                   {theme === 'system' && <CheckCircle2 className="w-3 h-3 text-gray-900 dark:text-white" />}
                 </button>
               </div>
             )}
           </div>
+
+          <LanguageSwitcher compact />
 
           {/* User Role Badge & Dropdown */}
           <div className="relative">
@@ -261,7 +266,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                     className="w-full px-3 py-2 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2"
                   >
                     <LogOut className="w-3.5 h-3.5" />
-                    <span>Keluar Sesi (Logout)</span>
+                    <span>{t('shell.logout')}</span>
                   </button>
                 </div>
               </div>
@@ -311,14 +316,14 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           <div className="hidden md:block pt-4 border-t border-gray-100 dark:border-gray-800 px-2 text-[11px] text-gray-500 dark:text-gray-400 space-y-1.5">
             <div className="flex items-center justify-between text-[10px]">
               <span>Auth: Better Auth</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium">Online</span>
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium">{t('shell.online')}</span>
             </div>
             <div className="flex items-center justify-between text-[10px]">
               <span>Spatial: PostGIS</span>
-              <span className="text-gray-900 dark:text-gray-200 font-medium">Ready</span>
+              <span className="text-gray-900 dark:text-gray-200 font-medium">{t('shell.ready')}</span>
             </div>
             <div className="flex items-center justify-between text-[10px]">
-              <span>Theme</span>
+              <span>{t('shell.theme')}</span>
               <button
                 type="button"
                 onClick={toggleTheme}

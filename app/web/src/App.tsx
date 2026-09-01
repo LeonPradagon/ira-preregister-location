@@ -13,20 +13,23 @@ import { RemindersView } from './components/admin/RemindersView';
 import { IntegrationsView } from './components/admin/IntegrationsView';
 import { BackendCustomerVerificationView } from './components/customer/BackendCustomerVerificationView';
 import { CampaignsView } from './components/admin/CampaignsView';
+import { I18nProvider, useTranslation } from './i18n';
 
 const MainAppContent: React.FC = () => {
   const { currentAdmin, customers, addresses, createVerificationSession, loadCustomerDetail } = useApp();
+  const { t } = useTranslation();
   const [currentTab, setCurrentTab] = useState<AdminTab>('dashboard');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedVerificationId, setSelectedVerificationId] = useState<string | null>(null);
   const tokenMatch = window.location.pathname.match(/^\/v\/([^/]+)$/);
   const customerToken = tokenMatch ? decodeURIComponent(tokenMatch[1]) : null;
+  const simulationRoute = Boolean(customerToken?.startsWith('simulasi-'));
 
   useEffect(() => {
-    document.title = customerToken ? 'Verifikasi Lokasi' : 'Exact Location Ops';
-  }, [customerToken]);
+    document.title = customerToken ? t('app.customerVerification') : t('app.opsTitle');
+  }, [customerToken, t]);
 
-  if (customerToken) return <BackendCustomerVerificationView token={customerToken} />;
+  if (customerToken) return <BackendCustomerVerificationView token={customerToken} simulation={simulationRoute} />;
   if (!currentAdmin) return <LoginView />;
 
   const createVerificationForCustomer = async (customerId: string, addressId?: string) => {
@@ -45,7 +48,7 @@ const MainAppContent: React.FC = () => {
       await loadCustomerDetail(customerId);
       setSelectedCustomerId(customerId);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'Detail pelanggan gagal dimuat.');
+      window.alert(error instanceof Error ? error.message : t('customer.requestFailed'));
     }
   };
 
@@ -60,12 +63,13 @@ const MainAppContent: React.FC = () => {
     if (currentTab === 'audit-logs') return <AuditLogsView />;
     if (currentTab === 'settings') return <ValidationSettingsView />;
     if (currentTab === 'integrations') return <IntegrationsView />;
-    return <DashboardView onSelectVerification={setSelectedVerificationId} onNavigate={setCurrentTab} onCreateVerificationClick={() => undefined} />;
+    return <DashboardView onSelectVerification={setSelectedVerificationId} onNavigate={setCurrentTab} onCreateVerificationClick={() => { const customer = customers[0]; if (customer) void createVerificationForCustomer(customer.id, customer.activeAddress?.id); }} />;
   };
 
   return <AdminLayout currentTab={currentTab} onSelectTab={setCurrentTab} selectedCustomerId={selectedCustomerId} onSelectCustomer={setSelectedCustomerId} selectedVerificationId={selectedVerificationId} onSelectVerification={setSelectedVerificationId}>{renderTabContent()}</AdminLayout>;
 };
 
 export default function App() {
-  return <AppProvider><MainAppContent /></AppProvider>;
+  const customerRoute = /^\/v\//.test(window.location.pathname);
+  return <I18nProvider defaultLanguage={customerRoute ? 'id' : undefined}><AppProvider><MainAppContent /></AppProvider></I18nProvider>;
 }

@@ -83,6 +83,14 @@ export class AdminController {
     return this.admin.createVerification(currentAdmin, customerId, parsed.data.addressId);
   }
 
+  @Post('customers/:id/verifications/simulation')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  async createSimulationVerification(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') customerId: string, @Body() body: unknown) {
+    const parsed = createVerificationSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.admin.createSimulationVerification(currentAdmin, customerId, parsed.data.addressId);
+  }
+
   @Get('verifications')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
   verifications(@Query() query: unknown) {

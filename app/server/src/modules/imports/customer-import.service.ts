@@ -28,6 +28,8 @@ interface ImportScriptResult {
   addressesInserted: number;
   duplicatePhoneRows: number;
   missingPostalCodeRowsStoredAs00000: number;
+  missingCoordinateRows: number;
+  incompleteAddressRows: number;
   coveredBtsRows: number;
   coverageStatusCounts: Record<string, number>;
   whatsappOptIn: string;
@@ -40,7 +42,9 @@ export class CustomerImportService {
   async import(admin: RequestAdmin, file: UploadedCustomerFile) {
     const extension = file.originalname.slice(file.originalname.lastIndexOf('.')).toLowerCase();
     if (!SUPPORTED_EXTENSIONS.has(extension)) throw new BadRequestException('File harus berformat .xlsx atau .csv.');
-    if (!file.size || !file.buffer?.length) throw new BadRequestException('File upload kosong.');
+    // The controller uses multer diskStorage, so normal uploads provide a
+    // temporary file path rather than an in-memory buffer.
+    if (!file.size || (!file.buffer?.length && !file.path)) throw new BadRequestException('File upload kosong.');
     if (file.size > MAX_UPLOAD_SIZE_BYTES) throw new BadRequestException('Ukuran file maksimal 50 MB. Gunakan beberapa file batch jika data lebih besar.');
 
     let temporaryDirectory: string | null = null;
