@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2,
   Clock,
-  Compass,
   AlertTriangle,
   Eye,
   Filter,
@@ -23,10 +22,10 @@ import { CustomerImportModal } from './CustomerImportModal';
 import { useTranslation } from '../../i18n';
 import { formatAddressForDisplay, isIncompleteAddress } from '../../lib/validationEngine';
 import { userFriendlyStatus } from '../../lib/statusLabels';
+import { findRegionOption, regionOptionValue, RegionOption } from '../../lib/regionSelection';
 
 interface CustomerListViewProps {
   onSelectCustomer: (customerId: string) => void;
-  onCreateVerificationForCustomer: (customerId: string, addressId?: string) => void;
 }
 
 const CUSTOMER_STATUS_LABEL: Record<CustomerStatus, string> = {
@@ -44,8 +43,13 @@ const statusBadgeClass = (status: CustomerStatus) => {
 };
 
 type RegionLevel = 'province' | 'city' | 'district' | 'subdistrict';
-type RegionOption = { code: string; name: string; postalCode?: string | null };
 const regionLevels: RegionLevel[] = ['province', 'city', 'district', 'subdistrict'];
+
+const generateCustomerExternalId = () => `REREG-NON-CUSTOMER-${Math.floor(Math.random() * 900000 + 100000)}`;
+const getPhoneNationalPart = (phone: string) => {
+  const digits = phone.replace(/\D/g, '');
+  return digits.startsWith('62') ? digits.slice(2) : digits.startsWith('0') ? digits.slice(1) : digits;
+};
 
 const CustomerTableSkeleton: React.FC = () => (
   <>
@@ -71,11 +75,9 @@ const CustomerTableSkeleton: React.FC = () => (
 
 export const CustomerListView: React.FC<CustomerListViewProps> = ({
   onSelectCustomer,
-  onCreateVerificationForCustomer,
 }) => {
   const { customers, customerPage, loadCustomerPage, addCustomer, updateCustomer, deleteCustomer, refreshDashboard, currentAdmin } = useApp();
   const { t } = useTranslation();
-  const canCreateVerification = hasCapability(currentAdmin?.role, 'createVerification');
   const canManageCustomers = hasCapability(currentAdmin?.role, 'manageCustomers');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -89,9 +91,10 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
   // New Customer Form State
   const [newCustName, setNewCustName] = useState('');
   const [newCustPhone, setNewCustPhone] = useState('+628');
-  const [newCustExtId, setNewCustExtId] = useState(`CUST-JKT-${Math.floor(Math.random() * 900000 + 100000)}`);
+  const [newCustExtId, setNewCustExtId] = useState(generateCustomerExternalId);
   const [newCustStreet, setNewCustStreet] = useState('');
   const [newCustHouseNo, setNewCustHouseNo] = useState('');
+  const [newCustAddressDetail, setNewCustAddressDetail] = useState('');
   const [newCustDistrict, setNewCustDistrict] = useState('');
   const [newCustSubdistrict, setNewCustSubdistrict] = useState('');
   const [newCustCity, setNewCustCity] = useState('');
@@ -112,8 +115,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
 
   const resetCustomerForm = () => {
     setEditingCustomer(null);
-    setNewCustName(''); setNewCustPhone('+628'); setNewCustExtId(`CUST-JKT-${Math.floor(Math.random() * 900000 + 100000)}`);
-    setNewCustStreet(''); setNewCustHouseNo(''); setNewCustDistrict(''); setNewCustSubdistrict(''); setNewCustCity(''); setNewCustProvince(''); setNewCustPostalCode('');
+    setNewCustName(''); setNewCustPhone('+62'); setNewCustExtId(generateCustomerExternalId());
+    setNewCustStreet(''); setNewCustHouseNo(''); setNewCustAddressDetail(''); setNewCustDistrict(''); setNewCustSubdistrict(''); setNewCustCity(''); setNewCustProvince(''); setNewCustPostalCode('');
     setNewCustLat(''); setNewCustLng(''); setNewCustStatus('PENDING_INSTALLATION'); setFormError(''); setRegionCodes({});
     setRegionOptions({ province: [], city: [], district: [], subdistrict: [] }); setRegionError('');
   };
@@ -121,13 +124,39 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
   useEffect(() => {
     if (!isAddModalOpen) return undefined;
     let active = true;
-    void api.regions.provinces()
-      .then((options) => { if (active) setRegionOptions((current) => ({ ...current, province: options })); })
-      .catch((error: unknown) => { if (active) setRegionError(error instanceof Error ? error.message : 'Data wilayah gagal dimuat.'); });
+    const loadRegions = async () => {
+      const provinces = await api.regions.provinces();
+      if (!active) return;
+      setRegionOptions((current) => ({ ...current, province: provinces }));
+      if (!editingCustomer) return;
+      const address = editingCustomer.activeAddress;
+
+      const province = findRegionOption(provinces, address.province);
+      if (!province) return;
+      const cities = await api.regions.regencies(province.code);
+      if (!active) return;
+      const city = findRegionOption(cities, address.city);
+      if (!city) { setRegionOptions((current) => ({ ...current, city: cities })); setRegionCodes({ province: province.code }); return; }
+      const districts = await api.regions.districts(city.code);
+      if (!active) return;
+      const district = findRegionOption(districts, address.district);
+      if (!district) { setRegionOptions((current) => ({ ...current, city: cities, district: districts })); setRegionCodes({ province: province.code, city: city.code }); return; }
+      const subdistricts = await api.regions.villages(district.code);
+      if (!active) return;
+      const subdistrict = findRegionOption(subdistricts, address.subdistrict);
+      setRegionOptions({ province: provinces, city: cities, district: districts, subdistrict: subdistricts });
+      setRegionCodes({ province: province.code, city: city.code, district: district.code, ...(subdistrict ? { subdistrict: subdistrict.code } : {}) });
+    };
+    void loadRegions().catch((error: unknown) => { if (active) setRegionError(error instanceof Error ? error.message : 'Data wilayah gagal dimuat.'); });
     return () => { active = false; };
-  }, [isAddModalOpen]);
+  }, [isAddModalOpen, editingCustomer]);
 
   const getRegionValue = (field: RegionLevel) => ({ province: newCustProvince, city: newCustCity, district: newCustDistrict, subdistrict: newCustSubdistrict }[field]);
+  const setPhoneNationalPart = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    const nationalPart = digits.startsWith('62') ? digits.slice(2) : digits.startsWith('0') ? digits.slice(1) : digits;
+    setNewCustPhone(`+62${nationalPart}`);
+  };
   const setRegionValue = (field: RegionLevel, value: string) => {
     if (field === 'province') setNewCustProvince(value);
     if (field === 'city') setNewCustCity(value);
@@ -136,8 +165,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
   };
   const handleRegionChange = async (field: RegionLevel, value: string) => {
     const levelIndex = regionLevels.indexOf(field);
-    const selected = regionOptions[field].find((option) => option.name.toLowerCase() === value.trim().toLowerCase());
-    setRegionValue(field, value);
+    const selected = findRegionOption(regionOptions[field], value);
+    setRegionValue(field, selected ? regionOptionValue(selected) : value.trim());
     if (field === 'subdistrict') setNewCustPostalCode(selected?.postalCode || '');
     else setNewCustPostalCode('');
     for (const child of regionLevels.slice(levelIndex + 1)) setRegionValue(child, '');
@@ -168,13 +197,15 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
       if (requestId === regionRequestId.current) setRegionLoading(null);
     }
   };
-  const renderRegionField = (field: RegionLevel, label: string, placeholder: string) => {
+  const renderRegionField = (field: RegionLevel, label: string) => {
     const parent = regionLevels[regionLevels.indexOf(field) - 1];
     const options = regionOptions[field];
     return <div>
-      <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">{label}</label>
-      <input type="text" required value={getRegionValue(field)} placeholder={placeholder} list={`admin-${field}-options`} disabled={Boolean(!editingCustomer && parent && !regionCodes[parent])} onChange={(event) => void handleRegionChange(field, event.target.value)} className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-xs disabled:bg-gray-100 dark:disabled:bg-gray-800/60" />
-      <datalist id={`admin-${field}-options`}>{options.map((option) => <option key={option.code} value={option.name} />)}</datalist>
+      <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">{label} <span className="text-rose-600">*</span></label>
+      <select required value={getRegionValue(field).trim()} disabled={Boolean(parent && !regionCodes[parent]) || regionLoading === field || options.length === 0} onChange={(event) => void handleRegionChange(field, event.target.value)} className="w-full rounded-lg border border-gray-300 bg-white p-2 text-xs disabled:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:disabled:bg-gray-800/60">
+        <option value="">Pilih {label}</option>
+        {options.map((option) => <option key={option.code} value={regionOptionValue(option)}>{regionOptionValue(option)}</option>)}
+      </select>
       {regionLoading === field && <p className="mt-1 text-[10px] text-gray-500">Memuat pilihan...</p>}
     </div>;
   };
@@ -201,7 +232,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
     const longitude = hasLongitude ? Number(longitudeText) : undefined;
     if ((latitude !== undefined && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) || (longitude !== undefined && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180))) { setFormError(t('customers.invalidCoordinates')); return; }
     setFormError('');
-    const rawAddr = `${newCustStreet} No. ${newCustHouseNo}, ${newCustSubdistrict}, ${newCustDistrict}, ${newCustCity}, ${newCustProvince}`;
+    const rawAddr = [newCustStreet, `No. ${newCustHouseNo.trim()}`, newCustAddressDetail.trim(), newCustSubdistrict, newCustDistrict, newCustCity, newCustProvince, newCustPostalCode].filter(Boolean).join(', ');
 
     try {
       const address = {
@@ -211,7 +242,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
         subdistrict: newCustSubdistrict,
         postalCode: newCustPostalCode,
         street: newCustStreet,
-        houseNumber: newCustHouseNo.trim() || 'TANPA NOMOR',
+        houseNumber: newCustHouseNo.trim(),
+        addressDetail: newCustAddressDetail.trim() || undefined,
         ...(latitude !== undefined && longitude !== undefined ? { referenceLocation: { latitude, longitude }, referenceSource: 'MASTER_COORDINATE' as const, referencePrecision: 'ROOFTOP' as const, referenceConfidence: 0.98 } : { referenceSource: 'CUSTOMER_PROPOSED' as const, referencePrecision: 'UNKNOWN' as const, referenceConfidence: 0 }),
       };
       if (editingCustomer) {
@@ -234,10 +266,11 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
     const address = customer.activeAddress;
     setEditingCustomer(customer);
     setNewCustName(customer.name);
-    setNewCustPhone(customer.phoneE164);
+    setNewCustPhone(`+62${getPhoneNationalPart(customer.phoneE164)}`);
     setNewCustExtId(customer.externalId);
     setNewCustStreet(address.street);
     setNewCustHouseNo(address.houseNumber);
+    setNewCustAddressDetail([address.addressDetail, address.landmark && `Patokan: ${address.landmark}`].filter(Boolean).join(', '));
     setNewCustDistrict(address.district);
     setNewCustSubdistrict(address.subdistrict);
     setNewCustCity(address.city);
@@ -415,17 +448,6 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
                       <div className="flex flex-wrap items-center justify-end gap-1.5">
                       <button
                         type="button"
-                        onClick={() => onCreateVerificationForCustomer(cust.id, masterAddr?.id)}
-                        disabled={!canCreateVerification}
-                        title={t('customers.newVerification')}
-                        aria-label={t('customers.newVerification')}
-                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-40 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/50"
-                      >
-                        <Compass className="h-3.5 w-3.5" />
-                      </button>
-
-                      <button
-                        type="button"
                         onClick={() => onSelectCustomer(cust.id)}
                         title={t('customers.viewDetail')}
                         aria-label={t('customers.viewDetail')}
@@ -493,26 +515,33 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">{t('customers.externalId')}</label>
-                  <input type="text" required value={newCustExtId} onChange={(e) => setNewCustExtId(e.target.value)} className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-mono" />
+                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">{t('customers.externalId')} <span className="font-normal text-gray-400">(otomatis)</span></label>
+                  <input type="text" value={newCustExtId} disabled title="Customer ID dibuat otomatis dan tidak dapat diubah" className="w-full rounded-lg border border-gray-300 bg-gray-100 p-2 text-xs font-mono text-gray-500 disabled:cursor-not-allowed dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-400" />
                 </div>
                 <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">{t('customers.whatsapp')}</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="+62812345678"
-                    value={newCustPhone}
-                    onChange={(e) => setNewCustPhone(e.target.value)}
-                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400"
-                  />
+                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">{t('customers.whatsapp')} (+62)</label>
+                  <div className="flex overflow-hidden rounded-lg border border-gray-300 bg-white dark:border-gray-700 dark:bg-gray-800">
+                    <span className="flex items-center border-r border-gray-300 bg-gray-50 px-2 font-mono text-xs text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">+62</span>
+                    <input
+                      type="tel"
+                      required
+                      inputMode="numeric"
+                      pattern="8[0-9]{7,12}"
+                      placeholder="812345678"
+                      value={getPhoneNationalPart(newCustPhone)}
+                      onChange={(e) => setPhoneNationalPart(e.target.value)}
+                      aria-label="Nomor WhatsApp setelah kode negara +62"
+                      className="min-w-0 flex-1 bg-transparent p-2 text-xs font-mono text-gray-900 outline-none focus:ring-1 focus:ring-gray-900 dark:text-white dark:focus:ring-gray-400"
+                    />
+                  </div>
+                  <p className="mt-1 text-[10px] leading-4 text-gray-500">Kode negara +62 dikunci. Isi nomor mulai dari 8.</p>
                 </div>
               </div>
 
               {editingCustomer && <div><label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">Status</label><select value={newCustStatus} onChange={(e) => setNewCustStatus(e.target.value as CustomerStatus)} className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-xs"><option value="ACTIVE">Aktif</option><option value="PENDING_INSTALLATION">Menunggu pemasangan</option><option value="VERIFIED">Terverifikasi</option><option value="SUSPENDED">Ditangguhkan</option></select></div>}
 
               <div>
-                <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">Nama Jalan / Perumahan</label>
+                <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">Nama Jalan / Perumahan <span className="text-rose-600">*</span></label>
                 <input
                   type="text"
                   required
@@ -524,30 +553,38 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                {renderRegionField('province', 'Provinsi', 'Contoh: DKI Jakarta')}
-                {renderRegionField('city', 'Kota / Kabupaten', 'Contoh: Jakarta Barat')}
+                {renderRegionField('province', 'Provinsi')}
+                {renderRegionField('city', 'Kota / Kabupaten')}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                {renderRegionField('district', 'Kecamatan', 'Contoh: Palmerah')}
-                {renderRegionField('subdistrict', 'Kelurahan', 'Contoh: Palmerah')}
+                {renderRegionField('district', 'Kecamatan')}
+                {renderRegionField('subdistrict', 'Kelurahan')}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                   <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">No. Rumah <span className="font-normal text-gray-400">(opsional)</span></label>
+                   <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">No. Rumah <span className="text-rose-600">*</span></label>
                   <input
                     type="text"
-                    placeholder="Contoh: No. 12 atau TANPA NOMOR"
+                    required
+                    placeholder="Contoh: 12 atau A-12"
                     value={newCustHouseNo}
                     onChange={(e) => setNewCustHouseNo(e.target.value)}
                     className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400"
                    />
-                   <p className="mt-1 text-[10px] leading-4 text-gray-500">Jika memang tidak ada nomor resmi, kosongkan. Alamat akan ditandai untuk diperiksa oleh tim.</p>
+                   <p className="mt-1 text-[10px] leading-4 text-gray-500">Nomor rumah wajib diisi, termasuk nomor unit atau blok jika relevan.</p>
                 </div>
                 <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">Kode Pos</label>
-                  <input required placeholder="Contoh: 11540" value={newCustPostalCode} onChange={(e) => setNewCustPostalCode(e.target.value)} className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-xs" />
+                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">Kode Pos <span className="text-rose-600">*</span></label>
+                  <input required inputMode="numeric" maxLength={5} pattern="[0-9]{5}" placeholder="Contoh: 11540" value={newCustPostalCode} onChange={(e) => setNewCustPostalCode(e.target.value)} className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-xs" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div>
+                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">Detail Alamat & Patokan <span className="font-normal text-gray-400">(opsional)</span></label>
+                  <textarea rows={2} maxLength={1000} placeholder="Contoh: Blok A lantai 2, dekat pos satpam, sebelah minimarket" value={newCustAddressDetail} onChange={(e) => setNewCustAddressDetail(e.target.value)} className="w-full resize-y rounded-lg border border-gray-300 bg-white p-2 text-xs dark:border-gray-700 dark:bg-gray-800" />
                 </div>
               </div>
 

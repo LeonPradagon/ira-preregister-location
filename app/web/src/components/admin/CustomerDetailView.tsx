@@ -10,7 +10,6 @@ import {
   Home,
   MapPin,
   MessageSquare,
-  Plus,
   Send,
   Smartphone,
   User,
@@ -19,19 +18,18 @@ import { useApp } from '../../context/AppContext';
 import { VerificationMap } from '../maps/VerificationMap';
 import { useTranslation } from '../../i18n';
 import { buildGoogleMapsDeepLink, formatAddressForDisplay, isIncompleteAddress } from '../../lib/validationEngine';
+import { userFriendlyStatus } from '../../lib/statusLabels';
 
 interface CustomerDetailViewProps {
   customerId: string;
   onBack: () => void;
   onSelectVerification: (sessionId: string) => void;
-  onCreateVerification: (customerId: string, addressId: string) => void;
 }
 
 export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
   customerId,
   onBack,
   onSelectVerification,
-  onCreateVerification,
 }) => {
   const { customers, addresses, verificationSessions, optOutCustomer } = useApp();
   const { t } = useTranslation();
@@ -92,16 +90,6 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
           </div>
         </div>
 
-        {masterAddress && (
-          <button
-            type="button"
-            onClick={() => onCreateVerification(customer.id, masterAddress.id)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg text-xs font-medium shadow-xs transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{t('detail.generate')}</span>
-          </button>
-        )}
       </div>
 
       {/* Grid: Address History & Active Sessions */}
@@ -114,7 +102,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
               <span>{t('detail.addresses')} ({custAddresses.length})</span>
             </h2>
 
-            <div className="space-y-3">
+            <div className="max-h-[32rem] space-y-3 overflow-y-auto pr-1">
               {custAddresses.map((addr) => (
                 <div
                   key={addr.id}
@@ -170,7 +158,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
             </h2>
 
             {custSessions.length > 0 ? (
-              <div className="space-y-3">
+              <div className="max-h-[32rem] space-y-3 overflow-y-auto pr-1">
                 {custSessions.map((session) => (
                   <div
                     key={session.id}
@@ -178,11 +166,8 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-indigo-700 dark:text-indigo-400 text-xs">
-                          {session.id}
-                        </span>
-                        <span className="text-[10px] font-mono bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 px-2 py-0.5 rounded">
-                          {session.verificationStatus}
+                        <span className="text-[10px] font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 px-2 py-0.5 rounded">
+                          {userFriendlyStatus(session.verificationStatus)}
                         </span>
                       </div>
                       <span className="text-[10px] text-gray-500 dark:text-gray-400 font-mono">

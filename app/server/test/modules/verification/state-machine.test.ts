@@ -26,4 +26,8 @@ describe('verification state machine', () => {
     expect(() => assertTransition('WAITING_FOR_HOME', 'ADDRESS_EDITING')).not.toThrow();
     expect(() => assertTransition('REMINDER_LIMIT_REACHED', 'ADDRESS_EDITING')).not.toThrow();
   });
+
+  it('allows scheduling the final reminder range directly from a failed GPS result', () => {
+    expect(() => assertTransition('LOCATION_MISMATCH', 'REMINDER_LIMIT_REACHED')).not.toThrow();
+  });
 });

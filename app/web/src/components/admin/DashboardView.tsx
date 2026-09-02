@@ -9,7 +9,6 @@ import {
   Compass,
   MapPin,
   MessageSquare,
-  Plus,
   Radio,
   RefreshCw,
   ShieldCheck,
@@ -19,7 +18,6 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { VerificationSession } from '../../types';
-import { hasCapability } from '../../lib/accessControl';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
 import { userFriendlyStatus } from '../../lib/statusLabels';
@@ -29,7 +27,6 @@ type DashboardDestination = 'customers' | 'campaigns' | 'verifications' | 'remin
 interface DashboardViewProps {
   onSelectVerification: (sessionId: string) => void;
   onNavigate: (destination: DashboardDestination) => void;
-  onCreateVerificationClick: () => void;
 }
 
 interface DashboardMetricCardProps {
@@ -70,11 +67,9 @@ const DashboardMetricCard: React.FC<DashboardMetricCardProps> = ({
 export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectVerification,
   onNavigate,
-  onCreateVerificationClick,
 }) => {
-  const { customers, verificationSessions, dashboardSummary, refreshDashboard, validationConfig, integrationConfigs, currentAdmin } = useApp();
+  const { customers, verificationSessions, dashboardSummary, refreshDashboard, validationConfig, integrationConfigs } = useApp();
   const { t } = useTranslation();
-  const canCreateVerification = hasCapability(currentAdmin?.role, 'createVerification');
   const [sessionPage, setSessionPage] = useState(1);
   const [sessionPageSize, setSessionPageSize] = useState<TablePageSize>(10);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -187,16 +182,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             <span>{t('dashboard.refresh')}</span>
-          </button>
-          <button
-            type="button"
-            onClick={onCreateVerificationClick}
-            disabled={!canCreateVerification}
-            title={!canCreateVerification ? 'Role ini hanya dapat melihat data' : undefined}
-            className="flex items-center gap-2 px-3.5 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white text-xs font-medium rounded-lg shadow-xs transition-all active:scale-[0.99]"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{t('dashboard.newVerification')}</span>
           </button>
         </div>
       </div>

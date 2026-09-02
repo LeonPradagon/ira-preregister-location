@@ -27,7 +27,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { ReviewDecision, VerificationSession } from '../../types';
 import { VerificationMap } from '../maps/VerificationMap';
-import { buildGoogleMapsDeepLink, formatAddressForDisplay, formatCoordinatePair } from '../../lib/validationEngine';
+import { buildGoogleMapsDeepLink, calculateGeodesicDistanceMeters, formatAddressForDisplay, formatCoordinatePair, isIncompleteAddress } from '../../lib/validationEngine';
 import { userFriendlyStatus } from '../../lib/statusLabels';
 import { hasCapability } from '../../lib/accessControl';
 import { AdminTable } from '../common/AdminTable';
@@ -52,6 +52,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
     loadVerificationDetail,
     currentAdmin,
     performManualReview,
+    updateAddressFromGps,
     resendInvitation,
     sendManualReminder,
     validationConfig,
@@ -95,6 +96,8 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
   const [reviewReasonCode, setReviewReasonCode] = useState('REFERENCE_LOCATION_VERIFIED_MANUAL');
   const [reviewNote, setReviewNote] = useState('');
   const [reviewError, setReviewError] = useState('');
+  const [addressUpdateBusy, setAddressUpdateBusy] = useState(false);
+  const [addressUpdateFeedback, setAddressUpdateFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Reminder trigger toast
   const [reminderFeedback, setReminderFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -113,6 +116,10 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
   const lastVal = session.lastValidationResult;
   const capturedLoc = lastVal?.capturedLocation;
   const refLoc = address.referenceLocation;
+  const reverseGeocode = lastVal?.reverseGeocode;
+  const distanceToCurrentReference = refLoc && capturedLoc
+    ? calculateGeodesicDistanceMeters(capturedLoc, refLoc)
+    : lastVal?.distanceFromReferenceMeters ?? null;
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -128,6 +135,26 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
       setReminderFeedback({ type: 'error', message: res.message });
     }
     setTimeout(() => setReminderFeedback(null), 4000);
+  };
+
+  const handleUpdateAddressFromGps = async () => {
+    if (!capturedLoc || addressUpdateBusy) return;
+    if (!window.confirm('Gunakan GPS hasil pemeriksaan ini untuk melengkapi alamat yang kosong dan memperbarui titik referensi rumah?')) return;
+    setAddressUpdateBusy(true);
+    setAddressUpdateFeedback(null);
+    try {
+      const updatedFields = await updateAddressFromGps(session.id);
+      setAddressUpdateFeedback({
+        type: 'success',
+        message: updatedFields.length > 0
+          ? `Alamat diperbarui dari GPS. Field yang dilengkapi: ${updatedFields.join(', ')}.`
+          : 'Titik referensi alamat berhasil diperbarui dari GPS.',
+      });
+    } catch (cause) {
+      setAddressUpdateFeedback({ type: 'error', message: cause instanceof Error ? cause.message : 'Alamat gagal diperbarui dari GPS.' });
+    } finally {
+      setAddressUpdateBusy(false);
+    }
   };
 
   const handleExecuteReview = async (e: React.FormEvent) => {
@@ -286,6 +313,11 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
             </div>
 
             <div className="text-xs space-y-2">
+              {(!refLoc || isIncompleteAddress(address)) && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                  <strong>Perlu dilengkapi:</strong> alamat ini belum memiliki data referensi rumah yang cukup. Lengkapi nomor/detail alamat dan koordinat master jika tersedia. Jika koordinat belum dapat ditentukan, gunakan <strong>pemeriksaan tim</strong> setelah melihat titik GPS dan peta; jangan langsung menandai lokasi sebagai salah.
+                </div>
+              )}
               <div className="bg-gray-50 dark:bg-gray-800/60 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
                 <span className="text-[11px] text-gray-500 dark:text-gray-400 block mb-1">
                   Alamat Aktif Saat Ini ({address.addressType}):
@@ -435,7 +467,25 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               )}
+              {canPerformReview && capturedLoc && !['LOCATION_VALID', 'EXPIRED'].includes(session.verificationStatus) && (
+                <button
+                  type="button"
+                  onClick={() => void handleUpdateAddressFromGps()}
+                  disabled={addressUpdateBusy}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-950/50"
+                  title="Lengkapi alamat yang kosong dan simpan titik GPS sebagai referensi"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${addressUpdateBusy ? 'animate-spin' : ''}`} />
+                  <span>Update alamat dari GPS</span>
+                </button>
+              )}
             </div>
+
+            {addressUpdateFeedback && (
+              <div className={`rounded-lg border px-3 py-2 text-xs ${addressUpdateFeedback.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300' : 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300'}`}>
+                {addressUpdateFeedback.message}
+              </div>
+            )}
 
             {capturedLoc ? (
               <div className="space-y-3">
@@ -521,7 +571,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                 {/* Device Accuracy & Distance vs Toleransi Rumah */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                   <div className="bg-gray-50 dark:bg-gray-800/60 p-2 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <span className="text-gray-500 dark:text-gray-400 text-[10px] block">Akurasi GPS (Radius):</span>
+                    <span className="text-gray-500 dark:text-gray-400 text-[10px] block">Akurasi GPS Device:</span>
                     <span
                       className={`font-mono font-bold ${
                         capturedLoc.accuracyMeters <= validationConfig.GPS_MAX_ACCURACY_METERS
@@ -529,14 +579,14 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                           : 'text-rose-700 dark:text-rose-400'
                       }`}
                     >
-                      &plusmn;{capturedLoc.accuracyMeters} meter
+                      &plusmn;{capturedLoc.accuracyMeters} meter <span className="font-sans font-normal text-[10px]">(batas &le; {validationConfig.GPS_MAX_ACCURACY_METERS}m)</span>
                     </span>
                   </div>
 
                   <div className="bg-gray-50 dark:bg-gray-800/60 p-2 rounded-lg border border-gray-200 dark:border-gray-700">
                     <span className="text-gray-500 dark:text-gray-400 text-[10px] block">Jarak ke Rumah:</span>
                     <span className="font-mono font-bold text-gray-900 dark:text-white">
-                      {lastVal?.distanceFromReferenceMeters == null ? 'Belum ada referensi' : `${lastVal.distanceFromReferenceMeters.toFixed(1)} meter`}
+                      {distanceToCurrentReference == null ? 'Belum ada referensi' : `${distanceToCurrentReference.toFixed(1)} meter`}
                     </span>
                   </div>
 
@@ -570,7 +620,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                 capturedLocation={capturedLoc}
                 capturedLabel={`Customer: ${customer.name}`}
                 homeRadiusMeters={validationConfig.HOME_RADIUS_METERS}
-                distanceMeters={lastVal?.distanceFromReferenceMeters}
+                distanceMeters={distanceToCurrentReference}
                 isMatch={lastVal?.result === 'LOCATION_VALID'}
                 heightClass="h-[340px]"
               />
@@ -617,28 +667,46 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Provinsi</td>
                     <td className="px-3.5 py-2">{address.province}</td>
-                    <td className="px-3.5 py-2">{address.province}</td>
-                    <td className="px-3.5 py-2 text-right font-semibold text-emerald-700 dark:text-emerald-400">Match</td>
+                    <td className="px-3.5 py-2">{reverseGeocode?.province || 'Tidak tersedia'}</td>
+                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.provinceMatch ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>{lastVal == null ? 'Belum ada hasil' : lastVal.provinceMatch ? 'Match' : 'Tidak cocok'}</td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Kota / Kabupaten</td>
                     <td className="px-3.5 py-2">{address.city}</td>
-                    <td className="px-3.5 py-2">{address.city}</td>
-                    <td className="px-3.5 py-2 text-right font-semibold text-emerald-700 dark:text-emerald-400">Match</td>
+                    <td className="px-3.5 py-2">{reverseGeocode?.city || 'Tidak tersedia'}</td>
+                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.cityMatch ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>{lastVal == null ? 'Belum ada hasil' : lastVal.cityMatch ? 'Match' : 'Tidak cocok'}</td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Kecamatan</td>
                     <td className="px-3.5 py-2">{address.district}</td>
-                    <td className="px-3.5 py-2">{address.district}</td>
-                    <td className="px-3.5 py-2 text-right font-semibold text-emerald-700 dark:text-emerald-400">Match (20%)</td>
+                    <td className="px-3.5 py-2">{reverseGeocode?.district || 'Tidak tersedia'}</td>
+                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.districtMatch ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>{lastVal == null ? 'Belum ada hasil' : lastVal.districtMatch ? 'Match' : 'Tidak cocok'}</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Kelurahan / Desa</td>
+                    <td className="px-3.5 py-2">{address.subdistrict}</td>
+                    <td className="px-3.5 py-2">{reverseGeocode?.subdistrict || 'Tidak tersedia'}</td>
+                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.subdistrictMatch ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>{lastVal == null ? 'Belum ada hasil' : lastVal.subdistrictMatch ? 'Match' : 'Tidak cocok'}</td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Nama Jalan / Kompleks</td>
                     <td className="px-3.5 py-2">{address.street}</td>
-                    <td className="px-3.5 py-2">{address.street}</td>
+                    <td className="px-3.5 py-2">{reverseGeocode?.street || 'Tidak tersedia'}</td>
                     <td className="px-3.5 py-2 text-right font-semibold text-emerald-700 dark:text-emerald-400">
                       {lastVal ? `${Math.round(lastVal.streetScore * 100)}% Match` : 'Belum ada hasil'}
                     </td>
+                  </tr>
+                  <tr>
+                    <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Nomor Rumah</td>
+                    <td className="px-3.5 py-2">{address.houseNumber}</td>
+                    <td className="px-3.5 py-2">{reverseGeocode?.houseNumber || 'Tidak tersedia'}</td>
+                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.houseNumberMatch == null ? 'text-gray-500 dark:text-gray-400' : lastVal.houseNumberMatch ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>{lastVal == null || lastVal.houseNumberMatch == null ? 'Tidak tersedia' : lastVal.houseNumberMatch ? 'Match' : 'Tidak cocok'}</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Kode Pos</td>
+                    <td className="px-3.5 py-2">{address.postalCode}</td>
+                    <td className="px-3.5 py-2">{reverseGeocode?.postalCode || 'Tidak tersedia'}</td>
+                    <td className="px-3.5 py-2 text-right font-mono text-[11px] text-gray-500 dark:text-gray-400">Informasi GPS</td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Akurasi GPS Device</td>
@@ -660,18 +728,20 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Jarak vs Toleransi Rumah</td>
                     <td className="px-3.5 py-2 font-mono text-[11px]">&le; {validationConfig.HOME_RADIUS_METERS}m</td>
                     <td className="px-3.5 py-2 font-mono text-[11px]">
-                      {lastVal?.distanceFromReferenceMeters == null ? 'Belum ada referensi' : `${lastVal.distanceFromReferenceMeters.toFixed(1)}m`}
+                      {distanceToCurrentReference == null ? 'Belum ada referensi' : `${distanceToCurrentReference.toFixed(1)}m`}
                     </td>
                     <td
                       className={`px-3.5 py-2 text-right font-semibold ${
-                        lastVal?.distanceFromReferenceMeters != null && lastVal.distanceFromReferenceMeters <= validationConfig.HOME_RADIUS_METERS
+                        distanceToCurrentReference != null && distanceToCurrentReference <= validationConfig.HOME_RADIUS_METERS
                           ? 'text-emerald-700 dark:text-emerald-400'
                           : 'text-rose-700 dark:text-rose-400'
                       }`}
                     >
-                      {lastVal?.distanceFromReferenceMeters != null && lastVal.distanceFromReferenceMeters <= validationConfig.HOME_RADIUS_METERS
-                        ? 'Sesuai'
-                        : 'Perlu dicek'}
+                      {distanceToCurrentReference == null
+                        ? 'Tidak dapat dihitung'
+                        : distanceToCurrentReference <= validationConfig.HOME_RADIUS_METERS
+                          ? 'Sesuai'
+                          : 'Perlu dicek'}
                     </td>
                   </tr>
                 </tbody>

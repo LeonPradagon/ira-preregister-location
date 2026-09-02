@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, gt, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, ilike, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { auditLogs, customerAddresses, customers, integrationConfigs, integrationOutbox, locationCaptures, reminders, spatialPointSql, validationResults, verificationReviews, verificationSessions, whatsappDeliveryLogs } from '../../db/schema/index.js';
 import { AddressChangeInput, AdminListQueryInput, CustomerCreateInput, CustomerListQueryInput, CustomerUpdateInput, ReviewInput, ValidationConfigInput } from '../../common/contracts.js';
@@ -14,12 +14,18 @@ import { createVerificationToken } from '../verification/verification-token.js';
 import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/whatsapp/whatsapp.templates.js';
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
+const addressPlaceholders = new Set(['', 'unknown', 'tidak diketahui', 'tanpa nomor', 'n/a', 'na', '-', '00000']);
+const addressText = (value: unknown) => typeof value === 'string' ? value.trim() : '';
+const isMissingAddressText = (value: unknown) => addressPlaceholders.has(addressText(value).toLowerCase());
+const fillMissingAddressText = (current: unknown, gpsValue: unknown) => isMissingAddressText(current) && !isMissingAddressText(gpsValue) ? addressText(gpsValue) : addressText(current);
 
 function formatRawAddress(address: CustomerCreateInput['address']) {
   return [
     address.street,
     address.houseNumber && `No. ${address.houseNumber}`,
     address.block && `Blok ${address.block}`,
+    address.addressDetail,
+    address.landmark && `Patokan: ${address.landmark}`,
     address.subdistrict,
     address.district,
     address.city,
@@ -179,7 +185,7 @@ export class AdminService {
         subdistrict: address.subdistrict,
         postalCode: address.postalCode,
         street: address.street,
-        houseNumber: address.houseNumber?.trim() || 'TANPA NOMOR',
+        houseNumber: address.houseNumber.trim(),
         rt: address.rt,
         rw: address.rw,
         building: address.building,
@@ -260,7 +266,7 @@ export class AdminService {
           subdistrict: nextAddress.subdistrict,
           postalCode: nextAddress.postalCode,
           street: nextAddress.street,
-          houseNumber: nextAddress.houseNumber?.trim() || 'TANPA NOMOR',
+          houseNumber: nextAddress.houseNumber.trim(),
           rt: nextAddress.rt,
           rw: nextAddress.rw,
           building: nextAddress.building,
@@ -429,6 +435,66 @@ export class AdminService {
     return { session: sanitizeSession(row.session), customer: row.customer, address, results, reviews, reminders: sessionReminders, audits, captures };
   }
 
+  async updateAddressFromGps(admin: RequestAdmin, id: string) {
+    if (!['SUPER_ADMIN', 'ADMIN', 'REVIEWER'].includes(admin.role)) throw new DomainError('Role cannot update address from GPS', 403, 'FORBIDDEN');
+    const detail = await this.verification(id);
+    if (['LOCATION_VALID', 'EXPIRED'].includes(detail.session.verificationStatus)) throw new DomainError('Completed or expired sessions cannot update their address', 409, 'SESSION_NOT_EDITABLE');
+    const result = detail.results[0];
+    if (!result) throw new DomainError('Address update requires a recorded GPS validation result', 409, 'VALIDATION_RESULT_REQUIRED');
+
+    const latitude = Number(result.capturedLatitude);
+    const longitude = Number(result.capturedLongitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) throw new DomainError('Recorded GPS coordinates are invalid', 409, 'GPS_COORDINATE_INVALID');
+    const reverse = result.reverseGeocode && typeof result.reverseGeocode === 'object' ? result.reverseGeocode as Record<string, unknown> : {};
+    const nextAddress = {
+      province: fillMissingAddressText(detail.address.province, reverse.province),
+      city: fillMissingAddressText(detail.address.city, reverse.city),
+      district: fillMissingAddressText(detail.address.district, reverse.district),
+      subdistrict: fillMissingAddressText(detail.address.subdistrict, reverse.subdistrict),
+      postalCode: fillMissingAddressText(detail.address.postalCode, reverse.postalCode),
+      street: fillMissingAddressText(detail.address.street, reverse.street),
+      houseNumber: fillMissingAddressText(detail.address.houseNumber, reverse.houseNumber),
+    };
+    const updatedFields = Object.keys(nextAddress).filter((field) => nextAddress[field as keyof typeof nextAddress] !== addressText(detail.address[field as keyof typeof nextAddress]));
+    const rawAddress = [
+      nextAddress.street,
+      nextAddress.houseNumber && `No. ${nextAddress.houseNumber}`,
+      detail.address.block && `Blok ${detail.address.block}`,
+      detail.address.addressDetail,
+      detail.address.landmark && `Patokan: ${detail.address.landmark}`,
+      nextAddress.subdistrict,
+      nextAddress.district,
+      nextAddress.city,
+      nextAddress.province,
+      nextAddress.postalCode,
+    ].filter(Boolean).join(', ');
+    const updatedAt = timestamp();
+
+    await db.transaction(async (tx) => {
+      await tx.update(customerAddresses).set({
+        ...nextAddress,
+        rawAddress,
+        referenceLocation: spatialPointSql(latitude, longitude),
+        referenceSource: 'MASTER_COORDINATE',
+        referencePrecision: 'HOUSE',
+        referenceConfidence: '0.950',
+        updatedAt,
+      }).where(eq(customerAddresses.id, detail.address.id));
+      await tx.insert(auditLogs).values({
+        actorUserId: admin.id,
+        actorName: admin.name,
+        action: 'ADDRESS_UPDATED_FROM_GPS',
+        entityType: 'ADDRESS',
+        entityId: detail.address.id,
+        before: { referenceLocation: detail.address.referenceLocation, referencePrecision: detail.address.referencePrecision, address: detail.address.rawAddress },
+        after: { referenceLocation: { latitude, longitude }, referencePrecision: 'HOUSE', updatedFields },
+        reason: 'Admin memperbarui referensi alamat berdasarkan GPS hasil pemeriksaan manual.',
+        timestamp: updatedAt,
+      });
+    });
+    return { status: 'UPDATED', addressId: detail.address.id, updatedFields, referenceLocation: { latitude, longitude } };
+  }
+
   async resend(admin: RequestAdmin, id: string) {
     if (!canManage(admin.role)) throw new DomainError('Role cannot resend verification', 403, 'FORBIDDEN');
     const config = await this.validationConfig.get();
@@ -439,12 +505,15 @@ export class AdminService {
     await this.assertManualSendAllowed(detail.customer.phoneE164);
     const verificationToken = await createVerificationToken();
     const expiresAt = new Date(Date.now() + config.VERIFICATION_TOKEN_TTL_DAYS * 86400000);
-    const updatedAt = timestamp();
-    await db.update(verificationSessions).set({ tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, expiresAt, updatedAt }).where(eq(verificationSessions.id, id));
     const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
     const idempotencyKey = `invitation-resend:${id}:${verificationToken.tokenId}`;
     const invitationTemplate = getWhatsAppTemplate('INVITATION');
     const sent = await this.whatsapp.send({ phoneE164: detail.customer.phoneE164, templateName: invitationTemplate.name, templateLanguage: invitationTemplate.language, templateParameters: [detail.customer.name, verificationLink], idempotencyKey });
+    const updatedAt = timestamp();
+    await db.transaction(async (tx) => {
+      await tx.update(reminders).set({ tokenInvalidatedAt: updatedAt }).where(and(eq(reminders.sessionId, id), isNotNull(reminders.tokenId), isNull(reminders.tokenInvalidatedAt)));
+      await tx.update(verificationSessions).set({ tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, expiresAt, updatedAt }).where(eq(verificationSessions.id, id));
+    });
     await this.recordManualDelivery(detail.customer.phoneE164, idempotencyKey, 'INVITATION_RESEND', sent.providerMessageId);
     await db.insert(auditLogs).values({ actorUserId: admin.id, actorName: admin.name, action: 'INVITATION_RESENT', entityType: 'VERIFICATION_SESSION', entityId: id, after: { tokenRotated: true, tokenStoredAsHash: true, expiresAt: expiresAt.toISOString() }, timestamp: updatedAt });
     return { status: 'SENT', verificationLink, expiresAt };
@@ -495,7 +564,7 @@ export class AdminService {
         channel: 'WHATSAPP',
         scheduledAt,
         status: 'SCHEDULED',
-        messageText: `Halo ${detail.customer.name}, ini pengingat verifikasi lokasi Anda. Pengingat ${reminderNumber} dari ${max}. Tautan dibuat saat pengiriman.`,
+        messageText: `Halo ${detail.customer.name}, ini pengingat verifikasi lokasi Anda. Pengingat ${reminderNumber} dari ${max}. Tautan baru berlaku maksimal ${config.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`,
         retryCount: 0,
         createdAt: scheduledAt,
       });

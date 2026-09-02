@@ -103,6 +103,12 @@ export class AdminController {
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
   verification(@Param('id') id: string) { return this.admin.verification(id); }
 
+  @Post('verifications/:id/address-from-gps')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER')
+  addressFromGps(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) {
+    return this.admin.updateAddressFromGps(currentAdmin, id);
+  }
+
   @Post('verifications/:id/resend')
   @Roles('SUPER_ADMIN', 'ADMIN')
   resend(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) { return this.admin.resend(currentAdmin, id); }

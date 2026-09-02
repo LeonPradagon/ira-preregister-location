@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { Queue, Worker } from 'bullmq';
-import { and, desc, eq, gte, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, isNotNull, lte, ne, or, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { db, pool } from './db/client.js';
 import { auditLogs, customers, integrationOutbox, reminders, verificationCampaignItems, verificationCampaigns, verificationSessions, whatsappDeliveryLogs } from './db/schema/index.js';
@@ -14,6 +14,7 @@ import { createVerificationToken } from './modules/verification/verification-tok
 import { CampaignService } from './modules/campaigns/campaign.service.js';
 import { ValidationConfigService } from './config/validation-config.service.js';
 import { getWhatsAppTemplate } from './integrations/whatsapp/whatsapp.templates.js';
+import { reminderLinkExpiresAt } from './modules/reminders/reminder.policy.js';
 
 const connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null });
 const outboxQueueName = 'exact-location-outbox';
@@ -33,6 +34,7 @@ const whatsapp: WhatsAppPort = whatsappProvider === 'disabled' || whatsappProvid
       ? new DisabledWhatsAppAdapter()
       : new ConsoleWhatsAppAdapter();
 const campaigns = new CampaignService(new ValidationConfigService());
+const reminderConfig = new ValidationConfigService();
 
 const circuitBucket = () => `whatsapp:outcomes:${Math.floor(Date.now() / 60000)}`;
 const isCircuitOpen = async () => (await connection.get('whatsapp:circuit:open')) === '1';
@@ -114,6 +116,10 @@ const reminderWorker = new Worker(
       .where(eq(reminders.id, reminderId))
       .limit(1);
     if (!target) return;
+    if (target.session.revokedAt || target.session.expiresAt <= new Date()) {
+      await db.update(reminders).set({ status: 'CANCELLED' }).where(eq(reminders.id, reminderId));
+      return;
+    }
     if (target.customer.whatsappOptOutAt) {
       await db.update(reminders).set({ status: 'CANCELLED' }).where(eq(reminders.id, reminderId));
       await db.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Reminder Worker', action: 'WHATSAPP_SEND_BLOCKED', entityType: 'REMINDER', entityId: reminderId, after: { reason: 'CUSTOMER_OPTED_OUT' }, timestamp: new Date() });
@@ -130,12 +136,17 @@ const reminderWorker = new Worker(
     }
     try {
       const verificationToken = await createVerificationToken();
-      const expiresAt = new Date(Date.now() + Number(process.env.VERIFICATION_TOKEN_TTL_DAYS ?? 7) * 86400000);
-      await db.update(verificationSessions).set({ tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, expiresAt, updatedAt: new Date() }).where(eq(verificationSessions.id, target.session.id));
+      const reminderTtlHours = (await reminderConfig.get()).REMINDER_LINK_TTL_HOURS;
       const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
       const sent = await whatsapp.send({ phoneE164: target.customer.phoneE164, templateName: reminderTemplate.name, templateLanguage: reminderTemplate.language, templateParameters: [target.customer.name, verificationLink], idempotencyKey: `reminder:${reminderId}` });
+      const sentAt = new Date();
+      const tokenExpiresAt = reminderLinkExpiresAt(sentAt, target.session.expiresAt, reminderTtlHours);
+      await db.transaction(async (tx) => {
+        await tx.update(reminders).set({ tokenInvalidatedAt: sentAt }).where(and(eq(reminders.sessionId, target.session.id), ne(reminders.id, reminderId), isNotNull(reminders.tokenId), isNull(reminders.tokenInvalidatedAt)));
+        await tx.update(verificationSessions).set({ tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, updatedAt: sentAt }).where(eq(verificationSessions.id, target.session.id));
+        await tx.update(reminders).set({ status: 'SENT', sentAt, providerMessageId: sent.providerMessageId, tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, tokenExpiresAt }).where(eq(reminders.id, reminderId));
+      });
       await recordProviderOutcome(true);
-      await db.update(reminders).set({ status: 'SENT', sentAt: new Date(), providerMessageId: sent.providerMessageId }).where(eq(reminders.id, reminderId));
       await recordDelivery(target.customer.phoneE164, 'REMINDER', `reminder:${reminderId}`, sent.providerMessageId);
       await db.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Reminder Worker', action: 'REMINDER_SENT', entityType: 'REMINDER', entityId: reminderId, after: { reminderNumber: target.reminder.reminderNumber, providerMessageId: sent.providerMessageId }, timestamp: new Date() });
     } catch (error) {
@@ -210,9 +221,12 @@ const campaignWorker = new Worker(
     try {
       const verificationToken = await createVerificationToken();
       const expiresAt = new Date(Date.now() + Number(process.env.VERIFICATION_TOKEN_TTL_DAYS ?? 7) * 86400000);
-      await db.update(verificationSessions).set({ tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, expiresAt, verificationStatus: 'MESSAGE_SENT', updatedAt: new Date() }).where(eq(verificationSessions.id, target.session.id));
       const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
        const sent = await whatsapp.send({ phoneE164: target.customer.phoneE164, templateName: invitationTemplate.name, templateLanguage: invitationTemplate.language, templateParameters: [target.customer.name, verificationLink], idempotencyKey: `campaign-invitation:${itemId}` });
+      await db.transaction(async (tx) => {
+        await tx.update(reminders).set({ tokenInvalidatedAt: new Date() }).where(and(eq(reminders.sessionId, target.session.id), isNotNull(reminders.tokenId), isNull(reminders.tokenInvalidatedAt)));
+        await tx.update(verificationSessions).set({ tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, expiresAt, verificationStatus: 'MESSAGE_SENT', updatedAt: new Date() }).where(eq(verificationSessions.id, target.session.id));
+      });
       await recordProviderOutcome(true);
       await db.update(verificationCampaignItems).set({ status: 'SENT', sentAt: new Date(), providerMessageId: sent.providerMessageId, lastError: null, updatedAt: new Date() }).where(eq(verificationCampaignItems.id, itemId));
       await recordDelivery(target.customer.phoneE164, 'CAMPAIGN_INVITATION', `campaign-invitation:${itemId}`, sent.providerMessageId);

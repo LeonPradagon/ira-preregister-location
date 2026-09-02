@@ -11,6 +11,7 @@ const DEFAULT_VALIDATION_CONFIG: ValidationConfig = {
   GPS_MAX_ACCURACY_METERS: 30, HOME_RADIUS_METERS: 50, STREET_MATCH_THRESHOLD: 0.9,
   ADDRESS_SCORE_THRESHOLD: 0.9, MAX_LOCATION_ATTEMPTS: 5, MAX_REMINDERS_PER_SESSION: 3,
   COORDINATE_DISPLAY_DECIMALS: 6, VERIFICATION_TOKEN_TTL_DAYS: 7,
+  REMINDER_LINK_TTL_HOURS: 24,
   REMINDER_DEFAULT_1_HOURS: 2, REMINDER_DEFAULT_2_HOURS: 24, REMINDER_DEFAULT_3_HOURS: 24,
   ENABLE_CUSTOMER_OTP: false, ENABLE_IRA_COVERAGE: false, ENABLE_TICKETING: false,
   ENABLE_MANUAL_REVIEW: true, ENABLE_ADDRESS_EDIT: true, ENABLE_REMINDERS: true,
@@ -61,6 +62,7 @@ interface AppContextType {
   resendInvitation: (sessionId: string) => Promise<void>;
   revokeVerificationSession: (sessionId: string) => Promise<void>;
   performManualReview: (sessionId: string, decision: ReviewDecision, reasonCode: string, reviewNote: string) => Promise<void>;
+  updateAddressFromGps: (sessionId: string) => Promise<string[]>;
   sendManualReminder: (sessionId: string) => Promise<{ success: boolean; message: string }>;
   createCampaign: (name: string, customerIds?: string[], scheduledAt?: string, options?: { targetFilter?: { locationStatus: 'UNVERIFIED' | 'VERIFIED'; status?: CustomerStatus; search?: string }; batchSize?: number; sendWindowDays?: number }) => Promise<VerificationCampaign>;
   startCampaign: (campaignId: string) => Promise<void>;
@@ -293,9 +295,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const startCampaign = async (campaignId: string) => { assertCapability(currentAdmin?.role, 'createVerification'); await api.startCampaign(campaignId); setCampaigns((prev) => prev.map((campaign) => campaign.id === campaignId ? { ...campaign, status: 'RUNNING' } : campaign)); await refreshDashboard(); };
   const optOutCustomer = async (customerId: string) => { await api.optOutCustomer(customerId); setCustomers((prev) => prev.map((customer) => customer.id === customerId ? { ...customer, whatsappOptOutAt: new Date().toISOString() } : customer)); await refreshDashboard(); };
   const performManualReview = async (sessionId: string, decision: ReviewDecision, reasonCode: string, reviewNote: string) => { assertCapability(currentAdmin?.role, 'manualReview'); const result = await api.review(sessionId, { decision, reasonCode, reviewNote }); await loadVerificationDetail(sessionId); await refreshDashboard(); if (result.status !== 'LOCATION_VALID') setVerificationSessions((prev) => prev.map((session) => session.id === sessionId ? { ...session, verificationStatus: result.status as VerificationSession['verificationStatus'], updatedAt: new Date().toISOString() } : session)); };
+  const updateAddressFromGps = async (sessionId: string) => { assertCapability(currentAdmin?.role, 'manualReview'); const result = await api.addressFromGps(sessionId); await loadVerificationDetail(sessionId); await refreshDashboard(); return result.updatedFields; };
   const updateValidationConfig = async (newConfig: Partial<ValidationConfig>) => { assertCapability(currentAdmin?.role, 'changeValidationConfig'); const saved = await api.updateSettings(newConfig); setValidationConfig((prev) => ({ ...prev, ...saved } as ValidationConfig)); };
 
-  return <AppContext.Provider value={{ currentAdmin, loginAdmin, logoutAdmin, customers, customerPage, dashboardSummary, refreshDashboard, loadCustomerPage, loadCustomerDetail, loadVerificationDetail, addresses, verificationSessions, locationCaptures, verificationReviews, reminders, campaigns, auditLogs, outboxEvents, validationConfig, integrationConfigs, addCustomer, updateCustomer, deleteCustomer, getCustomerById, getCustomerAddresses, getCustomerSessions, createVerificationSession, resendInvitation, revokeVerificationSession, performManualReview, sendManualReminder, createCampaign, startCampaign, optOutCustomer, updateValidationConfig, theme, isDarkMode, setTheme: setThemeState, toggleTheme: () => setThemeState((prev) => prev === 'dark' ? 'light' : 'dark') }}>{children}</AppContext.Provider>;
+  return <AppContext.Provider value={{ currentAdmin, loginAdmin, logoutAdmin, customers, customerPage, dashboardSummary, refreshDashboard, loadCustomerPage, loadCustomerDetail, loadVerificationDetail, addresses, verificationSessions, locationCaptures, verificationReviews, reminders, campaigns, auditLogs, outboxEvents, validationConfig, integrationConfigs, addCustomer, updateCustomer, deleteCustomer, getCustomerById, getCustomerAddresses, getCustomerSessions, createVerificationSession, resendInvitation, revokeVerificationSession, performManualReview, updateAddressFromGps, sendManualReminder, createCampaign, startCampaign, optOutCustomer, updateValidationConfig, theme, isDarkMode, setTheme: setThemeState, toggleTheme: () => setThemeState((prev) => prev === 'dark' ? 'light' : 'dark') }}>{children}</AppContext.Provider>;
 };
 
 export const useApp = () => { const context = useContext(AppContext); if (!context) throw new Error('useApp must be used within an AppProvider'); return context; };

@@ -13,6 +13,7 @@ export interface RuntimeValidationConfig extends Record<string, unknown> {
   MAX_REMINDERS_PER_SESSION: number;
   COORDINATE_DISPLAY_DECIMALS: number;
   VERIFICATION_TOKEN_TTL_DAYS: number;
+  REMINDER_LINK_TTL_HOURS: number;
   REMINDER_DEFAULT_1_HOURS: number;
   REMINDER_DEFAULT_2_HOURS: number;
   REMINDER_DEFAULT_3_HOURS: number;
@@ -36,6 +37,7 @@ export class ValidationConfigService {
       MAX_REMINDERS_PER_SESSION: Number(process.env.MAX_REMINDERS_PER_SESSION ?? 3),
       COORDINATE_DISPLAY_DECIMALS: Number(process.env.COORDINATE_DISPLAY_DECIMALS ?? 6),
       VERIFICATION_TOKEN_TTL_DAYS: Number(process.env.VERIFICATION_TOKEN_TTL_DAYS ?? 7),
+      REMINDER_LINK_TTL_HOURS: Number(process.env.REMINDER_LINK_TTL_HOURS ?? 24),
       REMINDER_DEFAULT_1_HOURS: Number(process.env.REMINDER_DEFAULT_1_HOURS ?? 2),
       REMINDER_DEFAULT_2_HOURS: Number(process.env.REMINDER_DEFAULT_2_HOURS ?? 24),
       REMINDER_DEFAULT_3_HOURS: Number(process.env.REMINDER_DEFAULT_3_HOURS ?? 24),

@@ -183,7 +183,7 @@ export const ValidationSettingsView: React.FC = () => {
             <span>{t('settings.session')}</span>
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
             <div>
               <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
                 {t('settings.maxReminders')}
@@ -230,6 +230,22 @@ export const ValidationSettingsView: React.FC = () => {
                 className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
               />
               <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.decimalPrecisionHelp')}</p>
+            </div>
+
+            <div>
+              <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                {t('settings.reminderLinkLifetime')}
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="168"
+                disabled={!canEditSettings}
+                value={formData.REMINDER_LINK_TTL_HOURS}
+                onChange={(e) => handleChangeNumber('REMINDER_LINK_TTL_HOURS', parseInt(e.target.value) || 24)}
+                className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
+              />
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.reminderLinkLifetimeHelp')}</p>
             </div>
           </div>
         </div>

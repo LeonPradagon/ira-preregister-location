@@ -39,7 +39,7 @@ export class PublicVerificationController {
   async waitForHome(@Param('token') token: string, @Body() body: unknown) {
     const parsed = reminderSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
-    return this.verification.waitForHome(token, parsed.data.reminderPreference, parsed.data.scheduledAt);
+    return this.verification.waitForHome(token, parsed.data.reminderPreference, parsed.data.scheduledAt, parsed.data.reminderUntilAt);
   }
 
   @Post(':token/address-change')
@@ -67,6 +67,6 @@ export class PublicVerificationController {
   async reminder(@Param('token') token: string, @Body() body: unknown) {
     const parsed = reminderSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
-    return this.verification.waitForHome(token, parsed.data.reminderPreference, parsed.data.scheduledAt);
+    return this.verification.waitForHome(token, parsed.data.reminderPreference, parsed.data.scheduledAt, parsed.data.reminderUntilAt);
   }
 }

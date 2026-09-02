@@ -21,7 +21,7 @@ export class ApiClientError extends Error {
 }
 
 export interface PublicVerificationContextApi {
-  session: { id: string; status: string; expiresAt: string; customerConfirmationStatus: string; reminderCount: number };
+  session: { id: string; status: string; expiresAt: string; linkExpiresAt: string; customerConfirmationStatus: string; reminderCount: number };
   customer: { id: string; name: string; phoneE164: string };
   address: {
     id: string; rawAddress: string; province: string; city: string; district: string; subdistrict: string;
@@ -219,7 +219,7 @@ const publicVerificationApi = {
   confirm: (token: string, confirmed: boolean) => request<{ status: string }>(`/public/verifications/${encodeURIComponent(token)}/customer-confirmation`, { method: 'POST', body: JSON.stringify({ confirmed }) }),
   consent: (token: string) => request<{ status: string }>(`/public/verifications/${encodeURIComponent(token)}/consent`, { method: 'POST' }),
   submitLocation: (token: string, samples: unknown[]) => request<ServerValidationDecision>(`/public/verifications/${encodeURIComponent(token)}/location`, { method: 'POST', body: JSON.stringify({ samples }) }),
-  waitForHome: (token: string, reminder: { scheduledAt?: string; reminderPreference?: string }) => request<{ status: string; reminderNumber: number }>(`/public/verifications/${encodeURIComponent(token)}/wait-for-home`, { method: 'POST', body: JSON.stringify(reminder) }),
+  waitForHome: (token: string, reminder: { scheduledAt?: string; reminderPreference?: string; reminderUntilAt: string }) => request<{ status: string; reminderNumber: number; reminderCount: number; scheduledAt: string; reminderUntilAt: string }>(`/public/verifications/${encodeURIComponent(token)}/wait-for-home`, { method: 'POST', body: JSON.stringify(reminder) }),
   changeAddress: (token: string, address: unknown) => request<{ id: string; status: string }>(`/public/verifications/${encodeURIComponent(token)}/address-change`, { method: 'POST', body: JSON.stringify(address) }),
   lookupAddress: (token: string, address: unknown) => request<{ postalCode: string | null; formattedAddress: string }>(`/public/verifications/${encodeURIComponent(token)}/address-lookup`, { method: 'POST', body: JSON.stringify(address) }),
   addressStatus: (token: string, sameAddress: boolean) => request<{ status: string; sameAddress: boolean }>(`/public/verifications/${encodeURIComponent(token)}/address-status`, { method: 'POST', body: JSON.stringify({ sameAddress }) }),
@@ -250,6 +250,7 @@ const adminApi = {
   },
   verifications: (query: AdminListQuery = {}) => request<AdminPageApi<{ session: Record<string, unknown>; customer: Record<string, unknown> }>>(`/admin/verifications${queryString(query)}`),
   verification: (id: string) => request<Record<string, unknown>>(`/admin/verifications/${encodeURIComponent(id)}`),
+  addressFromGps: (id: string) => request<{ status: string; addressId: string; updatedFields: string[]; referenceLocation: { latitude: number; longitude: number } }>(`/admin/verifications/${encodeURIComponent(id)}/address-from-gps`, { method: 'POST' }),
   createVerification: (customerId: string, addressId: string) => request<{ sessionId: string; verificationLink: string; expiresAt: string }>(`/admin/customers/${encodeURIComponent(customerId)}/verifications`, { method: 'POST', body: JSON.stringify({ addressId }) }),
   createSimulationVerification: (customerId: string, addressId: string) => request<{ simulation: boolean; sessionId: string; recipient: { name: string; phoneE164: string }; templateName: string; language: string; message: string; verificationLink: string; referenceLocation: { latitude: number; longitude: number } | null; referencePrecision: string | null; simulationConfig: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number }; expiresAt: string }>(`/admin/customers/${encodeURIComponent(customerId)}/verifications/simulation`, { method: 'POST', body: JSON.stringify({ addressId }) }),
   resend: (id: string) => request<{ status: string; verificationLink: string; expiresAt: string }>(`/admin/verifications/${encodeURIComponent(id)}/resend`, { method: 'POST' }),

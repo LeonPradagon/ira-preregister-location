@@ -4,7 +4,7 @@ import { GpsSample } from '../../../src/common/contracts.js';
 
 const address: AddressEvidence = {
   id: 'address-1', province: 'Jawa Barat', city: 'Bandung', district: 'Coblong', subdistrict: 'Dago',
-  street: 'Jl. Ir H Juanda', houseNumber: '10', referenceLatitude: -6.884, referenceLongitude: 107.613,
+  street: 'Jl. Ir H Juanda', houseNumber: '10', postalCode: '40135', referenceLatitude: -6.884, referenceLongitude: 107.613,
   referencePrecision: 'HOUSE',
 };
 
@@ -88,6 +88,14 @@ describe('server validation engine', () => {
     }, config);
     expect(decision.result).toBe('MANUAL_REVIEW');
     expect(decision.reasonCodes).toContain('REFERENCE_LOCATION_MISSING');
+  });
+
+  it('does not label an unreferenced address as only a GPS accuracy failure', () => {
+    const decision = decideValidation([
+      sample(-6.2, 106.784, 35), sample(-6.20001, 106.78401, 36, 1), sample(-6.19999, 106.78399, 37, 2),
+    ], { ...address, houseNumber: 'UNKNOWN', postalCode: '00000', referenceLatitude: null, referenceLongitude: null, referencePrecision: 'UNKNOWN' }, reverseGeocode, config);
+    expect(decision.result).toBe('MANUAL_REVIEW');
+    expect(decision.reasonCodes).toEqual(expect.arrayContaining(['LOW_GPS_ACCURACY', 'REFERENCE_LOCATION_MISSING', 'ADDRESS_INCOMPLETE']));
   });
 
   it('routes incomplete addresses to manual review even when GPS and reference match', () => {

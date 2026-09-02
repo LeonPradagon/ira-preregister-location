@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { and, eq, gt, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { customerAddresses, customers, integrationOutbox, locationCaptures, reminders, validationResults, verificationSessions, auditLogs } from '../../db/schema/index.js';
 import { AddressChangeInput, AddressLookupInput, GpsSample, PublicVerificationContext } from '../../common/contracts.js';
@@ -8,7 +8,7 @@ import { DomainError, NotFoundError } from '../../common/errors.js';
 import { GeocodingPort, GeocodingResult } from '../../integrations/geocoding/geocoding.port.js';
 import { decideValidation, AddressEvidence, ReverseGeocodeEvidence } from '../validation/engine.js';
 import { assertTransition } from './state-machine.js';
-import { nextReminderNumber, ReminderPreference, scheduleReminderInTimezone } from '../reminders/reminder.policy.js';
+import { isReminderScheduledBeforeSessionExpiry, nextReminderNumber, ReminderPreference, scheduleReminderInTimezone, spreadReminderTimes } from '../reminders/reminder.policy.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
 import { parseVerificationToken, verifyVerificationToken } from './verification-token.js';
 const now = () => new Date();
@@ -40,13 +40,21 @@ export class VerificationService {
         session: verificationSessions,
         customer: customers,
         address: customerAddresses,
+        reminder: reminders,
         referenceLatitude: sql<number>`ST_Y(${customerAddresses.referenceLocation}::geometry)`,
         referenceLongitude: sql<number>`ST_X(${customerAddresses.referenceLocation}::geometry)`,
       })
       .from(verificationSessions)
       .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
       .innerJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
-      .where(and(eq(verificationSessions.tokenId, parsed.tokenId), isNull(verificationSessions.revokedAt), gt(verificationSessions.expiresAt, now())))
+      .leftJoin(reminders, eq(reminders.tokenId, verificationSessions.tokenId))
+      .where(and(
+        eq(verificationSessions.tokenId, parsed.tokenId),
+        isNull(verificationSessions.revokedAt),
+        gt(verificationSessions.expiresAt, now()),
+        isNull(reminders.tokenInvalidatedAt),
+        or(isNull(reminders.tokenExpiresAt), gt(reminders.tokenExpiresAt, now())),
+      ))
       .limit(1);
     if (!row) throw new NotFoundError('Verification link is invalid or expired');
     if (!row.session.tokenHash || !(await verifyVerificationToken(token, row.session.tokenHash))) throw new NotFoundError('Verification link is invalid or expired');
@@ -67,6 +75,7 @@ export class VerificationService {
         id: row.session.id,
         status: row.session.openedAt ? row.session.verificationStatus : 'LINK_OPENED',
         expiresAt: row.session.expiresAt.toISOString(),
+        linkExpiresAt: row.reminder?.tokenExpiresAt?.toISOString() ?? row.session.expiresAt.toISOString(),
         customerConfirmationStatus: row.session.customerConfirmationStatus,
         reminderCount: row.session.reminderCount,
       },
@@ -229,7 +238,7 @@ export class VerificationService {
     return { id: resultId, ...decision, capturedLocation: { ...decision.bestSample, coordinateText: `${decision.bestSample.latitude.toFixed(6)}, ${decision.bestSample.longitude.toFixed(6)}`, googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${decision.bestSample.latitude},${decision.bestSample.longitude}` } };
   }
 
-  async waitForHome(token: string, preference?: ReminderPreference, scheduledAtInput?: string) {
+  async waitForHome(token: string, preference?: ReminderPreference, scheduledAtInput?: string, reminderUntilAtInput?: string) {
     const row = await this.findByToken(token);
     const config = await this.validationConfig.get();
     const max = config.MAX_REMINDERS_PER_SESSION;
@@ -238,17 +247,26 @@ export class VerificationService {
     if (!reminderNumber) throw new DomainError('Reminder limit reached', 409, 'REMINDER_LIMIT_REACHED');
     const currentTime = now();
     const scheduledAt = scheduledAtInput ? new Date(scheduledAtInput) : scheduleReminderInTimezone(preference ?? 'DEFAULT', currentTime, process.env.REMINDER_TIMEZONE ?? 'Asia/Jakarta');
+    const reminderUntilAt = reminderUntilAtInput ? new Date(reminderUntilAtInput) : null;
     if (Number.isNaN(scheduledAt.getTime()) || scheduledAt <= currentTime) throw new DomainError('Reminder time must be in the future', 422, 'REMINDER_TIME_INVALID');
-    const nextStatus = reminderNumber >= max ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME';
+    if (!reminderUntilAt || Number.isNaN(reminderUntilAt.getTime()) || reminderUntilAt <= scheduledAt) throw new DomainError('Reminder end time must be after the first reminder', 422, 'REMINDER_RANGE_INVALID');
+    if (!isReminderScheduledBeforeSessionExpiry(scheduledAt, row.session.expiresAt)) throw new DomainError('Reminder time must be before the verification session expires', 422, 'REMINDER_TIME_EXCEEDS_SESSION');
+    if (!isReminderScheduledBeforeSessionExpiry(reminderUntilAt, row.session.expiresAt)) throw new DomainError('Reminder end time must be before the verification session expires', 422, 'REMINDER_TIME_EXCEEDS_SESSION');
+    const reminderTimes = spreadReminderTimes(scheduledAt, reminderUntilAt, max - row.session.reminderCount);
+    const finalReminderNumber = row.session.reminderCount + reminderTimes.length;
+    const nextStatus = finalReminderNumber >= max ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME';
     assertTransition(row.session.verificationStatus, nextStatus);
     await db.transaction(async (tx) => {
       const timestamp = now();
-      await tx.insert(reminders).values({ id: randomUUID(), sessionId: row.session.id, reminderNumber, channel: 'WHATSAPP', scheduledAt, status: 'SCHEDULED', messageText: `Halo ${row.customer.name}, pengingat ${reminderNumber} dari ${max}. Tautan verifikasi dibuat saat pengiriman.`, retryCount: 0, createdAt: timestamp });
-      await tx.update(verificationSessions).set({ reminderCount: reminderNumber, verificationStatus: nextStatus, updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
-      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'WAITING_FOR_HOME_SELECTED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, after: { preference: preference ?? 'CUSTOM', reminderNumber, scheduledAt: scheduledAt.toISOString() }, timestamp });
-      await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Reminder Scheduler', action: 'REMINDER_SCHEDULED', entityType: 'REMINDER', entityId: row.session.id, after: { reminderNumber, scheduledAt: scheduledAt.toISOString() }, timestamp });
+      await tx.insert(reminders).values(reminderTimes.map((time, index) => {
+        const reminderNumber = row.session.reminderCount + index + 1;
+        return { id: randomUUID(), sessionId: row.session.id, reminderNumber, channel: 'WHATSAPP', scheduledAt: time, status: 'SCHEDULED', messageText: `Halo ${row.customer.name}, pengingat ${reminderNumber} dari ${max}. Tautan baru berlaku maksimal ${config.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`, retryCount: 0, createdAt: timestamp };
+      }));
+      await tx.update(verificationSessions).set({ reminderCount: finalReminderNumber, verificationStatus: nextStatus, updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
+      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'WAITING_FOR_HOME_SELECTED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, after: { preference: preference ?? 'CUSTOM', reminderCount: finalReminderNumber, scheduledAt: scheduledAt.toISOString(), reminderUntilAt: reminderUntilAt.toISOString() }, timestamp });
+      await tx.insert(auditLogs).values(reminderTimes.map((time, index) => ({ actorUserId: 'system', actorName: 'Reminder Scheduler', action: 'REMINDER_SCHEDULED', entityType: 'REMINDER', entityId: row.session.id, after: { reminderNumber: row.session.reminderCount + index + 1, scheduledAt: time.toISOString(), reminderUntilAt: reminderUntilAt.toISOString() }, timestamp })));
     });
-    return { status: reminderNumber >= max ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME', reminderNumber };
+    return { status: nextStatus, reminderNumber: finalReminderNumber, reminderCount: finalReminderNumber, scheduledAt: scheduledAt.toISOString(), reminderUntilAt: reminderUntilAt.toISOString() };
   }
 
   async addressStatus(token: string, sameAddress: boolean) {
@@ -276,7 +294,7 @@ export class VerificationService {
     if (!config.ENABLE_ADDRESS_EDIT) throw new DomainError('Address edit is disabled', 409);
     if (row.session.verificationStatus !== 'ADDRESS_EDITING') assertTransition(row.session.verificationStatus, 'ADDRESS_EDITING');
     assertTransition('ADDRESS_EDITING', 'ADDRESS_PROPOSED');
-    const houseNumber = input.houseNumber?.trim() || 'TANPA NOMOR';
+    const houseNumber = input.houseNumber.trim();
     let geocode: GeocodingResult | null = null;
     try {
       geocode = await this.geocoding.forward(input);
@@ -288,7 +306,7 @@ export class VerificationService {
     await db.transaction(async (tx) => {
       await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'ADDRESS_CHANGE_STARTED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, before: { addressId: row.address.id, status: row.session.verificationStatus }, after: { status: 'ADDRESS_EDITING' }, timestamp });
       await tx.update(customerAddresses).set({ addressStatus: 'SUPERSEDED', isActive: false, validTo: timestamp, updatedAt: timestamp }).where(and(eq(customerAddresses.customerId, row.customer.id), eq(customerAddresses.addressType, 'PROPOSED'), eq(customerAddresses.isActive, true)));
-      await tx.insert(customerAddresses).values({ ...input, houseNumber, id: addressId, customerId: row.customer.id, addressType: 'PROPOSED', addressStatus: 'PROPOSED', rawAddress: [input.street, houseNumber !== 'TANPA NOMOR' && `No. ${houseNumber}`, input.block && `Blok ${input.block}`, input.subdistrict, input.district, input.city, input.province, input.postalCode].filter(Boolean).join(', '), referenceLocation: geocode ? { latitude: geocode.latitude, longitude: geocode.longitude } : null, referenceSource: geocode ? 'GEOCODED' : 'CUSTOMER_PROPOSED', referencePrecision: geocode?.precision ?? 'UNKNOWN', referenceConfidence: geocode?.confidence.toFixed(3) ?? '0.000', geocodingProvider: geocode?.provider ?? null, providerPlaceId: geocode?.providerPlaceId ?? null, geocodedAt: geocode ? timestamp : null, isActive: true, isVerified: false, validFrom: timestamp, createdAt: timestamp, updatedAt: timestamp });
+      await tx.insert(customerAddresses).values({ ...input, houseNumber, id: addressId, customerId: row.customer.id, addressType: 'PROPOSED', addressStatus: 'PROPOSED', rawAddress: [input.street, `No. ${houseNumber}`, input.block && `Blok ${input.block}`, input.addressDetail, input.landmark && `Patokan: ${input.landmark}`, input.subdistrict, input.district, input.city, input.province, input.postalCode].filter(Boolean).join(', '), referenceLocation: geocode ? { latitude: geocode.latitude, longitude: geocode.longitude } : null, referenceSource: geocode ? 'GEOCODED' : 'CUSTOMER_PROPOSED', referencePrecision: geocode?.precision ?? 'UNKNOWN', referenceConfidence: geocode?.confidence.toFixed(3) ?? '0.000', geocodingProvider: geocode?.provider ?? null, providerPlaceId: geocode?.providerPlaceId ?? null, geocodedAt: geocode ? timestamp : null, isActive: true, isVerified: false, validFrom: timestamp, createdAt: timestamp, updatedAt: timestamp });
       await tx.update(verificationSessions).set({ currentAddressId: addressId, verificationStatus: 'ADDRESS_PROPOSED', updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
       await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'ADDRESS_PROPOSED', entityType: 'ADDRESS', entityId: addressId, after: { sessionId: row.session.id, status: 'PROPOSED' }, timestamp });
     });

@@ -331,6 +331,13 @@ ALTER TABLE "verification_campaigns" ADD COLUMN IF NOT EXISTS "materialized_coun
 -- statement-breakpoint
 ALTER TABLE "verification_sessions" ALTER COLUMN "token_hash" DROP NOT NULL;
 -- statement-breakpoint
+ALTER TABLE "reminders" ADD COLUMN IF NOT EXISTS "token_id" varchar(64);
+ALTER TABLE "reminders" ADD COLUMN IF NOT EXISTS "token_hash" varchar(128);
+ALTER TABLE "reminders" ADD COLUMN IF NOT EXISTS "token_expires_at" timestamptz;
+ALTER TABLE "reminders" ADD COLUMN IF NOT EXISTS "token_invalidated_at" timestamptz;
+CREATE UNIQUE INDEX IF NOT EXISTS "reminders_token_id_idx" ON "reminders" ("token_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "reminders_token_hash_idx" ON "reminders" ("token_hash");
+-- statement-breakpoint
 ALTER TABLE "validation_results" ALTER COLUMN "distance_to_reference_meters" DROP NOT NULL;
 -- statement-breakpoint
 ALTER TABLE "validation_results" ALTER COLUMN "reference_latitude" DROP NOT NULL;

@@ -16,6 +16,7 @@ export const confirmationSchema = z.object({ confirmed: z.boolean() });
 export const reminderSchema = z.object({
   reminderPreference: z.enum(['IN_1_HOUR', 'TONIGHT', 'TOMORROW_MORNING', 'DEFAULT']).optional(),
   scheduledAt: z.string().datetime().optional(),
+  reminderUntilAt: z.string().datetime(),
 }).refine((input) => Boolean(input.reminderPreference) !== Boolean(input.scheduledAt), {
   message: 'Provide either reminderPreference or scheduledAt',
   path: ['scheduledAt'],
@@ -47,11 +48,9 @@ export const addressChangeSchema = z.object({
   city: z.string().trim().min(1).max(128),
   district: z.string().trim().min(1).max(128),
   subdistrict: z.string().trim().min(1).max(128),
-  postalCode: z.string().trim().min(3).max(16),
+  postalCode: z.string().trim().regex(/^\d{5}$/, 'Kode pos harus terdiri dari 5 digit'),
   street: z.string().trim().min(1).max(255),
-  // Some Indonesian addresses genuinely have no official house number.
-  // Store those explicitly as TANPA NOMOR and route them to manual review.
-  houseNumber: z.string().trim().max(64).optional(),
+  houseNumber: z.string().trim().min(1).max(64).refine((value) => !['unknown', 'tidak diketahui', 'tanpa nomor', 'n/a', 'na', '-', '00000'].includes(value.toLowerCase()), 'Nomor rumah wajib diisi dengan nomor yang valid'),
   rt: z.string().trim().max(8).optional(),
   rw: z.string().trim().max(8).optional(),
   building: z.string().trim().max(255).optional(),
@@ -158,6 +157,7 @@ export const validationConfigSchema = z.object({
   MAX_REMINDERS_PER_SESSION: z.number().int().min(1).max(3).optional(),
   COORDINATE_DISPLAY_DECIMALS: z.number().int().min(0).max(8).optional(),
   VERIFICATION_TOKEN_TTL_DAYS: z.number().int().positive().optional(),
+  REMINDER_LINK_TTL_HOURS: z.number().positive().optional(),
   REMINDER_DEFAULT_1_HOURS: z.number().positive().optional(),
   REMINDER_DEFAULT_2_HOURS: z.number().positive().optional(),
   REMINDER_DEFAULT_3_HOURS: z.number().positive().optional(),
@@ -189,6 +189,7 @@ export interface PublicVerificationContext {
     id: string;
     status: string;
     expiresAt: string;
+    linkExpiresAt: string;
     customerConfirmationStatus: string;
     reminderCount: number;
   };

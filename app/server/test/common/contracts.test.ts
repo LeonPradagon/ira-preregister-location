@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { campaignCreateSchema, customerCreateSchema, locationSamplesSchema } from '../../src/common/contracts.js';
+import { addressChangeSchema, campaignCreateSchema, customerCreateSchema, locationSamplesSchema, reminderSchema } from '../../src/common/contracts.js';
 
 describe('API contracts', () => {
   it('accepts a master customer address with E.164 phone and coordinates', () => {
@@ -68,6 +68,18 @@ describe('API contracts', () => {
     }
   });
 
+  it('requires a five-digit postal code and a real house number', () => {
+    const baseAddress = {
+      province: 'DKI Jakarta', city: 'Jakarta Barat', district: 'Palmerah', subdistrict: 'Palmerah',
+      postalCode: '11540', street: 'Jl. KH Syahdan', houseNumber: '10',
+    };
+
+    expect(addressChangeSchema.safeParse({ ...baseAddress, houseNumber: '' }).success).toBe(false);
+    expect(addressChangeSchema.safeParse({ ...baseAddress, houseNumber: 'TANPA NOMOR' }).success).toBe(false);
+    expect(addressChangeSchema.safeParse({ ...baseAddress, postalCode: '1154' }).success).toBe(false);
+    expect(addressChangeSchema.safeParse({ ...baseAddress, addressDetail: 'Blok A', landmark: 'Dekat pos satpam' }).success).toBe(true);
+  });
+
   it('accepts a filter campaign without sending customer IDs to the API', () => {
     const result = campaignCreateSchema.safeParse({ name: 'All unverified', targetFilter: { locationStatus: 'UNVERIFIED' } });
     expect(result.success).toBe(true);
@@ -77,5 +89,14 @@ describe('API contracts', () => {
   it('requires exactly one campaign target source', () => {
     expect(campaignCreateSchema.safeParse({ name: 'Invalid' }).success).toBe(false);
     expect(campaignCreateSchema.safeParse({ name: 'Invalid', customerIds: [], targetFilter: { locationStatus: 'UNVERIFIED' } }).success).toBe(false);
+  });
+
+  it('requires a reminder range endpoint', () => {
+    const valid = reminderSchema.safeParse({
+      scheduledAt: '2026-09-02T05:00:00.000Z',
+      reminderUntilAt: '2026-09-04T05:00:00.000Z',
+    });
+    expect(valid.success).toBe(true);
+    expect(reminderSchema.safeParse({ scheduledAt: '2026-09-02T05:00:00.000Z' }).success).toBe(false);
   });
 });

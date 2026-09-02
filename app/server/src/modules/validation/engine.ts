@@ -149,6 +149,7 @@ export function decideValidation(
     : undefined;
   const addressIncomplete = [address.province, address.city, address.district, address.subdistrict, address.street, address.houseNumber, address.postalCode]
     .some((value) => isPlaceholderAddressValue(value)) || isOnlyPlusCode(address.street);
+  const addressNeedsManualReview = addressIncomplete || !hasReferenceLocation || !precisionOk;
   const addressScore = Math.round((Number(districtMatch) * 0.2 + Number(subdistrictMatch) * 0.25 + streetScore * 0.35 + (houseNumberMatch === undefined ? 0.2 : Number(houseNumberMatch) * 0.2)) * 100) / 100;
   const distanceFromReferenceMeters = hasReferenceLocation ? distanceMeters(bestSample, {
     latitude: address.referenceLatitude!,
@@ -168,14 +169,19 @@ export function decideValidation(
   if (distanceFromReferenceMeters != null && distanceFromReferenceMeters > config.homeRadiusMeters) reasonCodes.push('HOME_RADIUS_EXCEEDED');
 
   let result: ValidationResult = 'MANUAL_REVIEW';
-  if (bestSample.accuracyMeters > config.gpsMaxAccuracyMeters) result = 'LOW_GPS_ACCURACY';
+  // An incomplete/unreferenced address cannot be proven automatically, even
+  // when the device also reports a weak accuracy estimate. Keep the GPS
+  // signal in reasonCodes, but make the actionable outcome manual review so
+  // Ops fixes the address/reference instead of rejecting the customer as
+  // being in the wrong place.
+  if (addressNeedsManualReview) result = 'MANUAL_REVIEW';
+  else if (bestSample.accuracyMeters > config.gpsMaxAccuracyMeters) result = 'LOW_GPS_ACCURACY';
   else if (spreadMeters > 100) result = 'MANUAL_REVIEW';
   else if (precisionOk && provinceMatch && cityMatch && districtMatch && subdistrictMatch && streetScore >= config.streetMatchThreshold && distanceFromReferenceMeters != null && distanceFromReferenceMeters <= config.homeRadiusMeters && addressScore >= config.addressScoreThreshold) result = 'LOCATION_VALID';
   // Without a trusted reference coordinate we cannot calculate whether the
   // customer is at the registered home. This is not proof of a mismatch.
   else if (!hasReferenceLocation || !precisionOk) result = 'MANUAL_REVIEW';
   else if ((distanceFromReferenceMeters != null && distanceFromReferenceMeters > config.homeRadiusMeters) || addressScore < 0.6 || !provinceMatch || !cityMatch) result = 'LOCATION_MISMATCH';
-  else if (addressIncomplete) result = 'MANUAL_REVIEW';
   if (result === 'LOCATION_VALID') reasonCodes.push('LOCATION_VALID');
   if (result === 'MANUAL_REVIEW') reasonCodes.push('MANUAL_REVIEW_REQUIRED');
   return { result, bestSample, sampleSpreadMeters: spreadMeters, distanceFromReferenceMeters, addressScore, provinceMatch, cityMatch, districtMatch, subdistrictMatch, streetScore, houseNumberMatch, reasonCodes, referencePrecision: address.referencePrecision, reverseGeocode };

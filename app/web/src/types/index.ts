@@ -190,6 +190,7 @@ export interface VerificationSession {
   customerId: string;
   currentAddressId: string;
   expiresAt: string;
+  linkExpiresAt?: string;
   revokedAt?: string;
   verificationStatus: VerificationStatus;
   customerConfirmationStatus: CustomerConfirmationStatus;
@@ -356,6 +357,7 @@ export interface ValidationConfig {
   MAX_REMINDERS_PER_SESSION: number;
   COORDINATE_DISPLAY_DECIMALS: number;
   VERIFICATION_TOKEN_TTL_DAYS: number;
+  REMINDER_LINK_TTL_HOURS: number;
   REMINDER_DEFAULT_1_HOURS: number;
   REMINDER_DEFAULT_2_HOURS: number;
   REMINDER_DEFAULT_3_HOURS: number;

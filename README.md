@@ -50,6 +50,8 @@ npm run db:seed
 npm run infra:worker
 ```
 
+`npm run db:migrate` menjalankan migration SQL bernomor secara berurutan dan mencatatnya di tabel `app_migrations`. Migration `0001_wilayah_regions.sql` mengisi 91.599 kode wilayah dari [cahyadsn/wilayah](https://github.com/cahyadsn/wilayah), sedangkan `0002_wilayah_postal_codes.sql` mengisi 83.762 mapping kode pos dari [cahyadsn/wilayah_kodepos](https://github.com/cahyadsn/wilayah_kodepos). Data di-upsert berdasarkan kode sehingga aman untuk deploy ulang.
+
 Development Compose memakai PostgreSQL host port `5433` agar tidak bentrok dengan instalasi PostgreSQL Windows yang umum memakai `5432`. Ubah `$env:POSTGRES_PORT` dan `DATABASE_URL` di `app/server/.env` bersama-sama bila ingin memakai port lain.
 
 Perintah backend akan membuat `app/server/.env` dari `.env.example` jika file tersebut belum ada. Untuk mode production, isi secret dan endpoint provider sendiri; jangan memakai nilai lokal.
@@ -98,7 +100,7 @@ Login UI selalu menggunakan Better Auth melalui API. Gunakan akun seed `admin@ex
 
 Admin dapat membuat campaign dari customer belum terverifikasi melalui pilihan per halaman atau filter seluruh eligible. API tidak membuat satu transaksi besar: worker melakukan materialisasi target per `batchSize`, membuat token hanya saat item akan dikirim, lalu mengatur jadwal sepanjang `sendWindowDays`. Status item mencakup `PENDING`, `PROCESSING`, `SENT`, `DELIVERED`, `READ`, `FAILED`, `PROVIDER_UNAVAILABLE`, dan `OPTED_OUT`.
 
-Link reminder meminta customer mengonfirmasi apakah masih tinggal di alamat yang sama. Jika alamat berubah, alamat baru berstatus `PROPOSED` sampai lolos validasi GPS. Pilihan reminder tersedia sebagai 1 jam lagi, malam ini, atau besok pagi dan dijadwalkan backend memakai `REMINDER_TIMEZONE`.
+Link reminder meminta customer mengonfirmasi apakah masih tinggal di alamat yang sama. Jika alamat berubah, alamat baru berstatus `PROPOSED` sampai lolos validasi GPS. Customer memilih waktu reminder pertama dan batas waktu reminder terakhir; maksimal 3 reminder dibagi merata dalam rentang tersebut. Pilihan reminder tersedia sebagai 1 jam lagi, malam ini, atau besok pagi dan dijadwalkan backend memakai `REMINDER_TIMEZONE`. Satu sesi dibatasi maksimal 3 reminder. Setiap reminder yang berhasil dikirim membuat link baru; link sebelumnya langsung tidak berlaku. Link reminder berlaku maksimal `REMINDER_LINK_TTL_HOURS` (default 24 jam) atau sampai sesi berakhir, mana yang lebih dulu. Waktu reminder juga wajib dipilih sebelum sesi berakhir.
 
 ## WhatsApp anti-spam guardrails
 

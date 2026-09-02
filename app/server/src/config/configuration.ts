@@ -19,6 +19,7 @@ export const envSchema = z.object({
   MAX_REMINDERS_PER_SESSION: z.coerce.number().int().min(1).max(3).default(3),
   COORDINATE_DISPLAY_DECIMALS: z.coerce.number().int().min(0).max(8).default(6),
   VERIFICATION_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
+  REMINDER_LINK_TTL_HOURS: z.coerce.number().positive().default(24),
   VERIFICATION_TOKEN_BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
   REMINDER_DEFAULT_1_HOURS: z.coerce.number().positive().default(2),
   REMINDER_DEFAULT_2_HOURS: z.coerce.number().positive().default(24),
