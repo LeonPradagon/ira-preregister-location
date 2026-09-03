@@ -42,7 +42,8 @@ export type ReferencePrecision =
   | 'STREET'
   | 'AREA'
   | 'DISTRICT'
-  | 'CITY';
+  | 'CITY'
+  | 'UNKNOWN';
 
 export interface Coordinate {
   latitude: number;

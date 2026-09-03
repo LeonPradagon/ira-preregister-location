@@ -63,7 +63,7 @@ describe('server validation engine', () => {
     expect(decision.reasonCodes).toContain('REFERENCE_LOCATION_MISSING');
   });
 
-  it('normalizes Indonesian administrative aliases and adjacent OSM levels', () => {
+  it('normalizes Indonesian administrative aliases on their canonical levels', () => {
     const decision = decideValidation([
       sample(-6.2, 106.784), sample(-6.20001, 106.78401, 12, 1), sample(-6.19999, 106.78399, 14, 2),
     ], {
@@ -71,7 +71,7 @@ describe('server validation engine', () => {
       province: 'Daerah Khusus Ibukota Jakarta', city: 'Kota Administrasi Jakarta Barat', district: 'Pal Merah', subdistrict: 'Palmerah',
       street: 'JL KH Syahdan', houseNumber: 'No.10A', referenceLatitude: -6.2, referenceLongitude: 106.784,
     }, {
-      province: '', city: 'Daerah Khusus Ibukota Jakarta', district: 'Jakarta Barat', subdistrict: 'Palmerah', street: 'Jalan KH. Syahdan', formattedAddress: 'Jalan KH. Syahdan, Palmerah, Jakarta Barat',
+      province: 'DKI Jakarta', city: 'Jakarta Barat', district: 'Palmerah', subdistrict: 'Palmerah', street: 'Jalan KH. Syahdan', formattedAddress: 'Jalan KH. Syahdan, Palmerah, Jakarta Barat',
     }, config);
     expect(decision.provinceMatch).toBe(true);
     expect(decision.cityMatch).toBe(true);
@@ -80,14 +80,70 @@ describe('server validation engine', () => {
     expect(decision.result).toBe('LOCATION_VALID');
   });
 
-  it('routes an address without a trusted reference to manual review, not mismatch', () => {
+  it('does not treat shifted administrative levels as a match', () => {
+    const decision = decideValidation([
+      sample(-6.2, 106.784), sample(-6.20001, 106.78401, 12, 1), sample(-6.19999, 106.78399, 14, 2),
+    ], {
+      ...address,
+      province: 'Daerah Khusus Ibukota Jakarta', city: 'Kota Administrasi Jakarta Utara', district: 'Penjaringan', subdistrict: 'Kamal Muara',
+      street: 'Jalan Kamal Muara VI', referenceLatitude: -6.2, referenceLongitude: 106.784,
+    }, {
+      province: '', city: 'Daerah Khusus Ibukota Jakarta', district: 'Jakarta Utara', subdistrict: 'Penjaringan', street: 'Jalan Kamal Muara VI', formattedAddress: 'Jalan Kamal Muara VI, Penjaringan, Jakarta Utara',
+    }, config);
+    expect(decision.cityMatch).toBe(false);
+    expect(decision.districtMatch).toBe(false);
+    expect(decision.subdistrictMatch).toBe(false);
+    expect(decision.result).toBe('LOCATION_MISMATCH');
+  });
+
+  it('treats a similar street name as a variation when administrative levels match', () => {
+    const decision = decideValidation([
+      sample(-6.127123, 106.744726), sample(-6.127124, 106.744727, 12, 1), sample(-6.127122, 106.744725, 14, 2),
+    ], {
+      ...address,
+      province: 'DKI Jakarta', city: 'Kota Administrasi Jakarta Utara', district: 'Penjaringan', subdistrict: 'Kamal Muara',
+      street: 'Jalan Kamal Muara 7', houseNumber: '6', postalCode: '14470', referenceLatitude: null, referenceLongitude: null, referencePrecision: 'UNKNOWN',
+    }, {
+      province: 'DKI Jakarta', city: 'Jakarta Utara', district: 'Penjaringan', subdistrict: 'Kamal Muara', street: 'Jalan Kamal Muara VI', formattedAddress: 'Jalan Kamal Muara VI, Kamal Muara',
+    }, config);
+    expect(decision.provinceMatch).toBe(true);
+    expect(decision.cityMatch).toBe(true);
+    expect(decision.districtMatch).toBe(true);
+    expect(decision.subdistrictMatch).toBe(true);
+    expect(decision.streetScore).toBe(0.75);
+    expect(decision.reasonCodes).toContain('STREET_VARIATION');
+    expect(decision.reasonCodes).not.toContain('STREET_MISMATCH');
+    expect(decision.result).toBe('MANUAL_REVIEW');
+  });
+
+  it('routes an address without a trusted reference to manual review when reverse GPS matches', () => {
+    const decision = decideValidation([
+      sample(-6.2, 106.784), sample(-6.20001, 106.78401, 12, 1), sample(-6.19999, 106.78399, 14, 2),
+    ], { ...address, referenceLatitude: null, referenceLongitude: null, referencePrecision: 'UNKNOWN' }, reverseGeocode, config);
+    expect(decision.result).toBe('MANUAL_REVIEW');
+    expect(decision.reasonCodes).toContain('REFERENCE_LOCATION_MISSING');
+  });
+
+  it('routes a complete address mismatch to mismatch even without a master coordinate', () => {
     const decision = decideValidation([
       sample(-6.2, 106.784), sample(-6.20001, 106.78401, 12, 1), sample(-6.19999, 106.78399, 14, 2),
     ], { ...address, referenceLatitude: null, referenceLongitude: null, referencePrecision: 'UNKNOWN' }, {
       province: 'Daerah Khusus Ibukota Jakarta', city: 'Jakarta Barat', district: 'Palmerah', subdistrict: 'Palmerah', street: 'Jalan KH Syahdan', formattedAddress: 'Jalan KH Syahdan, Palmerah',
     }, config);
-    expect(decision.result).toBe('MANUAL_REVIEW');
-    expect(decision.reasonCodes).toContain('REFERENCE_LOCATION_MISSING');
+    expect(decision.result).toBe('LOCATION_MISMATCH');
+    expect(decision.reasonCodes).toContain('DISTRICT_MISMATCH');
+    expect(decision.reasonCodes).toContain('STREET_MISMATCH');
+    expect(decision.reasonCodes).not.toContain('MANUAL_REVIEW_REQUIRED');
+  });
+
+  it('routes a GPS point outside the home radius to mismatch before address review', () => {
+    const decision = decideValidation([
+      sample(-6.88, 107.613), sample(-6.88001, 107.61301, 12, 1), sample(-6.87999, 107.61299, 14, 2),
+    ], { ...address, referencePrecision: 'STREET' }, reverseGeocode, config);
+    expect(decision.distanceFromReferenceMeters).toBeGreaterThan(config.homeRadiusMeters);
+    expect(decision.result).toBe('LOCATION_MISMATCH');
+    expect(decision.reasonCodes).toContain('HOME_RADIUS_EXCEEDED');
+    expect(decision.reasonCodes).not.toContain('MANUAL_REVIEW_REQUIRED');
   });
 
   it('does not label an unreferenced address as only a GPS accuracy failure', () => {

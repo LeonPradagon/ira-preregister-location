@@ -7,6 +7,10 @@ import {
 import { assertCapability } from '../lib/accessControl';
 import { AdminDashboardApi, api } from '../lib/apiClient';
 
+type NewCustomerAddress = Omit<CustomerAddress, 'id' | 'customerId' | 'createdAt' | 'updatedAt' | 'isActive' | 'isVerified' | 'referenceLocation'> & {
+  referenceLocation?: CustomerAddress['referenceLocation'];
+};
+
 const DEFAULT_VALIDATION_CONFIG: ValidationConfig = {
   GPS_MAX_ACCURACY_METERS: 30, HOME_RADIUS_METERS: 50, STREET_MATCH_THRESHOLD: 0.9,
   ADDRESS_SCORE_THRESHOLD: 0.9, MAX_LOCATION_ATTEMPTS: 5, MAX_REMINDERS_PER_SESSION: 3,
@@ -52,7 +56,7 @@ interface AppContextType {
   outboxEvents: IntegrationOutboxEvent[];
   validationConfig: ValidationConfig;
   integrationConfigs: IntegrationConfigs;
-  addCustomer: (customerData: Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>, addressData: Omit<CustomerAddress, 'id' | 'customerId' | 'createdAt' | 'updatedAt' | 'isActive' | 'isVerified'>) => Promise<Customer>;
+  addCustomer: (customerData: Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>, addressData: NewCustomerAddress) => Promise<Customer>;
   updateCustomer: (customerId: string, body: unknown) => Promise<Customer>;
   deleteCustomer: (customerId: string) => Promise<void>;
   getCustomerById: (id: string) => Customer | undefined;
@@ -259,7 +263,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (Array.isArray(raw.audits)) setAuditLogs((previous) => [...raw.audits as AuditLog[], ...previous.filter((item) => item.entityId !== session.id)]);
   };
 
-  const addCustomer = async (customerData: Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>, addressData: Omit<CustomerAddress, 'id' | 'customerId' | 'createdAt' | 'updatedAt' | 'isActive' | 'isVerified'>): Promise<Customer> => {
+  const addCustomer = async (customerData: Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>, addressData: NewCustomerAddress): Promise<Customer> => {
     const payload = await api.createCustomer({ ...customerData, address: addressData }); const mappedAddress = mapApiAddress(payload.address as Record<string, unknown>); const customer = { ...mapApiCustomer(payload.customer as Record<string, unknown>), activeAddress: mappedAddress }; setCustomers((prev) => [customer, ...prev]); setCustomerPage((prev) => { const total = prev.total + 1; return { ...prev, items: [customer, ...prev.items].slice(0, prev.pageSize), total, totalPages: Math.ceil(total / prev.pageSize) }; }); setAddresses((prev) => [mappedAddress, ...prev]); return customer;
   };
 
@@ -278,9 +282,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteCustomer = async (customerId: string): Promise<void> => {
     assertCapability(currentAdmin?.role, 'manageCustomers');
     await api.deleteCustomer(customerId);
-    const updatedAt = new Date().toISOString();
-    setCustomers((prev) => prev.map((item) => item.id === customerId ? { ...item, status: 'SUSPENDED', updatedAt } : item));
-    setCustomerPage((prev) => ({ ...prev, items: prev.items.map((item) => item.id === customerId ? { ...item, status: 'SUSPENDED', updatedAt } : item) }));
+    const deletedSessionIds = new Set(verificationSessions.filter((item) => item.customerId === customerId).map((item) => item.id));
+    setCustomers((prev) => prev.filter((item) => item.id !== customerId));
+    setCustomerPage((prev) => {
+      const total = Math.max(0, prev.total - 1);
+      return { ...prev, items: prev.items.filter((item) => item.id !== customerId), total, totalPages: Math.max(1, Math.ceil(total / prev.pageSize)) };
+    });
+    setAddresses((prev) => prev.filter((item) => item.customerId !== customerId));
+    setVerificationSessions((prev) => prev.filter((item) => item.customerId !== customerId));
+    setLocationCaptures((prev) => prev.filter((item) => !deletedSessionIds.has(item.sessionId)));
+    setVerificationReviews((prev) => prev.filter((item) => !deletedSessionIds.has(item.sessionId)));
+    setReminders((prev) => prev.filter((item) => !deletedSessionIds.has(item.sessionId)));
     await refreshDashboard();
   };
 

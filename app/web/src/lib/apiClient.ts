@@ -24,7 +24,7 @@ export interface PublicVerificationContextApi {
   session: { id: string; status: string; expiresAt: string; linkExpiresAt: string; customerConfirmationStatus: string; reminderCount: number };
   customer: { id: string; name: string; phoneE164: string };
   address: {
-    id: string; rawAddress: string; province: string; city: string; district: string; subdistrict: string;
+    id: string; addressType: string; rawAddress: string; province: string; city: string; district: string; subdistrict: string;
     street: string; houseNumber: string; referencePrecision: string; referenceLocation?: { latitude: number; longitude: number } | null; simulationConfig?: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number; manualReview?: boolean };
   };
 }
@@ -76,8 +76,17 @@ apiClient.interceptors.response.use(
       : typeof body?.message === 'string'
         ? body.message
         : undefined;
+    const structuredMessage = body?.message && typeof body.message === 'object' && !Array.isArray(body.message)
+      ? Object.entries(body.message).flatMap(([section, value]) => {
+        if (Array.isArray(value)) return value.map((item) => `${section}: ${String(item)}`);
+        if (value && typeof value === 'object') return Object.entries(value).flatMap(([field, messages]) => Array.isArray(messages) ? messages.map((item) => `${field}: ${String(item)}`) : [`${field}: ${String(messages)}`]);
+        return [`${section}: ${String(value)}`];
+      }).join(', ')
+      : undefined;
+    const message = body?.error?.message || topLevelMessage || structuredMessage
+      || (!error.response ? 'Server backend tidak dapat dihubungi. Pastikan npm run dev:server sedang berjalan di port 3000.' : 'Permintaan tidak dapat diproses. Silakan coba lagi.');
     return Promise.reject(new ApiClientError(
-      body?.error?.message || topLevelMessage || 'Permintaan tidak dapat diproses. Silakan coba lagi.',
+      message,
       error.response?.status,
       body?.error?.code,
       typeof responseCorrelationId === 'string' ? responseCorrelationId : undefined,

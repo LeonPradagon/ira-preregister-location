@@ -51,6 +51,28 @@ describe('OSM Nominatim geocoding adapter', () => {
 
     const result = await new OsmGeocodingAdapter().reverse(-6.2008, 106.7840);
 
-    expect(result).toMatchObject({ province: 'Daerah Khusus Ibukota Jakarta', city: 'Jakarta Barat', district: 'Jakarta Barat', subdistrict: 'Palmerah' });
+    expect(result).toMatchObject({ province: 'DKI Jakarta', city: 'Jakarta Barat', district: 'Palmerah', subdistrict: 'Palmerah' });
+  });
+
+  it('keeps Jakarta municipality, district, and village in the correct levels', async () => {
+    process.env.OSM_NOMINATIM_BASE_URL = 'https://nominatim.test';
+    vi.spyOn(providerHttpClient, 'get').mockResolvedValue({
+      data: {
+        place_id: 789,
+        lat: '-6.127123',
+        lon: '106.744726',
+        display_name: 'Jalan Kamal Muara VI, Kamal Muara, Penjaringan, Jakarta Utara, Indonesia',
+        addresstype: 'road',
+        address: {
+          state: 'Daerah Khusus Ibukota Jakarta', city: 'Daerah Khusus Ibukota Jakarta',
+          district: 'Jakarta Utara', city_district: 'Jakarta Utara', suburb: 'Penjaringan',
+          village: 'Kamal Muara', road: 'Jalan Kamal Muara VI', postcode: '14470',
+        },
+      },
+    } as never);
+
+    const result = await new OsmGeocodingAdapter().reverse(-6.127123, 106.744726);
+
+    expect(result).toMatchObject({ province: 'DKI Jakarta', city: 'Jakarta Utara', district: 'Penjaringan', subdistrict: 'Kamal Muara', street: 'Jalan Kamal Muara VI', postalCode: '14470' });
   });
 });

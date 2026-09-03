@@ -2,6 +2,7 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import axios from 'axios';
 import { providerErrorMessage, providerHttpClient } from '../../common/http/provider-http.client.js';
 import { AddressLookupInput } from '../../common/contracts.js';
+import { displayProvinceName } from '../../common/region-names.js';
 import { GeocodingPort, GeocodingResult } from './geocoding.port.js';
 
 type NominatimResult = {
@@ -16,6 +17,9 @@ type NominatimResult = {
 };
 
 const first = (...values: Array<string | undefined>): string => values.find((value) => Boolean(value?.trim()))?.trim() ?? '';
+
+const jakartaMunicipalityPattern = /^(?:kota administrasi\s+)?jakarta\s+(barat|pusat|selatan|timur|utara|kepulauan seribu)$/i;
+const isJakartaMunicipality = (value?: string): boolean => Boolean(value?.trim() && jakartaMunicipalityPattern.test(value.trim()));
 
 function precisionFor(result: NominatimResult): GeocodingResult['precision'] {
   const type = first(result.addresstype, result.type).toLowerCase();
@@ -37,9 +41,20 @@ function mapResult(result: NominatimResult): GeocodingResult {
   const city = first(address.city, address.municipality, address.town, address.county);
   const jakartaAdministrativeCity = /^(dki jakarta|daerah khusus ibukota jakarta)$/i.test(city);
   // In Jakarta Nominatim commonly returns the province in `city` and the
-  // actual city/administrative municipality in `state_district`.
+  // actual city/administrative municipality in `state_district`, `district`,
+  // or `city_district`, depending on the mapped area.
+  const jakartaMunicipality = [address.state_district, address.district, address.city_district]
+    .find((value) => isJakartaMunicipality(value));
   const province = first(address.state, address.province, jakartaAdministrativeCity ? city : undefined);
-  const resolvedCity = first(jakartaAdministrativeCity ? address.state_district : undefined, city, address.state_district);
+  const resolvedCity = first(jakartaAdministrativeCity ? jakartaMunicipality : undefined, city, address.state_district);
+  const district = first(
+    address.district && !isJakartaMunicipality(address.district) ? address.district : undefined,
+    address.city_district && !isJakartaMunicipality(address.city_district) ? address.city_district : undefined,
+    address.borough && !isJakartaMunicipality(address.borough) ? address.borough : undefined,
+    address.suburb,
+    address.district,
+    address.city_district,
+  );
   return {
     latitude,
     longitude,
@@ -47,10 +62,10 @@ function mapResult(result: NominatimResult): GeocodingResult {
     confidence: Math.round(confidence * 1000) / 1000,
     provider: 'OpenStreetMap Nominatim',
     providerPlaceId: result.place_id == null ? undefined : String(result.place_id),
-    province,
+    province: displayProvinceName(province),
     city: resolvedCity,
-    district: first(address.city_district, address.district, address.borough, address.suburb),
-    subdistrict: first(address.suburb, address.village, address.neighbourhood, address.hamlet),
+    district,
+    subdistrict: first(address.village, address.neighbourhood, address.hamlet, address.suburb),
     street: first(address.road, address.pedestrian, address.path),
     houseNumber: address.house_number,
     postalCode: address.postcode,

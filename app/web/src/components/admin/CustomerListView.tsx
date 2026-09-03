@@ -25,7 +25,7 @@ import { userFriendlyStatus } from '../../lib/statusLabels';
 import { findRegionOption, regionOptionValue, RegionOption } from '../../lib/regionSelection';
 
 interface CustomerListViewProps {
-  onSelectCustomer: (customerId: string) => void;
+  onSelectCustomer: (customerId: string, alreadyLoaded?: boolean) => void;
 }
 
 const CUSTOMER_STATUS_LABEL: Record<CustomerStatus, string> = {
@@ -133,17 +133,21 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
 
       const province = findRegionOption(provinces, address.province);
       if (!province) return;
+      setNewCustProvince(regionOptionValue(province));
       const cities = await api.regions.regencies(province.code);
       if (!active) return;
       const city = findRegionOption(cities, address.city);
       if (!city) { setRegionOptions((current) => ({ ...current, city: cities })); setRegionCodes({ province: province.code }); return; }
+      setNewCustCity(regionOptionValue(city));
       const districts = await api.regions.districts(city.code);
       if (!active) return;
       const district = findRegionOption(districts, address.district);
       if (!district) { setRegionOptions((current) => ({ ...current, city: cities, district: districts })); setRegionCodes({ province: province.code, city: city.code }); return; }
+      setNewCustDistrict(regionOptionValue(district));
       const subdistricts = await api.regions.villages(district.code);
       if (!active) return;
       const subdistrict = findRegionOption(subdistricts, address.subdistrict);
+      if (subdistrict) setNewCustSubdistrict(regionOptionValue(subdistrict));
       setRegionOptions({ province: provinces, city: cities, district: districts, subdistrict: subdistricts });
       setRegionCodes({ province: province.code, city: city.code, district: district.code, ...(subdistrict ? { subdistrict: subdistrict.code } : {}) });
     };
@@ -151,7 +155,11 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
     return () => { active = false; };
   }, [isAddModalOpen, editingCustomer]);
 
-  const getRegionValue = (field: RegionLevel) => ({ province: newCustProvince, city: newCustCity, district: newCustDistrict, subdistrict: newCustSubdistrict }[field]);
+  const getRegionValue = (field: RegionLevel) => {
+    const value = { province: newCustProvince, city: newCustCity, district: newCustDistrict, subdistrict: newCustSubdistrict }[field];
+    const selected = findRegionOption(regionOptions[field], value);
+    return selected ? regionOptionValue(selected) : value.trim();
+  };
   const setPhoneNationalPart = (value: string) => {
     const digits = value.replace(/\D/g, '');
     const nationalPart = digits.startsWith('62') ? digits.slice(2) : digits.startsWith('0') ? digits.slice(1) : digits;
@@ -254,7 +262,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
           { name: newCustName, phoneE164: newCustPhone, externalId: newCustExtId, status: 'PENDING_INSTALLATION' },
           { ...address, addressType: 'MASTER', addressStatus: 'ACTIVE', rawAddress: rawAddr, validFrom: new Date().toISOString() },
         );
-        onSelectCustomer(created.id);
+        onSelectCustomer(created.id, true);
       }
       setIsAddModalOpen(false);
     } catch (error) {
@@ -298,7 +306,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
       await deleteCustomer(customerToDelete.id);
       setCustomerToDelete(null);
     } catch (error) {
-      setDeleteError(error instanceof Error ? error.message : t('customers.deleteError'));
+      setDeleteError(error instanceof Error ? error.message : t('customers.permanentDeleteError'));
     } finally {
       setIsDeletingCustomer(false);
     }
@@ -468,9 +476,9 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
                       <button
                         type="button"
                         onClick={() => void handleDeleteCustomer(cust)}
-                        disabled={!canManageCustomers || cust.status === 'SUSPENDED'}
-                        title={t('customers.deactivate')}
-                        aria-label={t('customers.deactivate')}
+                        disabled={!canManageCustomers}
+                        title={t('customers.permanentDelete')}
+                        aria-label={t('customers.permanentDelete')}
                         className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-700 transition-colors hover:bg-rose-50 disabled:opacity-40 dark:border-rose-800 dark:bg-gray-800 dark:text-rose-300 dark:hover:bg-rose-950/30"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -660,16 +668,16 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
                 <AlertTriangle className="h-5 w-5" />
               </div>
               <div>
-                <h3 id="delete-customer-title" className="text-sm font-semibold text-gray-900 dark:text-white">{t('customers.deactivateQuestion')}</h3>
+                <h3 id="delete-customer-title" className="text-sm font-semibold text-gray-900 dark:text-white">{t('customers.permanentDeleteQuestion')}</h3>
                 <p id="delete-customer-description" className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-400">
-                  Anda akan menonaktifkan <span className="font-semibold text-gray-900 dark:text-white">{customerToDelete.name}</span>. {t('customers.noPermanentDelete')}
+                  {t('customers.permanentDeleteDescription')} Customer: <span className="font-semibold text-gray-900 dark:text-white">{customerToDelete.name}</span>.
                 </p>
               </div>
             </div>
 
             <div className="space-y-3 p-5">
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-                {t('customers.confirmText')}
+                {t('customers.permanentDeleteWarning')}
               </div>
 
               {deleteError && <p className="text-xs text-rose-600 dark:text-rose-400">{deleteError}</p>}
@@ -690,7 +698,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isDeletingCustomer && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />}
-                  {isDeletingCustomer ? t('campaigns.process') : t('customers.confirmDeactivate')}
+                  {isDeletingCustomer ? t('campaigns.process') : t('customers.confirmPermanentDelete')}
                 </button>
               </div>
             </div>

@@ -117,9 +117,23 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
   const capturedLoc = lastVal?.capturedLocation;
   const refLoc = address.referenceLocation;
   const reverseGeocode = lastVal?.reverseGeocode;
+  const reverseGeocodeUnavailable = lastVal?.reasonCodes.includes('GEOCODING_UNAVAILABLE') ?? false;
+  const administrativeCheckResult = (matches: boolean | undefined) =>
+    lastVal == null ? 'Belum ada hasil' : reverseGeocodeUnavailable ? 'Tidak tersedia' : matches ? 'Match' : 'Tidak cocok';
   const distanceToCurrentReference = refLoc && capturedLoc
     ? calculateGeodesicDistanceMeters(capturedLoc, refLoc)
     : lastVal?.distanceFromReferenceMeters ?? null;
+  const automatedPassed = lastVal?.reasonCodes.includes('AUTOMATED_VALIDATION_PASSED') ?? false;
+  const overallResultLabel = !lastVal
+    ? 'Belum ada hasil'
+    : automatedPassed
+      ? 'Sesuai secara otomatis — menunggu tinjauan manual'
+      : userFriendlyStatus(lastVal.result);
+  const overallResultClass = !lastVal || automatedPassed
+    ? 'text-amber-700 dark:text-amber-400'
+    : lastVal.result === 'LOCATION_VALID'
+      ? 'text-emerald-700 dark:text-emerald-400'
+      : 'text-rose-700 dark:text-rose-400';
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -638,6 +652,17 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
               </span>
             </div>
 
+            <div className="flex flex-col gap-2 border-b border-gray-200 p-3.5 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Kecocokan keseluruhan</p>
+                <p className={`mt-1 text-sm font-semibold ${overallResultClass}`}>{overallResultLabel}</p>
+              </div>
+              {lastVal && <div className="text-left text-[11px] text-gray-500 dark:text-gray-400 sm:text-right">
+                <p>Skor alamat: <span className="font-mono font-semibold text-gray-700 dark:text-gray-200">{Math.round(lastVal.addressScore * 100)}%</span></p>
+                <p>Validasi terakhir: {new Date(lastVal.createdAt).toLocaleString('id-ID')}</p>
+              </div>}
+            </div>
+
             <AdminTable embedded minWidthClass="min-w-[760px]">
                 <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">
                   <tr>
@@ -668,39 +693,39 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Provinsi</td>
                     <td className="px-3.5 py-2">{address.province}</td>
                     <td className="px-3.5 py-2">{reverseGeocode?.province || 'Tidak tersedia'}</td>
-                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.provinceMatch ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>{lastVal == null ? 'Belum ada hasil' : lastVal.provinceMatch ? 'Match' : 'Tidak cocok'}</td>
+                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.provinceMatch && !reverseGeocodeUnavailable ? 'text-emerald-700 dark:text-emerald-400' : reverseGeocodeUnavailable ? 'text-gray-500 dark:text-gray-400' : 'text-rose-700 dark:text-rose-400'}`}>{administrativeCheckResult(lastVal?.provinceMatch)}</td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Kota / Kabupaten</td>
                     <td className="px-3.5 py-2">{address.city}</td>
                     <td className="px-3.5 py-2">{reverseGeocode?.city || 'Tidak tersedia'}</td>
-                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.cityMatch ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>{lastVal == null ? 'Belum ada hasil' : lastVal.cityMatch ? 'Match' : 'Tidak cocok'}</td>
+                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.cityMatch && !reverseGeocodeUnavailable ? 'text-emerald-700 dark:text-emerald-400' : reverseGeocodeUnavailable ? 'text-gray-500 dark:text-gray-400' : 'text-rose-700 dark:text-rose-400'}`}>{administrativeCheckResult(lastVal?.cityMatch)}</td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Kecamatan</td>
                     <td className="px-3.5 py-2">{address.district}</td>
                     <td className="px-3.5 py-2">{reverseGeocode?.district || 'Tidak tersedia'}</td>
-                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.districtMatch ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>{lastVal == null ? 'Belum ada hasil' : lastVal.districtMatch ? 'Match' : 'Tidak cocok'}</td>
+                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.districtMatch && !reverseGeocodeUnavailable ? 'text-emerald-700 dark:text-emerald-400' : reverseGeocodeUnavailable ? 'text-gray-500 dark:text-gray-400' : 'text-rose-700 dark:text-rose-400'}`}>{administrativeCheckResult(lastVal?.districtMatch)}</td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Kelurahan / Desa</td>
                     <td className="px-3.5 py-2">{address.subdistrict}</td>
                     <td className="px-3.5 py-2">{reverseGeocode?.subdistrict || 'Tidak tersedia'}</td>
-                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.subdistrictMatch ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>{lastVal == null ? 'Belum ada hasil' : lastVal.subdistrictMatch ? 'Match' : 'Tidak cocok'}</td>
+                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.subdistrictMatch && !reverseGeocodeUnavailable ? 'text-emerald-700 dark:text-emerald-400' : reverseGeocodeUnavailable ? 'text-gray-500 dark:text-gray-400' : 'text-rose-700 dark:text-rose-400'}`}>{administrativeCheckResult(lastVal?.subdistrictMatch)}</td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Nama Jalan / Kompleks</td>
                     <td className="px-3.5 py-2">{address.street}</td>
                     <td className="px-3.5 py-2">{reverseGeocode?.street || 'Tidak tersedia'}</td>
                     <td className="px-3.5 py-2 text-right font-semibold text-emerald-700 dark:text-emerald-400">
-                      {lastVal ? `${Math.round(lastVal.streetScore * 100)}% Match` : 'Belum ada hasil'}
+                      {lastVal == null ? 'Belum ada hasil' : reverseGeocodeUnavailable ? 'Tidak tersedia' : `${Math.round(lastVal.streetScore * 100)}% Match`}
                     </td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Nomor Rumah</td>
                     <td className="px-3.5 py-2">{address.houseNumber}</td>
                     <td className="px-3.5 py-2">{reverseGeocode?.houseNumber || 'Tidak tersedia'}</td>
-                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.houseNumberMatch == null ? 'text-gray-500 dark:text-gray-400' : lastVal.houseNumberMatch ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>{lastVal == null || lastVal.houseNumberMatch == null ? 'Tidak tersedia' : lastVal.houseNumberMatch ? 'Match' : 'Tidak cocok'}</td>
+                    <td className={`px-3.5 py-2 text-right font-semibold ${lastVal?.houseNumberMatch == null || reverseGeocodeUnavailable ? 'text-gray-500 dark:text-gray-400' : lastVal.houseNumberMatch ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>{lastVal == null || reverseGeocodeUnavailable || lastVal.houseNumberMatch == null ? 'Tidak tersedia' : lastVal.houseNumberMatch ? 'Match' : 'Tidak cocok'}</td>
                   </tr>
                   <tr>
                     <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Kode Pos</td>

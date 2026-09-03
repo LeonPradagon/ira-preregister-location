@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, gt, ilike, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
-import { auditLogs, customerAddresses, customers, integrationConfigs, integrationOutbox, locationCaptures, reminders, spatialPointSql, validationResults, verificationReviews, verificationSessions, whatsappDeliveryLogs } from '../../db/schema/index.js';
+import { auditLogs, customerAddresses, customers, integrationConfigs, integrationOutbox, locationCaptures, reminders, spatialPointSql, validationResults, verificationCampaignItems, verificationReviews, verificationSessions, whatsappDeliveryLogs } from '../../db/schema/index.js';
 import { AddressChangeInput, AdminListQueryInput, CustomerCreateInput, CustomerListQueryInput, CustomerUpdateInput, ReviewInput, ValidationConfigInput } from '../../common/contracts.js';
 import { DomainError, NotFoundError } from '../../common/errors.js';
 import { RequestAdmin } from '../../common/request-user.js';
@@ -303,22 +303,39 @@ export class AdminService {
     if (!canManage(admin.role)) throw new DomainError('Role cannot delete a customer', 403, 'FORBIDDEN');
     const [existing] = await db.select().from(customers).where(eq(customers.id, id));
     if (!existing) throw new NotFoundError('Customer not found');
-    const updatedAt = timestamp();
     await db.transaction(async (tx) => {
-      await tx.update(customers).set({ status: 'SUSPENDED', updatedAt }).where(eq(customers.id, id));
+      const addressRows = await tx.select({ id: customerAddresses.id }).from(customerAddresses).where(eq(customerAddresses.customerId, id));
+      const sessionRows = await tx.select({ id: verificationSessions.id }).from(verificationSessions).where(eq(verificationSessions.customerId, id));
+      const addressIds = addressRows.map((row) => row.id);
+      const sessionIds = sessionRows.map((row) => row.id);
+
+      // Remove dependent records first because these foreign keys intentionally
+      // do not cascade: campaign items, validation evidence, reviews, reminders,
+      // captures, sessions, addresses, and finally the customer.
+      await tx.delete(verificationCampaignItems).where(eq(verificationCampaignItems.customerId, id));
+      if (sessionIds.length > 0) {
+        await tx.delete(validationResults).where(inArray(validationResults.sessionId, sessionIds));
+        await tx.delete(verificationReviews).where(inArray(verificationReviews.sessionId, sessionIds));
+        await tx.delete(reminders).where(inArray(reminders.sessionId, sessionIds));
+        await tx.delete(locationCaptures).where(inArray(locationCaptures.sessionId, sessionIds));
+        await tx.delete(integrationOutbox).where(inArray(integrationOutbox.aggregateId, sessionIds));
+        await tx.delete(verificationSessions).where(inArray(verificationSessions.id, sessionIds));
+      }
+      if (addressIds.length > 0) await tx.delete(customerAddresses).where(inArray(customerAddresses.id, addressIds));
+      await tx.delete(customers).where(eq(customers.id, id));
       await tx.insert(auditLogs).values({
         actorUserId: admin.id,
         actorName: admin.name,
-        action: 'CUSTOMER_DEACTIVATED',
+        action: 'CUSTOMER_DELETED',
         entityType: 'CUSTOMER',
         entityId: id,
         before: { status: existing.status },
-        after: { status: 'SUSPENDED' },
-        reason: 'Soft delete dari panel admin',
-        timestamp: updatedAt,
+        after: { status: 'DELETED' },
+        reason: 'Penghapusan permanen dari panel admin',
+        timestamp: timestamp(),
       });
     });
-    return { id, status: 'SUSPENDED' as const };
+    return { id, status: 'DELETED' as const };
   }
 
   async createVerification(admin: RequestAdmin, customerId: string, addressId: string) {

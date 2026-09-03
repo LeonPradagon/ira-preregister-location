@@ -43,6 +43,7 @@ const reasonLabels: Record<string, string> = {
   DISTRICT_MISMATCH: 'Kecamatan tidak sesuai',
   SUBDISTRICT_MISMATCH: 'Kelurahan atau desa tidak sesuai',
   STREET_MISMATCH: 'Nama jalan tidak sesuai',
+  STREET_VARIATION: 'Nama jalan mirip, tetapi penulisannya berbeda',
   HOUSE_NUMBER_MISMATCH: 'Nomor rumah tidak sesuai',
   ADDRESS_INCOMPLETE: 'Alamat belum lengkap',
 };
@@ -51,7 +52,7 @@ const auditLabels: Record<string, string> = {
   CUSTOMER_CREATED: 'Pelanggan ditambahkan', CUSTOMER_UPDATED: 'Data pelanggan diperbarui', CUSTOMER_DEACTIVATED: 'Pelanggan dinonaktifkan',
   ADDRESS_CREATED: 'Alamat ditambahkan', ADDRESS_UPDATED: 'Alamat diperbarui', ADDRESS_PROPOSED: 'Alamat baru diajukan',
   VERIFICATION_CREATED: 'Pemeriksaan dibuat', VERIFICATION_STARTED: 'Pemeriksaan dimulai', LOCATION_CAPTURED: 'Lokasi diterima',
-  LOCATION_VALID: 'Lokasi dinyatakan sesuai', MANUAL_REVIEW: 'Pemeriksaan tambahan dilakukan', REMINDER_SCHEDULED: 'Pengingat dijadwalkan',
+  LOCATION_VALID: 'Lokasi dinyatakan sesuai', MANUAL_REVIEW: 'Pemeriksaan tambahan dilakukan', CUSTOMER_DELETED: 'Pelanggan dihapus permanen', REMINDER_SCHEDULED: 'Pengingat dijadwalkan',
   REMINDER_SENT: 'Pengingat dikirim', CAMPAIGN_CREATED: 'Pengiriman dibuat', CAMPAIGN_STARTED: 'Pengiriman dimulai', LOGIN: 'Masuk ke akun', LOGOUT: 'Keluar dari akun',
 };
 

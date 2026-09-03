@@ -1,6 +1,8 @@
 export type RegionOption = { code: string; name: string; postalCode?: string | null };
 
-export const findRegionOption = (options: RegionOption[], value: string) =>
-  options.find((option) => option.name.trim().toLowerCase() === value.trim().toLowerCase());
+const canonicalRegionName = (value: string) => value.trim().toLocaleLowerCase('id-ID').replace(/\s+/g, ' ').replace(/^daerah khusus ibukota jakarta$/, 'dki jakarta');
 
-export const regionOptionValue = (option: RegionOption) => option.name.trim();
+export const findRegionOption = (options: RegionOption[], value: string) =>
+  options.find((option) => canonicalRegionName(option.name) === canonicalRegionName(value));
+
+export const regionOptionValue = (option: RegionOption) => /^daerah khusus ibukota jakarta$/i.test(option.name.trim()) ? 'DKI Jakarta' : option.name.trim();

@@ -148,7 +148,7 @@ export const IntegrationsView: React.FC = () => {
                     </span>
                   </div>
                   <div className="font-mono text-[10px] text-gray-500 dark:text-gray-400">
-                    ID: {evt.id} • {new Date(evt.publishedAt || evt.createdAt).toLocaleString('id-ID')}
+                     ID: {evt.id} • {new Date(evt.sentAt || evt.createdAt).toLocaleString('id-ID')}
                   </div>
                 </div>
 

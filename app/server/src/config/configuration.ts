@@ -26,6 +26,7 @@ export const envSchema = z.object({
   REMINDER_DEFAULT_3_HOURS: z.coerce.number().positive().default(24),
   ADDRESS_SCORE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.9),
   STREET_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.9),
+  STREET_SOFT_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
   ENABLE_CUSTOMER_OTP: booleanFromEnv.default(false),
   ENABLE_IRA_COVERAGE: booleanFromEnv.default(false),
   ENABLE_TICKETING: booleanFromEnv.default(false),

@@ -32,6 +32,7 @@ export interface ValidationConfig {
   gpsMaxAccuracyMeters: number;
   homeRadiusMeters: number;
   streetMatchThreshold: number;
+  streetSoftMatchThreshold?: number;
   addressScoreThreshold: number;
 }
 
@@ -135,15 +136,17 @@ export function decideValidation(
   const spreadMeters = sampleSpreadMeters(samples);
   const hasReferenceLocation = address.referenceLatitude != null && address.referenceLongitude != null;
   const precisionOk = hasReferenceLocation && ['EXACT_MASTER', 'ROOFTOP', 'HOUSE'].includes(address.referencePrecision);
-  // OSM and Indonesian administrative data can shift Jakarta one level up or
-  // down (for example city=DKI Jakarta, district=Jakarta Barat,
-  // subdistrict=Palmerah). Compare adjacent levels as well as the canonical
-  // level so a correct coordinate is not rejected because of provider schema.
-  const provinceMatch = administrativeMatch(address.province, [reverseGeocode.province, reverseGeocode.city]);
-  const cityMatch = administrativeMatch(address.city, [reverseGeocode.city, reverseGeocode.district]);
-  const districtMatch = administrativeMatch(address.district, [reverseGeocode.district, reverseGeocode.subdistrict]);
-  const subdistrictMatch = administrativeMatch(address.subdistrict, [reverseGeocode.subdistrict, reverseGeocode.district]);
+  // The geocoding adapter normalizes provider-specific administrative levels
+  // before this point. Keep each comparison on its canonical level so a
+  // shifted value cannot be reported as a false Match in the admin detail.
+  const provinceMatch = administrativeMatch(address.province, [reverseGeocode.province]);
+  const cityMatch = administrativeMatch(address.city, [reverseGeocode.city]);
+  const districtMatch = administrativeMatch(address.district, [reverseGeocode.district]);
+  const subdistrictMatch = administrativeMatch(address.subdistrict, [reverseGeocode.subdistrict]);
   const streetScore = tokenScore(address.street, reverseGeocode.street);
+  const streetSoftMatchThreshold = Math.min(config.streetMatchThreshold, config.streetSoftMatchThreshold ?? 0.7);
+  const administrativeLevelsMatch = provinceMatch && cityMatch && districtMatch && subdistrictMatch;
+  const streetIsAcceptablySimilar = streetScore >= streetSoftMatchThreshold;
   const houseNumberMatch = address.houseNumber && reverseGeocode.houseNumber
     ? normalizeAddress(address.houseNumber) === normalizeAddress(reverseGeocode.houseNumber)
     : undefined;
@@ -151,10 +154,17 @@ export function decideValidation(
     .some((value) => isPlaceholderAddressValue(value)) || isOnlyPlusCode(address.street);
   const addressNeedsManualReview = addressIncomplete || !hasReferenceLocation || !precisionOk;
   const addressScore = Math.round((Number(districtMatch) * 0.2 + Number(subdistrictMatch) * 0.25 + streetScore * 0.35 + (houseNumberMatch === undefined ? 0.2 : Number(houseNumberMatch) * 0.2)) * 100) / 100;
+  // A complete registered address can still be checked against reverse GPS
+  // data even when its master coordinate is missing. Do not hide a clear
+  // address mismatch behind the manual-review fallback.
+  const addressTextMismatch = !addressIncomplete && (
+    !administrativeLevelsMatch || !streetIsAcceptablySimilar || houseNumberMatch === false || addressScore < 0.6
+  );
   const distanceFromReferenceMeters = hasReferenceLocation ? distanceMeters(bestSample, {
     latitude: address.referenceLatitude!,
     longitude: address.referenceLongitude!,
   }) : null;
+  const outsideHomeRadius = distanceFromReferenceMeters != null && distanceFromReferenceMeters > config.homeRadiusMeters;
   if (bestSample.accuracyMeters > config.gpsMaxAccuracyMeters) reasonCodes.push('LOW_GPS_ACCURACY');
   if (spreadMeters > 100) reasonCodes.push('GPS_SAMPLE_INCONSISTENT');
   if (!hasReferenceLocation) reasonCodes.push('REFERENCE_LOCATION_MISSING');
@@ -163,7 +173,8 @@ export function decideValidation(
   if (!cityMatch) reasonCodes.push('CITY_MISMATCH');
   if (!districtMatch) reasonCodes.push('DISTRICT_MISMATCH');
   if (!subdistrictMatch) reasonCodes.push('SUBDISTRICT_MISMATCH');
-  if (streetScore < config.streetMatchThreshold) reasonCodes.push('STREET_MISMATCH');
+  if (streetScore < streetSoftMatchThreshold) reasonCodes.push('STREET_MISMATCH');
+  else if (streetScore < config.streetMatchThreshold) reasonCodes.push('STREET_VARIATION');
   if (houseNumberMatch === false) reasonCodes.push('HOUSE_NUMBER_MISMATCH');
   if (addressIncomplete) reasonCodes.push('ADDRESS_INCOMPLETE');
   if (distanceFromReferenceMeters != null && distanceFromReferenceMeters > config.homeRadiusMeters) reasonCodes.push('HOME_RADIUS_EXCEEDED');
@@ -174,14 +185,18 @@ export function decideValidation(
   // signal in reasonCodes, but make the actionable outcome manual review so
   // Ops fixes the address/reference instead of rejecting the customer as
   // being in the wrong place.
-  if (addressNeedsManualReview) result = 'MANUAL_REVIEW';
+  if (addressNeedsManualReview && !outsideHomeRadius && !addressTextMismatch) result = 'MANUAL_REVIEW';
   else if (bestSample.accuracyMeters > config.gpsMaxAccuracyMeters) result = 'LOW_GPS_ACCURACY';
   else if (spreadMeters > 100) result = 'MANUAL_REVIEW';
-  else if (precisionOk && provinceMatch && cityMatch && districtMatch && subdistrictMatch && streetScore >= config.streetMatchThreshold && distanceFromReferenceMeters != null && distanceFromReferenceMeters <= config.homeRadiusMeters && addressScore >= config.addressScoreThreshold) result = 'LOCATION_VALID';
+  // A trusted distance failure is conclusive even when the address metadata
+  // needs review. The customer is not at the registered home, so do not send
+  // this case to the Ops manual-review queue.
+  else if (outsideHomeRadius || addressTextMismatch) result = 'LOCATION_MISMATCH';
+  else if (precisionOk && administrativeLevelsMatch && streetIsAcceptablySimilar && distanceFromReferenceMeters != null && distanceFromReferenceMeters <= config.homeRadiusMeters && addressScore >= config.addressScoreThreshold) result = 'LOCATION_VALID';
   // Without a trusted reference coordinate we cannot calculate whether the
   // customer is at the registered home. This is not proof of a mismatch.
   else if (!hasReferenceLocation || !precisionOk) result = 'MANUAL_REVIEW';
-  else if ((distanceFromReferenceMeters != null && distanceFromReferenceMeters > config.homeRadiusMeters) || addressScore < 0.6 || !provinceMatch || !cityMatch) result = 'LOCATION_MISMATCH';
+  else if (outsideHomeRadius || addressScore < 0.6 || !provinceMatch || !cityMatch) result = 'LOCATION_MISMATCH';
   if (result === 'LOCATION_VALID') reasonCodes.push('LOCATION_VALID');
   if (result === 'MANUAL_REVIEW') reasonCodes.push('MANUAL_REVIEW_REQUIRED');
   return { result, bestSample, sampleSpreadMeters: spreadMeters, distanceFromReferenceMeters, addressScore, provinceMatch, cityMatch, districtMatch, subdistrictMatch, streetScore, houseNumberMatch, reasonCodes, referencePrecision: address.referencePrecision, reverseGeocode };

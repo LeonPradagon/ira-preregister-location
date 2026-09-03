@@ -2,6 +2,7 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { administrativeRegions, regionPostalCodes } from '../../db/schema/index.js';
+import { displayProvinceName } from '../../common/region-names.js';
 
 export interface RegionOption {
   code: string;
@@ -23,10 +24,13 @@ export class RegionsService {
         .where(parentCode ? and(eq(administrativeRegions.level, level), eq(administrativeRegions.parentCode, parentCode)) : and(eq(administrativeRegions.level, level), isNull(administrativeRegions.parentCode)))
         .orderBy(administrativeRegions.name);
       if (!regions.length) return [];
-      if (level !== 4) return regions;
+      const normalizedRegions = level === 1
+        ? regions.map((region) => ({ ...region, name: displayProvinceName(region.name) }))
+        : regions;
+      if (level !== 4) return normalizedRegions;
       const postalRows = await db.select().from(regionPostalCodes).where(inArray(regionPostalCodes.regionCode, regions.map((region) => region.code)));
       const postalByCode = new Map(postalRows.map((row) => [row.regionCode, row.postalCode]));
-      return regions.map((region) => ({ ...region, postalCode: postalByCode.get(region.code) ?? null }));
+      return normalizedRegions.map((region) => ({ ...region, postalCode: postalByCode.get(region.code) ?? null }));
     } catch {
       return null;
     }
@@ -47,7 +51,7 @@ export class RegionsService {
       const data = Array.isArray(payload.data)
         ? payload.data
           .filter((item) => typeof item.code === 'string' && typeof item.name === 'string')
-          .map((item) => ({ code: item.code as string, name: item.name as string }))
+          .map((item) => ({ code: item.code as string, name: level === 1 ? displayProvinceName(item.name as string) : item.name as string }))
         : [];
       this.cache.set(path, { expiresAt: Date.now() + 24 * 60 * 60 * 1000, data });
       return data;

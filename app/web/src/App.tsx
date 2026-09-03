@@ -32,7 +32,11 @@ const MainAppContent: React.FC = () => {
   if (customerToken) return <BackendCustomerVerificationView token={customerToken} simulation={simulationRoute} />;
   if (!currentAdmin) return <LoginView />;
 
-  const selectCustomer = async (customerId: string) => {
+  const selectCustomer = async (customerId: string, alreadyLoaded = false) => {
+    if (alreadyLoaded) {
+      setSelectedCustomerId(customerId);
+      return;
+    }
     try {
       await loadCustomerDetail(customerId);
       setSelectedCustomerId(customerId);
@@ -45,7 +49,7 @@ const MainAppContent: React.FC = () => {
     if (selectedVerificationId) return <VerificationDetailView sessionId={selectedVerificationId} onBack={() => setSelectedVerificationId(null)} />;
     if (selectedCustomerId) return <CustomerDetailView customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} onSelectVerification={setSelectedVerificationId} />;
     if (currentTab === 'dashboard') return <DashboardView onSelectVerification={setSelectedVerificationId} onNavigate={setCurrentTab} />;
-    if (currentTab === 'customers') return <CustomerListView onSelectCustomer={(customerId) => void selectCustomer(customerId)} />;
+    if (currentTab === 'customers') return <CustomerListView onSelectCustomer={(customerId, alreadyLoaded) => void selectCustomer(customerId, alreadyLoaded)} />;
     if (currentTab === 'campaigns') return <CampaignsView />;
     if (currentTab === 'verifications') return <VerificationListView onSelectVerification={setSelectedVerificationId} />;
     if (currentTab === 'reminders') return <RemindersView onSelectVerification={setSelectedVerificationId} />;

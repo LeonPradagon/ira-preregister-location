@@ -152,6 +152,7 @@ export const validationConfigSchema = z.object({
   GPS_MAX_ACCURACY_METERS: z.number().positive().optional(),
   HOME_RADIUS_METERS: z.number().positive().optional(),
   STREET_MATCH_THRESHOLD: z.number().min(0).max(1).optional(),
+  STREET_SOFT_MATCH_THRESHOLD: z.number().min(0).max(1).optional(),
   ADDRESS_SCORE_THRESHOLD: z.number().min(0).max(1).optional(),
   MAX_LOCATION_ATTEMPTS: z.number().int().positive().optional(),
   MAX_REMINDERS_PER_SESSION: z.number().int().min(1).max(3).optional(),

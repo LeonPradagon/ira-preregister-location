@@ -82,6 +82,7 @@ export class VerificationService {
       customer: { id: row.customer.id, name: maskName(row.customer.name), phoneE164: maskPhone(row.customer.phoneE164) },
       address: {
         id: row.address.id,
+        addressType: row.address.addressType,
         rawAddress: maskAddress(row.address),
         province: row.address.province,
         city: row.address.city,
@@ -143,18 +144,11 @@ export class VerificationService {
     } catch (error) {
       if (!(error instanceof ServiceUnavailableException)) throw error;
       if (row.session.verificationMode === 'SIMULATION') {
-        // E2E simulation still exercises the real GPS/radius/accuracy pipeline
-        // when no external reverse-geocoding provider is configured.
-        geocode = {
-          province: row.address.province,
-          city: row.address.city,
-          district: row.address.district,
-          subdistrict: row.address.subdistrict,
-          street: row.address.street,
-          houseNumber: row.address.houseNumber,
-          postalCode: row.address.postalCode,
-          formattedAddress: row.address.rawAddress,
-        };
+        // Never copy the master address into device data: the simulation
+        // coordinate may intentionally be somewhere else. Treat unavailable
+        // reverse-geocoding as unavailable evidence instead of a false match.
+        geocodingAvailable = false;
+        geocode = { province: '', city: '', district: '', subdistrict: '', street: '', formattedAddress: '' };
       } else {
         // Live sessions fail closed: capture the GPS but route it to manual
         // review instead of returning 503 or treating it as address proof.
@@ -171,11 +165,14 @@ export class VerificationService {
       gpsMaxAccuracyMeters: config.GPS_MAX_ACCURACY_METERS,
       homeRadiusMeters: config.HOME_RADIUS_METERS,
       streetMatchThreshold: config.STREET_MATCH_THRESHOLD,
+      streetSoftMatchThreshold: config.STREET_SOFT_MATCH_THRESHOLD,
       addressScoreThreshold: config.ADDRESS_SCORE_THRESHOLD,
     });
-    if (!geocodingAvailable) {
+    if (!geocodingAvailable && !(decision.result === 'LOCATION_MISMATCH' && decision.distanceFromReferenceMeters != null && decision.distanceFromReferenceMeters > config.HOME_RADIUS_METERS)) {
       decision.result = 'MANUAL_REVIEW';
       decision.reasonCodes = [...decision.reasonCodes, 'GEOCODING_UNAVAILABLE', 'MANUAL_REVIEW_REQUIRED'];
+    } else if (!geocodingAvailable) {
+      decision.reasonCodes = [...decision.reasonCodes, 'GEOCODING_UNAVAILABLE'];
     }
     if (decision.result === 'LOCATION_VALID' && config.ENABLE_MANUAL_REVIEW) {
       // A passing engine result is evidence for Ops, not the final customer
@@ -271,6 +268,9 @@ export class VerificationService {
 
   async addressStatus(token: string, sameAddress: boolean) {
     const row = await this.findByToken(token);
+    if (!sameAddress && row.address.addressType === 'PROPOSED') {
+      throw new DomainError('The address can only be changed once. Please contact IRA Customer Service for further changes.', 409, 'ADDRESS_CHANGE_LIMIT_REACHED');
+    }
     const nextStatus = sameAddress ? 'GPS_CAPTURING' : 'ADDRESS_EDITING';
     if (!row.session.consentAt) throw new DomainError('Location consent is required before confirming the address', 409, 'CONSENT_REQUIRED');
     assertTransition(row.session.verificationStatus, nextStatus);
@@ -292,6 +292,9 @@ export class VerificationService {
     const row = await this.findByToken(token);
     const config = await this.validationConfig.get();
     if (!config.ENABLE_ADDRESS_EDIT) throw new DomainError('Address edit is disabled', 409);
+    if (row.address.addressType === 'PROPOSED') {
+      throw new DomainError('The address can only be changed once. Please contact IRA Customer Service for further changes.', 409, 'ADDRESS_CHANGE_LIMIT_REACHED');
+    }
     if (row.session.verificationStatus !== 'ADDRESS_EDITING') assertTransition(row.session.verificationStatus, 'ADDRESS_EDITING');
     assertTransition('ADDRESS_EDITING', 'ADDRESS_PROPOSED');
     const houseNumber = input.houseNumber.trim();

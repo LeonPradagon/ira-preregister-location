@@ -8,6 +8,7 @@ export interface RuntimeValidationConfig extends Record<string, unknown> {
   GPS_MAX_ACCURACY_METERS: number;
   HOME_RADIUS_METERS: number;
   STREET_MATCH_THRESHOLD: number;
+  STREET_SOFT_MATCH_THRESHOLD: number;
   ADDRESS_SCORE_THRESHOLD: number;
   MAX_LOCATION_ATTEMPTS: number;
   MAX_REMINDERS_PER_SESSION: number;
@@ -32,6 +33,7 @@ export class ValidationConfigService {
       GPS_MAX_ACCURACY_METERS: Number(process.env.GPS_MAX_ACCURACY_METERS ?? 30),
       HOME_RADIUS_METERS: Number(process.env.HOME_RADIUS_METERS ?? 50),
       STREET_MATCH_THRESHOLD: Number(process.env.STREET_MATCH_THRESHOLD ?? 0.9),
+      STREET_SOFT_MATCH_THRESHOLD: Number(process.env.STREET_SOFT_MATCH_THRESHOLD ?? 0.7),
       ADDRESS_SCORE_THRESHOLD: Number(process.env.ADDRESS_SCORE_THRESHOLD ?? 0.9),
       MAX_LOCATION_ATTEMPTS: Number(process.env.MAX_LOCATION_ATTEMPTS ?? 5),
       MAX_REMINDERS_PER_SESSION: Number(process.env.MAX_REMINDERS_PER_SESSION ?? 3),
