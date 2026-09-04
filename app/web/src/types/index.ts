@@ -218,6 +218,7 @@ export interface CustomerPage {
 
 export interface DashboardSummary {
   generatedAt: string;
+  countAsOf?: string;
   customers: {
     total: number;
     active: number;
@@ -354,6 +355,7 @@ export interface ValidationConfig {
   HOME_RADIUS_METERS: number;
   STREET_MATCH_THRESHOLD: number;
   ADDRESS_SCORE_THRESHOLD: number;
+  AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: number;
   MAX_LOCATION_ATTEMPTS: number;
   MAX_REMINDERS_PER_SESSION: number;
   COORDINATE_DISPLAY_DECIMALS: number;
@@ -366,6 +368,7 @@ export interface ValidationConfig {
   ENABLE_IRA_COVERAGE: boolean;
   ENABLE_TICKETING: boolean;
   ENABLE_MANUAL_REVIEW: boolean;
+  ENABLE_AUTO_APPROVAL: boolean;
   ENABLE_ADDRESS_EDIT: boolean;
   ENABLE_REMINDERS: boolean;
 }

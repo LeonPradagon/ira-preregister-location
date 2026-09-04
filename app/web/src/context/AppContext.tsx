@@ -13,12 +13,12 @@ type NewCustomerAddress = Omit<CustomerAddress, 'id' | 'customerId' | 'createdAt
 
 const DEFAULT_VALIDATION_CONFIG: ValidationConfig = {
   GPS_MAX_ACCURACY_METERS: 30, HOME_RADIUS_METERS: 50, STREET_MATCH_THRESHOLD: 0.9,
-  ADDRESS_SCORE_THRESHOLD: 0.9, MAX_LOCATION_ATTEMPTS: 5, MAX_REMINDERS_PER_SESSION: 3,
+  ADDRESS_SCORE_THRESHOLD: 0.9, AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: 0.9, MAX_LOCATION_ATTEMPTS: 5, MAX_REMINDERS_PER_SESSION: 3,
   COORDINATE_DISPLAY_DECIMALS: 6, VERIFICATION_TOKEN_TTL_DAYS: 7,
   REMINDER_LINK_TTL_HOURS: 24,
   REMINDER_DEFAULT_1_HOURS: 2, REMINDER_DEFAULT_2_HOURS: 24, REMINDER_DEFAULT_3_HOURS: 24,
   ENABLE_CUSTOMER_OTP: false, ENABLE_IRA_COVERAGE: false, ENABLE_TICKETING: false,
-  ENABLE_MANUAL_REVIEW: true, ENABLE_ADDRESS_EDIT: true, ENABLE_REMINDERS: true,
+  ENABLE_MANUAL_REVIEW: true, ENABLE_AUTO_APPROVAL: false, ENABLE_ADDRESS_EDIT: true, ENABLE_REMINDERS: true,
 };
 
 const DEFAULT_INTEGRATION_CONFIGS: IntegrationConfigs = {
@@ -88,7 +88,7 @@ function mapApiDashboard(raw: AdminDashboardApi): DashboardSummary {
   const number = (value: unknown) => Number(value ?? 0);
   const numberMap = (value: Record<string, unknown> | undefined) => Object.fromEntries(Object.entries(value ?? {}).map(([key, item]) => [key, number(item)]));
   return {
-    generatedAt: String(raw.generatedAt ?? ''),
+    generatedAt: String(raw.generatedAt ?? ''), countAsOf: raw.countAsOf ? String(raw.countAsOf) : undefined,
     customers: {
       total: number(raw.customers.total), active: number(raw.customers.active), verified: number(raw.customers.verified),
       whatsappOptedIn: number(raw.customers.whatsappOptedIn), whatsappOptedOut: number(raw.customers.whatsappOptedOut),
@@ -133,7 +133,7 @@ function mapApiAddress(raw: Record<string, unknown>): CustomerAddress {
 }
 
 export function mapApiSession(raw: Record<string, unknown>): VerificationSession {
-  return { ...(raw as unknown as VerificationSession), id: String(raw.id), customerId: String(raw.customerId), currentAddressId: String(raw.currentAddressId), reminderCount: Number(raw.reminderCount ?? 0), attemptCount: Number(raw.attemptCount ?? 0) };
+  return { ...(raw as unknown as VerificationSession), id: String(raw.id), customerId: String(raw.customerId), currentAddressId: String(raw.currentAddressId), reminderCount: Number(raw.reminderCount ?? 0), attemptCount: Number(raw.attemptCount ?? 0), lastValidationResult: raw.lastValidationResult && typeof raw.lastValidationResult === 'object' ? mapApiValidationResult(raw.lastValidationResult as Record<string, unknown>) : undefined };
 }
 
 export function mapApiValidationResult(raw: Record<string, unknown>): ValidationResult {
@@ -155,6 +155,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentAdmin, setCurrentAdmin] = useState<AdminUser | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]); const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [customerPage, setCustomerPage] = useState<CustomerPage>(EMPTY_CUSTOMER_PAGE);
+  const [customerCursors, setCustomerCursors] = useState<Record<number, string>>({});
   const [verificationSessions, setVerificationSessions] = useState<VerificationSession[]>([]); const [locationCaptures, setLocationCaptures] = useState<LocationCapture[]>([]);
   const [verificationReviews, setVerificationReviews] = useState<VerificationReview[]>([]); const [reminders, setReminders] = useState<Reminder[]>([]);
   const [campaigns, setCampaigns] = useState<VerificationCampaign[]>([]);
@@ -185,26 +186,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         api.dashboard().catch(() => null), api.customers({ page: 1, pageSize: 25 }).catch(() => null), api.verifications({ page: 1, pageSize: 25 }).catch(() => null), api.reminders({ page: 1, pageSize: 25 }).catch(() => null),
         api.auditLogs({ page: 1, pageSize: 25 }).catch(() => null), api.settings().catch(() => null), api.integrations().catch(() => null), api.outbox({ page: 1, pageSize: 25 }).catch(() => null), api.campaigns({ page: 1, pageSize: 25 }).catch(() => null),
       ]);
-      const verificationDetails = rawVerifications ? await Promise.all(rawVerifications.items.map((raw) => api.verification(String(raw.session.id)).catch(() => null))) : [];
       if (!active) return;
       if (rawDashboard) setDashboardSummary(mapApiDashboard(rawDashboard));
       if (rawCustomerPage) {
         const mappedCustomers = rawCustomerPage.items.map(mapApiCustomer);
         setCustomers(mappedCustomers);
         setCustomerPage({ ...rawCustomerPage, items: mappedCustomers });
+        if (rawCustomerPage.nextCursor) setCustomerCursors({ 2: rawCustomerPage.nextCursor });
       }
       setAddresses([]);
-      const successfulDetails = verificationDetails.filter((detail): detail is NonNullable<typeof detail> => Boolean(detail));
-      const detailsById = new Map(successfulDetails.map((detail) => [String((detail.session as Record<string, unknown>).id), detail]));
-      const detailAddresses = successfulDetails
-        .filter((detail) => detail.address && typeof detail.address === 'object')
-        .map((detail) => mapApiAddress(detail.address as Record<string, unknown>));
-      if (detailAddresses.length) setAddresses((previous) => [...previous.filter((address) => !detailAddresses.some((item) => item.id === address.id)), ...detailAddresses]);
-      if (rawVerifications) setVerificationSessions(rawVerifications.items.map((raw) => { const session = mapApiSession(raw.session); const detail = detailsById.get(session.id); const results = detail && Array.isArray(detail.results) ? detail.results : []; return { ...session, lastValidationResult: results[0] ? mapApiValidationResult(results[0] as Record<string, unknown>) : undefined }; }));
-      if (successfulDetails.length) {
-        setLocationCaptures(successfulDetails.flatMap((detail) => (Array.isArray(detail.captures) ? detail.captures : []).map((row) => mapApiCapture(row as Record<string, unknown>))));
-        setVerificationReviews(successfulDetails.flatMap((detail) => (Array.isArray(detail.reviews) ? detail.reviews : [])) as VerificationReview[]);
-      }
+      if (rawVerifications) setVerificationSessions(rawVerifications.items.map((raw) => mapApiSession(raw.session)));
       if (rawReminders) setReminders(rawReminders.items as unknown as Reminder[]);
       if (rawAudits) setAuditLogs(rawAudits.items as unknown as AuditLog[]);
       if (rawOutbox) setOutboxEvents(rawOutbox.items as unknown as IntegrationOutboxEvent[]);
@@ -221,7 +212,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const getCustomerAddresses = (customerId: string) => addresses.filter((address) => address.customerId === customerId);
   const getCustomerSessions = (customerId: string) => verificationSessions.filter((session) => session.customerId === customerId);
   const loadCustomerPage = async (page = 1, search = '', status: CustomerStatus | 'ALL' = 'ALL', pageSize = customerPage.pageSize || 25): Promise<CustomerPage> => {
-    const raw = await api.customers({ page, pageSize, search, status });
+    const raw = await api.customers({ page, pageSize, search, status, cursor: page === 1 ? undefined : customerCursors[page] });
+    if (page === 1) setCustomerCursors({});
+    if (raw.nextCursor) setCustomerCursors((previous) => ({ ...previous, [page + 1]: raw.nextCursor! }));
     const mapped = raw.items.map(mapApiCustomer);
     const result = { ...raw, items: mapped };
     setCustomers(mapped);

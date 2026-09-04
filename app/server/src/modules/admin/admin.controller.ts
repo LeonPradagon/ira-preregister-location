@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { randomUUID } from 'node:crypto';
@@ -40,7 +41,24 @@ export class AdminController {
   @Post('customers/import')
   @Roles('SUPER_ADMIN', 'ADMIN')
   @UseInterceptors(FileInterceptor('file', { storage: diskStorage({ destination: tmpdir(), filename: (_request, file, callback) => callback(null, `exact-location-upload-${randomUUID()}${file.originalname.slice(file.originalname.lastIndexOf('.'))}`) }), limits: { fileSize: 50 * 1024 * 1024 } }))
-  importCustomers(@CurrentAdmin() currentAdmin: RequestAdmin, @UploadedFile() file: UploadedCustomerFile) {
+  async importCustomers(@CurrentAdmin() currentAdmin: RequestAdmin, @UploadedFile() file: UploadedCustomerFile, @Res({ passthrough: true }) response: Response) {
+    if (!file) throw new BadRequestException('Pilih file .xlsx atau .csv terlebih dahulu.');
+    const result = await this.customerImport.importLegacy(currentAdmin, file);
+    response.status(result && 'jobId' in result ? 202 : 200);
+    return result;
+  }
+
+  @Get('import-jobs/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  importJob(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) {
+    return this.customerImport.get(currentAdmin, id);
+  }
+
+  @Post('import-jobs')
+  @HttpCode(202)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseInterceptors(FileInterceptor('file', { storage: diskStorage({ destination: tmpdir(), filename: (_request, file, callback) => callback(null, `exact-location-upload-${randomUUID()}${file.originalname.slice(file.originalname.lastIndexOf('.'))}`) }), limits: { fileSize: 50 * 1024 * 1024 } }))
+  createImportJob(@CurrentAdmin() currentAdmin: RequestAdmin, @UploadedFile() file: UploadedCustomerFile) {
     if (!file) throw new BadRequestException('Pilih file .xlsx atau .csv terlebih dahulu.');
     return this.customerImport.import(currentAdmin, file);
   }

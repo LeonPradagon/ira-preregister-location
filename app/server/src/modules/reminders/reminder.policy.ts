@@ -1,5 +1,7 @@
 export const MAX_REMINDERS_PER_SESSION = 3;
 export const DEFAULT_REMINDER_LINK_TTL_HOURS = 24;
+const AUTOMATIC_REMINDER_INTERVAL_HOURS = 24;
+const REMINDER_EXPIRY_BUFFER_MS = 60 * 1000;
 
 export type ReminderPreference = 'IN_1_HOUR' | 'TONIGHT' | 'TOMORROW_MORNING' | 'DEFAULT';
 
@@ -23,6 +25,18 @@ export function spreadReminderTimes(startAt: Date, untilAt: Date, count: number)
   if (count === 1) return [new Date(startAt)];
   const interval = (untilAt.getTime() - startAt.getTime()) / (count - 1);
   return Array.from({ length: count }, (_, index) => new Date(startAt.getTime() + interval * index));
+}
+
+export function automaticReminderTimes(startAt: Date, count: number, sessionExpiresAt: Date): Date[] {
+  if (!Number.isInteger(count) || count < 1) throw new Error('Reminder count must be positive');
+  if (!Number.isFinite(startAt.getTime()) || !Number.isFinite(sessionExpiresAt.getTime()) || startAt >= sessionExpiresAt) {
+    throw new Error('Automatic reminder time must be before session expiry');
+  }
+  if (count === 1) return [new Date(startAt)];
+  const latestAllowed = new Date(sessionExpiresAt.getTime() - REMINDER_EXPIRY_BUFFER_MS);
+  if (latestAllowed <= startAt) throw new Error('Automatic reminders do not fit before session expiry');
+  const preferredEnd = new Date(startAt.getTime() + (count - 1) * AUTOMATIC_REMINDER_INTERVAL_HOURS * 60 * 60 * 1000);
+  return spreadReminderTimes(startAt, preferredEnd < latestAllowed ? preferredEnd : latestAllowed, count);
 }
 
 export function scheduleReminder(preference: ReminderPreference, from = new Date()): Date {

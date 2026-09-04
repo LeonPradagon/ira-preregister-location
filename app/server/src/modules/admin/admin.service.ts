@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, gt, ilike, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { auditLogs, customerAddresses, customers, integrationConfigs, integrationOutbox, locationCaptures, reminders, spatialPointSql, validationResults, verificationCampaignItems, verificationReviews, verificationSessions, whatsappDeliveryLogs } from '../../db/schema/index.js';
 import { AddressChangeInput, AdminListQueryInput, CustomerCreateInput, CustomerListQueryInput, CustomerUpdateInput, ReviewInput, ValidationConfigInput } from '../../common/contracts.js';
@@ -12,6 +12,8 @@ import { ValidationConfigService } from '../../config/validation-config.service.
 import { hashPhone, nextAllowedSendAt } from '../../integrations/whatsapp/whatsapp.policy.js';
 import { createVerificationToken } from '../verification/verification-token.js';
 import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/whatsapp/whatsapp.templates.js';
+import { ReadCacheService } from '../../common/read-cache.service.js';
+import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js';
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
 const addressPlaceholders = new Set(['', 'unknown', 'tidak diketahui', 'tanpa nomor', 'n/a', 'na', '-', '00000']);
@@ -44,6 +46,7 @@ export class AdminService {
   constructor(
     @Inject(WhatsAppPort) private readonly whatsapp: WhatsAppPort,
     private readonly validationConfig: ValidationConfigService,
+    private readonly readCache: ReadCacheService,
   ) {}
 
   async me(admin: RequestAdmin) {
@@ -51,6 +54,7 @@ export class AdminService {
   }
 
   async dashboard() {
+    const cached = await this.readCache.getOrSet('dashboard', 'summary', Number(process.env.DASHBOARD_CACHE_TTL_SECONDS ?? 30), async () => {
     const [customerStats] = await db.select({
       total: sql<number>`count(*)`,
       active: sql<number>`count(*) filter (where ${customers.status} = 'ACTIVE')`,
@@ -95,8 +99,10 @@ export class AdminService {
     const statusCounts = Object.fromEntries(verificationStatusRows.map((row) => [row.status, toNumber(row.total)]));
     const byNumber = Object.fromEntries(reminderNumberRows.map((row) => [String(row.reminderNumber), toNumber(row.total)]));
 
+    const countAsOf = new Date().toISOString();
     return {
-      generatedAt: new Date().toISOString(),
+      generatedAt: countAsOf,
+      countAsOf,
       customers: Object.fromEntries(Object.entries(customerStats).map(([key, value]) => [key, toNumber(value)])),
       verifications: {
         ...Object.fromEntries(Object.entries(verificationStats).map(([key, value]) => [key, toNumber(value)])),
@@ -108,6 +114,8 @@ export class AdminService {
       },
       outbox: Object.fromEntries(Object.entries(outboxStats[0]).map(([key, value]) => [key, toNumber(value)])),
     };
+    });
+    return cached;
   }
 
   async listCustomers(query: CustomerListQueryInput) {
@@ -123,12 +131,19 @@ export class AdminService {
       filters.push(sql`exists (select 1 from customer_addresses campaign_address where campaign_address.customer_id = ${customers.id} and campaign_address.is_active = true and campaign_address.is_verified = true)`);
     }
     const where = and(...filters);
-    const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(customers).where(where);
-    const customerRows = query.cursor
-      ? await db.select().from(customers).where(and(where, gt(customers.id, query.cursor))).orderBy(asc(customers.id)).limit(query.pageSize)
-      : await db.select().from(customers).where(where).orderBy(desc(customers.updatedAt), desc(customers.id)).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
+    const cachedCount = await this.readCache.count('customers', { search: query.search, status: query.status, locationStatus: query.locationStatus }, async () => {
+      const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(customers).where(where);
+      return Number(total);
+    });
+    const cursor = decodeListCursor(query.cursor);
+    const cursorWhere = cursor ? or(lt(customers.updatedAt, new Date(cursor.value)), and(eq(customers.updatedAt, new Date(cursor.value)), lt(customers.id, cursor.id))) : undefined;
+    const customerRows = await db.select().from(customers)
+      .where(cursorWhere ? and(where, cursorWhere) : where)
+      .orderBy(desc(customers.updatedAt), desc(customers.id))
+      .offset(cursor ? 0 : (query.page - 1) * query.pageSize)
+      .limit(query.pageSize);
     const customerIds = customerRows.map((customer) => customer.id);
-    if (!customerIds.length) return { items: [], page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize), nextCursor: null };
+    if (!customerIds.length) return { items: [], page: query.page, pageSize: query.pageSize, total: cachedCount.total, totalPages: Math.ceil(cachedCount.total / query.pageSize), nextCursor: null, hasMore: false, countAsOf: cachedCount.countAsOf };
 
     const addressRows = await db.select({
       address: customerAddresses,
@@ -147,9 +162,11 @@ export class AdminService {
       items: customerRows.map((customer) => ({ ...customer, activeAddress: addressByCustomer.get(customer.id) ?? null, latestVerification: sessionByCustomer.get(customer.id) ? sanitizeSession(sessionByCustomer.get(customer.id)!) : null })),
       page: query.page,
       pageSize: query.pageSize,
-      total: Number(total),
-      totalPages: Math.ceil(Number(total) / query.pageSize),
-      nextCursor: query.cursor ? customerRows[customerRows.length - 1]?.id ?? null : null,
+      total: cachedCount.total,
+      totalPages: Math.ceil(cachedCount.total / query.pageSize),
+      nextCursor: customerRows.length === query.pageSize ? encodeListCursor(customerRows[customerRows.length - 1].updatedAt, customerRows[customerRows.length - 1].id) : null,
+      hasMore: customerRows.length === query.pageSize,
+      countAsOf: cachedCount.countAsOf,
     };
   }
 
@@ -422,9 +439,17 @@ export class AdminService {
     }
     if (query.status) filters.push(eq(verificationSessions.verificationStatus, query.status as typeof verificationSessions.$inferSelect.verificationStatus));
     const where = and(...filters);
-    const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(verificationSessions).innerJoin(customers, eq(customers.id, verificationSessions.customerId)).where(where);
-    const rows = await db.select({ session: verificationSessions, customer: customers }).from(verificationSessions).innerJoin(customers, eq(customers.id, verificationSessions.customerId)).where(where).orderBy(desc(verificationSessions.updatedAt)).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
-    return { items: rows.map(({ session, customer }) => ({ session: sanitizeSession(session), customer })), page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize) };
+    const cachedCount = await this.readCache.count('verifications', { search: query.search, status: query.status }, async () => {
+      const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(verificationSessions).innerJoin(customers, eq(customers.id, verificationSessions.customerId)).where(where);
+      return Number(total);
+    });
+    const cursor = decodeListCursor(query.cursor);
+    const cursorWhere = cursor ? or(lt(verificationSessions.updatedAt, new Date(cursor.value)), and(eq(verificationSessions.updatedAt, new Date(cursor.value)), lt(verificationSessions.id, cursor.id))) : undefined;
+    const rows = await db.select({ session: verificationSessions, customer: customers }).from(verificationSessions).innerJoin(customers, eq(customers.id, verificationSessions.customerId)).where(cursorWhere ? and(where, cursorWhere) : where).orderBy(desc(verificationSessions.updatedAt), desc(verificationSessions.id)).offset(cursor ? 0 : (query.page - 1) * query.pageSize).limit(query.pageSize);
+    const resultRows = rows.length ? await db.select().from(validationResults).where(inArray(validationResults.sessionId, rows.map(({ session }) => session.id))).orderBy(desc(validationResults.createdAt)) : [];
+    const resultBySession = new Map<string, typeof resultRows[number]>();
+    for (const result of resultRows) if (!resultBySession.has(result.sessionId)) resultBySession.set(result.sessionId, result);
+    return { items: rows.map(({ session, customer }) => ({ session: { ...sanitizeSession(session), lastValidationResult: resultBySession.get(session.id) ?? null }, customer })), page: query.page, pageSize: query.pageSize, total: cachedCount.total, totalPages: Math.ceil(cachedCount.total / query.pageSize), nextCursor: rows.length === query.pageSize ? encodeListCursor(rows[rows.length - 1].session.updatedAt, rows[rows.length - 1].session.id) : null, hasMore: rows.length === query.pageSize, countAsOf: cachedCount.countAsOf };
   }
 
   async verification(id: string) {
@@ -640,9 +665,14 @@ export class AdminService {
     }
     if (query.status) filters.push(eq(reminders.status, query.status as typeof reminders.$inferSelect.status));
     const where = and(...filters);
-    const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(reminders).innerJoin(verificationSessions, eq(verificationSessions.id, reminders.sessionId)).innerJoin(customers, eq(customers.id, verificationSessions.customerId)).where(where);
-    const rows = await db.select({ reminder: reminders, session: verificationSessions, customer: customers }).from(reminders).innerJoin(verificationSessions, eq(verificationSessions.id, reminders.sessionId)).innerJoin(customers, eq(customers.id, verificationSessions.customerId)).where(where).orderBy(desc(reminders.createdAt)).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
-    return { items: rows.map(({ reminder, session, customer }) => ({ ...reminder, session: sanitizeSession(session), customer })), page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize) };
+    const cachedCount = await this.readCache.count('reminders', { search: query.search, status: query.status }, async () => {
+      const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(reminders).innerJoin(verificationSessions, eq(verificationSessions.id, reminders.sessionId)).innerJoin(customers, eq(customers.id, verificationSessions.customerId)).where(where);
+      return Number(total);
+    });
+    const cursor = decodeListCursor(query.cursor);
+    const cursorWhere = cursor ? or(lt(reminders.createdAt, new Date(cursor.value)), and(eq(reminders.createdAt, new Date(cursor.value)), lt(reminders.id, cursor.id))) : undefined;
+    const rows = await db.select({ reminder: reminders, session: verificationSessions, customer: customers }).from(reminders).innerJoin(verificationSessions, eq(verificationSessions.id, reminders.sessionId)).innerJoin(customers, eq(customers.id, verificationSessions.customerId)).where(cursorWhere ? and(where, cursorWhere) : where).orderBy(desc(reminders.createdAt), desc(reminders.id)).offset(cursor ? 0 : (query.page - 1) * query.pageSize).limit(query.pageSize);
+    return { items: rows.map(({ reminder, session, customer }) => ({ ...reminder, session: sanitizeSession(session), customer })), page: query.page, pageSize: query.pageSize, total: cachedCount.total, totalPages: Math.ceil(cachedCount.total / query.pageSize), nextCursor: rows.length === query.pageSize ? encodeListCursor(rows[rows.length - 1].reminder.createdAt, rows[rows.length - 1].reminder.id) : null, hasMore: rows.length === query.pageSize, countAsOf: cachedCount.countAsOf };
   }
 
   async audits(query: AdminListQueryInput) {
@@ -656,9 +686,14 @@ export class AdminService {
     if (query.actor === 'SYSTEM') filters.push(eq(auditLogs.actorUserId, 'system'));
     if (query.actor === 'ADMIN') filters.push(ilike(auditLogs.actorUserId, 'usr-admin%'));
     const where = and(...filters);
-    const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(auditLogs).where(where);
-    const items = await db.select().from(auditLogs).where(where).orderBy(desc(auditLogs.timestamp)).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
-    return { items, page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize) };
+    const cachedCount = await this.readCache.count('audit-logs', { search: query.search, status: query.status, actor: query.actor }, async () => {
+      const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(auditLogs).where(where);
+      return Number(total);
+    });
+    const cursor = decodeListCursor(query.cursor);
+    const cursorWhere = cursor ? or(lt(auditLogs.timestamp, new Date(cursor.value)), and(eq(auditLogs.timestamp, new Date(cursor.value)), lt(auditLogs.id, cursor.id))) : undefined;
+    const items = await db.select().from(auditLogs).where(cursorWhere ? and(where, cursorWhere) : where).orderBy(desc(auditLogs.timestamp), desc(auditLogs.id)).offset(cursor ? 0 : (query.page - 1) * query.pageSize).limit(query.pageSize);
+    return { items, page: query.page, pageSize: query.pageSize, total: cachedCount.total, totalPages: Math.ceil(cachedCount.total / query.pageSize), nextCursor: items.length === query.pageSize ? encodeListCursor(items[items.length - 1].timestamp, items[items.length - 1].id) : null, hasMore: items.length === query.pageSize, countAsOf: cachedCount.countAsOf };
   }
 
   async settings() {
@@ -681,9 +716,14 @@ export class AdminService {
     }
     if (query.status) filters.push(eq(integrationOutbox.status, query.status as typeof integrationOutbox.$inferSelect.status));
     const where = and(...filters);
-    const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(integrationOutbox).where(where);
-    const items = await db.select().from(integrationOutbox).where(where).orderBy(desc(integrationOutbox.createdAt)).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
-    return { items, page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize) };
+    const cachedCount = await this.readCache.count('outbox', { search: query.search, status: query.status }, async () => {
+      const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(integrationOutbox).where(where);
+      return Number(total);
+    });
+    const cursor = decodeListCursor(query.cursor);
+    const cursorWhere = cursor ? or(lt(integrationOutbox.createdAt, new Date(cursor.value)), and(eq(integrationOutbox.createdAt, new Date(cursor.value)), lt(integrationOutbox.id, cursor.id))) : undefined;
+    const items = await db.select().from(integrationOutbox).where(cursorWhere ? and(where, cursorWhere) : where).orderBy(desc(integrationOutbox.createdAt), desc(integrationOutbox.id)).offset(cursor ? 0 : (query.page - 1) * query.pageSize).limit(query.pageSize);
+    return { items, page: query.page, pageSize: query.pageSize, total: cachedCount.total, totalPages: Math.ceil(cachedCount.total / query.pageSize), nextCursor: items.length === query.pageSize ? encodeListCursor(items[items.length - 1].createdAt, items[items.length - 1].id) : null, hasMore: items.length === query.pageSize, countAsOf: cachedCount.countAsOf };
   }
 
   private async assertManualSendAllowed(phoneE164: string) {

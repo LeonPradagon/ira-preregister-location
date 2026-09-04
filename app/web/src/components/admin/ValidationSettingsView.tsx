@@ -173,6 +173,28 @@ export const ValidationSettingsView: React.FC = () => {
                 {t('settings.addressScoreHelp')}
               </p>
             </div>
+
+            <div>
+              <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                {t('settings.autoApprovalScore')}
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0.9"
+                  max="1.0"
+                  disabled={!canEditSettings}
+                  value={formData.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD}
+                  onChange={(e) => handleChangeNumber('AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD', parseFloat(e.target.value) || 0.9)}
+                  className="w-32 p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
+                />
+                <span className="text-gray-500 dark:text-gray-400">ratio (min. 0.90)</span>
+              </div>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                {t('settings.autoApprovalScoreHelp')}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -259,6 +281,11 @@ export const ValidationSettingsView: React.FC = () => {
 
           <div className="space-y-3 pt-1">
             {[
+              {
+                key: 'ENABLE_AUTO_APPROVAL' as keyof ValidationConfig,
+                label: 'settings.feature.autoApproval',
+                desc: 'settings.feature.autoApprovalDesc',
+              },
               {
                 key: 'ENABLE_MANUAL_REVIEW' as keyof ValidationConfig,
                 label: 'settings.feature.manualReview',

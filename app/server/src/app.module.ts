@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, RequestMethod } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module.js';
 import { HealthController } from './health/health.controller.js';
 import { PublicVerificationController } from './modules/verification/public-verification.controller.js';
@@ -23,6 +23,10 @@ import { WhatsAppWebhookController } from './integrations/whatsapp/whatsapp-webh
 import { CustomerImportService } from './modules/imports/customer-import.service.js';
 import { RegionsController } from './modules/regions/regions.controller.js';
 import { RegionsService } from './modules/regions/regions.service.js';
+import { ReadCacheService } from './common/read-cache.service.js';
+import { MetricsService } from './common/metrics.service.js';
+import { RequestMetricsMiddleware } from './common/request-metrics.middleware.js';
+import { RedisRateLimitMiddleware } from './common/redis-rate-limit.middleware.js';
 
 @Module({
   imports: [AuthModule],
@@ -34,6 +38,10 @@ import { RegionsService } from './modules/regions/regions.service.js';
     WhatsAppComplianceService,
     CustomerImportService,
     RegionsService,
+    ReadCacheService,
+    MetricsService,
+    RequestMetricsMiddleware,
+    RedisRateLimitMiddleware,
     ValidationConfigService,
     RolesGuard,
     { provide: GeocodingPort, useFactory: () => {
@@ -50,4 +58,8 @@ import { RegionsService } from './modules/regions/regions.service.js';
     } },
   ],
 })
-export class AppModule {}
+export class AppModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestMetricsMiddleware, RedisRateLimitMiddleware).forRoutes({ path: '*', method: RequestMethod.ALL });
+  }
+}

@@ -48,7 +48,16 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
     setError('');
     setIsUploading(true);
     try {
-      const imported = await api.importCustomers(file);
+      const queued = await api.importCustomers(file);
+      if (!queued.jobId) throw new Error('Server tidak mengembalikan ID import job.');
+      let imported = queued;
+      const deadline = Date.now() + 15 * 60 * 1000;
+      while (imported.status !== 'COMPLETED' && imported.status !== 'FAILED' && Date.now() < deadline) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        imported = await api.importJob(queued.jobId);
+      }
+      if (imported.status === 'FAILED') throw new Error(imported.errorSummary || 'Import gagal diproses.');
+      if (imported.status !== 'COMPLETED') throw new Error('Import masih diproses. Silakan cek status job dan coba lagi nanti.');
       setResult(imported);
       await onImported();
     } catch (uploadError) {

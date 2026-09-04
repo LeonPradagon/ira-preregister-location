@@ -35,14 +35,16 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<TablePageSize>(25);
+  const [cursors, setCursors] = useState<Record<number, string>>({});
 
   const sentReminders = rows.filter((row) => row.reminder.status === 'SENT');
   const scheduledReminders = rows.filter((row) => row.reminder.status === 'SCHEDULED');
-  useEffect(() => setPage(1), [searchTerm, statusFilter]);
+  useEffect(() => { setPage(1); setCursors({}); }, [searchTerm, statusFilter]);
   const load = async () => {
     setLoading(true); setError(null);
     try {
-      const response = await api.reminders({ page, pageSize, search: searchTerm, status: statusFilter });
+      const response = await api.reminders({ page, pageSize, search: searchTerm, status: statusFilter, cursor: page === 1 ? undefined : cursors[page] });
+      if (response.nextCursor) setCursors((previous) => ({ ...previous, [page + 1]: response.nextCursor! }));
       setRows(response.items.map((raw) => ({ reminder: raw as unknown as Reminder, session: mapApiSession(raw.session as Record<string, unknown>), customer: mapApiCustomer(raw.customer as Record<string, unknown>) })));
       setTotal(response.total);
     } catch (cause) { setError(cause instanceof Error ? cause.message : t('reminders.loadError')); }
@@ -83,7 +85,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({
       {/* Reminders Table */}
       <AdminTable
         minWidthClass="min-w-[1050px]"
-        footer={<TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} disabled={loading} />}
+        footer={<TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); setCursors({}); }} disabled={loading} />}
       >
             <thead className="bg-gray-50/80 dark:bg-gray-800/80 text-gray-600 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-700">
               <tr>

@@ -25,7 +25,7 @@ export interface PublicVerificationContextApi {
   customer: { id: string; name: string; phoneE164: string };
   address: {
     id: string; addressType: string; rawAddress: string; province: string; city: string; district: string; subdistrict: string;
-    street: string; houseNumber: string; referencePrecision: string; referenceLocation?: { latitude: number; longitude: number } | null; simulationConfig?: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number; manualReview?: boolean };
+    street: string; houseNumber: string; referencePrecision: string; referenceLocation?: { latitude: number; longitude: number } | null; simulationConfig?: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number; manualReview?: boolean; autoApprovalEnabled?: boolean; autoApprovalScoreThreshold?: number };
   };
 }
 
@@ -125,6 +125,7 @@ type ApiNumeric = number | string;
 
 export interface AdminDashboardApi {
   generatedAt: string;
+  countAsOf?: string;
   customers: {
     total: ApiNumeric;
     active: ApiNumeric;
@@ -163,7 +164,11 @@ export interface AdminDashboardApi {
 }
 
 export interface CustomerImportApiResult {
+  jobId?: string;
   fileName: string;
+  status?: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  rowsProcessed?: number;
+  rowsFailed?: number;
   rowsRead: number;
   customersUpserted: number;
   addressesUpdated: number;
@@ -177,6 +182,7 @@ export interface CustomerImportApiResult {
   whatsappOptIn: string;
   referencePrecision: string;
   importedAt: string;
+  errorSummary?: string | null;
 }
 
 export interface AdminPageApi<T> {
@@ -185,6 +191,9 @@ export interface AdminPageApi<T> {
   pageSize: number;
   total: number;
   totalPages: number;
+  nextCursor: string | null;
+  hasMore: boolean;
+  countAsOf: string;
 }
 
 export interface AdminListQuery {
@@ -228,7 +237,7 @@ const publicVerificationApi = {
   confirm: (token: string, confirmed: boolean) => request<{ status: string }>(`/public/verifications/${encodeURIComponent(token)}/customer-confirmation`, { method: 'POST', body: JSON.stringify({ confirmed }) }),
   consent: (token: string) => request<{ status: string }>(`/public/verifications/${encodeURIComponent(token)}/consent`, { method: 'POST' }),
   submitLocation: (token: string, samples: unknown[]) => request<ServerValidationDecision>(`/public/verifications/${encodeURIComponent(token)}/location`, { method: 'POST', body: JSON.stringify({ samples }) }),
-  waitForHome: (token: string, reminder: { scheduledAt?: string; reminderPreference?: string; reminderUntilAt: string }) => request<{ status: string; reminderNumber: number; reminderCount: number; scheduledAt: string; reminderUntilAt: string }>(`/public/verifications/${encodeURIComponent(token)}/wait-for-home`, { method: 'POST', body: JSON.stringify(reminder) }),
+  waitForHome: (token: string, reminder: { scheduledAt?: string; reminderPreference?: string; reminderUntilAt?: string }) => request<{ status: string; reminderNumber: number; reminderCount: number; scheduledAt: string; reminderUntilAt: string }>(`/public/verifications/${encodeURIComponent(token)}/wait-for-home`, { method: 'POST', body: JSON.stringify(reminder) }),
   changeAddress: (token: string, address: unknown) => request<{ id: string; status: string }>(`/public/verifications/${encodeURIComponent(token)}/address-change`, { method: 'POST', body: JSON.stringify(address) }),
   lookupAddress: (token: string, address: unknown) => request<{ postalCode: string | null; formattedAddress: string }>(`/public/verifications/${encodeURIComponent(token)}/address-lookup`, { method: 'POST', body: JSON.stringify(address) }),
   addressStatus: (token: string, sameAddress: boolean) => request<{ status: string; sameAddress: boolean }>(`/public/verifications/${encodeURIComponent(token)}/address-status`, { method: 'POST', body: JSON.stringify({ sameAddress }) }),
@@ -246,7 +255,7 @@ const adminApi = {
     if (query.locationStatus) params.set('locationStatus', query.locationStatus);
     if (query.cursor) params.set('cursor', query.cursor);
     const suffix = params.toString() ? `?${params.toString()}` : '';
-    return request<{ items: Array<Record<string, unknown>>; page: number; pageSize: number; total: number; totalPages: number }>(`/admin/customers${suffix}`);
+    return request<{ items: Array<Record<string, unknown>>; page: number; pageSize: number; total: number; totalPages: number; nextCursor: string | null; hasMore: boolean; countAsOf: string }>(`/admin/customers${suffix}`);
   },
   customer: (id: string) => request<Record<string, unknown>>(`/admin/customers/${encodeURIComponent(id)}`),
   createCustomer: (body: unknown) => request<Record<string, unknown>>('/admin/customers', { method: 'POST', body: JSON.stringify(body) }),
@@ -255,8 +264,9 @@ const adminApi = {
   importCustomers: (file: File) => {
     const body = new FormData();
     body.append('file', file);
-    return request<CustomerImportApiResult>('/admin/customers/import', { method: 'POST', body, timeout: 5 * 60 * 1000 });
+    return request<CustomerImportApiResult>('/admin/import-jobs', { method: 'POST', body, timeout: 60_000 });
   },
+  importJob: (id: string) => request<CustomerImportApiResult>(`/admin/import-jobs/${encodeURIComponent(id)}`),
   verifications: (query: AdminListQuery = {}) => request<AdminPageApi<{ session: Record<string, unknown>; customer: Record<string, unknown> }>>(`/admin/verifications${queryString(query)}`),
   verification: (id: string) => request<Record<string, unknown>>(`/admin/verifications/${encodeURIComponent(id)}`),
   addressFromGps: (id: string) => request<{ status: string; addressId: string; updatedFields: string[]; referenceLocation: { latitude: number; longitude: number } }>(`/admin/verifications/${encodeURIComponent(id)}/address-from-gps`, { method: 'POST' }),
@@ -276,7 +286,7 @@ const adminApi = {
   campaign: (id: string) => request<Record<string, unknown>>(`/admin/campaigns/${encodeURIComponent(id)}`),
   campaignItems: (id: string, query: AdminListQuery = {}) => request<AdminPageApi<Record<string, unknown>>>(`/admin/campaigns/${encodeURIComponent(id)}/items${queryString(query)}`),
   createCampaign: (body: unknown) => request<Record<string, unknown>>('/admin/campaigns', { method: 'POST', body: JSON.stringify(body) }),
-  previewWhatsApp: (body: { customerName: string; phoneE164: string; address?: string; referenceLatitude?: number; referenceLongitude?: number; referencePrecision?: string }) => request<{ simulation: boolean; recipient: { name: string; phoneE164: string }; templateName: string; language: string; message: string; verificationLink: string; referenceLocation: { latitude: number; longitude: number } | null; referencePrecision: string | null; simulationConfig: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number } }>('/admin/campaigns/preview-whatsapp', { method: 'POST', body: JSON.stringify(body) }),
+  previewWhatsApp: (body: { customerName: string; phoneE164: string; address?: string; referenceLatitude?: number; referenceLongitude?: number; referencePrecision?: string }) => request<{ simulation: boolean; recipient: { name: string; phoneE164: string }; templateName: string; language: string; message: string; verificationLink: string; referenceLocation: { latitude: number; longitude: number } | null; referencePrecision: string | null; simulationConfig: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number; manualReview: boolean; autoApprovalEnabled: boolean; autoApprovalScoreThreshold: number } }>('/admin/campaigns/preview-whatsapp', { method: 'POST', body: JSON.stringify(body) }),
   startCampaign: (id: string) => request<{ id: string; status: string }>(`/admin/campaigns/${encodeURIComponent(id)}/start`, { method: 'POST' }),
   optOutCustomer: (id: string) => request<{ customerId: string; status: string }>(`/admin/customers/${encodeURIComponent(id)}/whatsapp-opt-out`, { method: 'POST' }),
 };

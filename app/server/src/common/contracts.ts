@@ -16,7 +16,7 @@ export const confirmationSchema = z.object({ confirmed: z.boolean() });
 export const reminderSchema = z.object({
   reminderPreference: z.enum(['IN_1_HOUR', 'TONIGHT', 'TOMORROW_MORNING', 'DEFAULT']).optional(),
   scheduledAt: z.string().datetime().optional(),
-  reminderUntilAt: z.string().datetime(),
+  reminderUntilAt: z.string().datetime().optional(),
 }).refine((input) => Boolean(input.reminderPreference) !== Boolean(input.scheduledAt), {
   message: 'Provide either reminderPreference or scheduledAt',
   path: ['scheduledAt'],
@@ -123,7 +123,7 @@ export const customerListQuerySchema = z.object({
   search: z.string().trim().max(128).default(''),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
-  cursor: z.string().uuid().optional(),
+  cursor: z.string().max(255).optional(),
 });
 
 export const adminListQuerySchema = z.object({
@@ -154,6 +154,7 @@ export const validationConfigSchema = z.object({
   STREET_MATCH_THRESHOLD: z.number().min(0).max(1).optional(),
   STREET_SOFT_MATCH_THRESHOLD: z.number().min(0).max(1).optional(),
   ADDRESS_SCORE_THRESHOLD: z.number().min(0).max(1).optional(),
+  AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: z.number().min(0.9).max(1).optional(),
   MAX_LOCATION_ATTEMPTS: z.number().int().positive().optional(),
   MAX_REMINDERS_PER_SESSION: z.number().int().min(1).max(3).optional(),
   COORDINATE_DISPLAY_DECIMALS: z.number().int().min(0).max(8).optional(),
@@ -166,6 +167,7 @@ export const validationConfigSchema = z.object({
   ENABLE_IRA_COVERAGE: z.boolean().optional(),
   ENABLE_TICKETING: z.boolean().optional(),
   ENABLE_MANUAL_REVIEW: z.boolean().optional(),
+  ENABLE_AUTO_APPROVAL: z.boolean().optional(),
   ENABLE_ADDRESS_EDIT: z.boolean().optional(),
   ENABLE_REMINDERS: z.boolean().optional(),
 });

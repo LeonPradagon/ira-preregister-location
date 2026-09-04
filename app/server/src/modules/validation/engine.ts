@@ -1,7 +1,7 @@
 import { GpsSample } from '../../common/contracts.js';
 
 export type ReferencePrecision = 'EXACT_MASTER' | 'ROOFTOP' | 'HOUSE' | 'STREET' | 'AREA' | 'DISTRICT' | 'CITY';
-export type ValidationResult = 'LOCATION_VALID' | 'LOW_GPS_ACCURACY' | 'LOCATION_MISMATCH' | 'MANUAL_REVIEW';
+export type ValidationResult = 'LOCATION_VALID' | 'LOW_GPS_ACCURACY' | 'LOCATION_MISMATCH' | 'MANUAL_REVIEW' | 'WAITING_FOR_HOME';
 
 export interface AddressEvidence {
   id: string;
@@ -154,6 +154,7 @@ export function decideValidation(
     .some((value) => isPlaceholderAddressValue(value)) || isOnlyPlusCode(address.street);
   const addressNeedsManualReview = addressIncomplete || !hasReferenceLocation || !precisionOk;
   const addressScore = Math.round((Number(districtMatch) * 0.2 + Number(subdistrictMatch) * 0.25 + streetScore * 0.35 + (houseNumberMatch === undefined ? 0.2 : Number(houseNumberMatch) * 0.2)) * 100) / 100;
+  const addressMatchPasses = !addressIncomplete && administrativeLevelsMatch && streetScore >= config.streetMatchThreshold && addressScore >= config.addressScoreThreshold;
   // A complete registered address can still be checked against reverse GPS
   // data even when its master coordinate is missing. Do not hide a clear
   // address mismatch behind the manual-review fallback.
@@ -180,24 +181,26 @@ export function decideValidation(
   if (distanceFromReferenceMeters != null && distanceFromReferenceMeters > config.homeRadiusMeters) reasonCodes.push('HOME_RADIUS_EXCEEDED');
 
   let result: ValidationResult = 'MANUAL_REVIEW';
-  // An incomplete/unreferenced address cannot be proven automatically, even
-  // when the device also reports a weak accuracy estimate. Keep the GPS
-  // signal in reasonCodes, but make the actionable outcome manual review so
-  // Ops fixes the address/reference instead of rejecting the customer as
-  // being in the wrong place.
-  if (addressNeedsManualReview && !outsideHomeRadius && !addressTextMismatch) result = 'MANUAL_REVIEW';
-  else if (bestSample.accuracyMeters > config.gpsMaxAccuracyMeters) result = 'LOW_GPS_ACCURACY';
-  else if (spreadMeters > 100) result = 'MANUAL_REVIEW';
+  // A weak or unstable GPS capture is an actionable customer retry, not an
+  // Ops decision. Address/reference quality is evaluated after the customer
+  // has produced a usable location sample.
+  if (bestSample.accuracyMeters > config.gpsMaxAccuracyMeters || spreadMeters > 100) result = 'WAITING_FOR_HOME';
   // A trusted distance failure is conclusive even when the address metadata
   // needs review. The customer is not at the registered home, so do not send
   // this case to the Ops manual-review queue.
   else if (outsideHomeRadius || addressTextMismatch) result = 'LOCATION_MISMATCH';
-  else if (precisionOk && administrativeLevelsMatch && streetIsAcceptablySimilar && distanceFromReferenceMeters != null && distanceFromReferenceMeters <= config.homeRadiusMeters && addressScore >= config.addressScoreThreshold) result = 'LOCATION_VALID';
+  // A complete reverse-GPS match is enough for the automatic path even when
+  // the master coordinate is absent or only has area/street precision. A
+  // trusted reference still wins when available because it adds the radius
+  // check; the service applies the manual-review flag after this decision.
+  else if (addressMatchPasses && (distanceFromReferenceMeters == null || distanceFromReferenceMeters <= config.homeRadiusMeters)) result = 'LOCATION_VALID';
+  else if (addressNeedsManualReview) result = 'MANUAL_REVIEW';
   // Without a trusted reference coordinate we cannot calculate whether the
   // customer is at the registered home. This is not proof of a mismatch.
   else if (!hasReferenceLocation || !precisionOk) result = 'MANUAL_REVIEW';
   else if (outsideHomeRadius || addressScore < 0.6 || !provinceMatch || !cityMatch) result = 'LOCATION_MISMATCH';
   if (result === 'LOCATION_VALID') reasonCodes.push('LOCATION_VALID');
+  if (result === 'WAITING_FOR_HOME') reasonCodes.push('WAITING_FOR_HOME');
   if (result === 'MANUAL_REVIEW') reasonCodes.push('MANUAL_REVIEW_REQUIRED');
   return { result, bestSample, sampleSpreadMeters: spreadMeters, distanceFromReferenceMeters, addressScore, provinceMatch, cityMatch, districtMatch, subdistrictMatch, streetScore, houseNumberMatch, reasonCodes, referencePrecision: address.referencePrecision, reverseGeocode };
 }

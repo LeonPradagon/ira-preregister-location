@@ -45,7 +45,7 @@ const buildHeaderMap = (headers, rowNumber = 1) => {
 };
 
 if (!sourcePath || !existsSync(sourcePath)) throw new Error('Usage: npm run import:prereg -- /absolute/path/to/file.xlsx-or-file.csv');
-if (!Number.isInteger(batchSize) || batchSize < 100 || batchSize > 5000) throw new Error('IMPORT_BATCH_SIZE must be between 100 and 5000');
+if (!Number.isInteger(batchSize) || batchSize < 100 || batchSize > 1000) throw new Error('IMPORT_BATCH_SIZE must be between 100 and 1000');
 if (!['.xlsx', '.csv'].includes(sourcePath.slice(sourcePath.lastIndexOf('.')).toLowerCase())) throw new Error('Only .xlsx and .csv files are supported');
 
 const text = (value) => {
@@ -309,7 +309,12 @@ const insertStageBatch = async (client, rows) => {
 };
 
 const importRows = async ({ rows, stats }) => {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: Number(process.env.DATABASE_POOL_MAX ?? 5),
+    connectionTimeoutMillis: Number(process.env.DATABASE_CONNECTION_TIMEOUT_MS ?? 5000),
+    idleTimeoutMillis: Number(process.env.DATABASE_IDLE_TIMEOUT_MS ?? 30000),
+  });
   const client = await pool.connect();
   const importedAt = new Date();
   try {

@@ -1,5 +1,6 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common';
 import axios from 'axios';
+import { Redis } from 'ioredis';
 import { providerErrorMessage, providerHttpClient } from '../../common/http/provider-http.client.js';
 import { AddressLookupInput } from '../../common/contracts.js';
 import { displayProvinceName } from '../../common/region-names.js';
@@ -74,22 +75,61 @@ function mapResult(result: NominatimResult): GeocodingResult {
 }
 
 @Injectable()
-export class OsmGeocodingAdapter extends GeocodingPort {
+export class OsmGeocodingAdapter extends GeocodingPort implements OnModuleDestroy {
   private readonly baseUrl = (process.env.OSM_NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org').replace(/\/$/, '');
   private readonly userAgent = process.env.OSM_NOMINATIM_USER_AGENT || 'IRAPreregist/1.0';
   private readonly cacheTtlMs = Number(process.env.OSM_NOMINATIM_CACHE_TTL_MS ?? 300_000);
   private readonly cache = new Map<string, { expiresAt: number; value: GeocodingResult }>();
+  private readonly redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { lazyConnect: true, maxRetriesPerRequest: 1, enableOfflineQueue: false }).on('error', () => undefined);
+  private readonly distributedRateLimit = Number(process.env.GEOCODING_RATE_LIMIT_PER_SECOND ?? 1);
   private requestQueue = Promise.resolve();
   private nextRequestAt = 0;
 
+  private normalizeCacheKey(path: string, params: Record<string, string>) {
+    const normalized = Object.fromEntries(Object.entries(params).map(([key, value]) => [key, value.trim().replace(/\s+/g, ' ').toLowerCase()]));
+    return `${path}?${new URLSearchParams(normalized).toString()}`;
+  }
+
+  private async sharedCacheGet(key: string) {
+    try {
+      if (this.redis.status === 'wait') await this.redis.connect();
+      const value = await this.redis.get(`geocode:${key}`);
+      return value ? JSON.parse(value) as GeocodingResult : null;
+    } catch { return null; }
+  }
+
+  private async sharedCacheSet(key: string, value: GeocodingResult) {
+    try { await this.redis.set(`geocode:${key}`, JSON.stringify(value), 'PX', this.cacheTtlMs); } catch { /* local cache remains available */ }
+  }
+
+  private async acquireDistributedPermit() {
+    while (true) {
+      try {
+        if (this.redis.status === 'wait') await this.redis.connect();
+        const bucket = Math.floor(Date.now() / 1000);
+        const key = `geocode:rate:${bucket}`;
+        const count = await this.redis.incr(key);
+        if (count === 1) await this.redis.expire(key, 2);
+        if (count <= this.distributedRateLimit) return;
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      } catch { return; }
+    }
+  }
+
   private async request(path: string, params: Record<string, string>): Promise<GeocodingResult> {
-    const cacheKey = `${path}?${new URLSearchParams(params).toString()}`;
+    const cacheKey = this.normalizeCacheKey(path, params);
     const cached = this.cache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.value;
+    const sharedCached = await this.sharedCacheGet(cacheKey);
+    if (sharedCached) {
+      this.cache.set(cacheKey, { expiresAt: Date.now() + this.cacheTtlMs, value: sharedCached });
+      return sharedCached;
+    }
 
     const task = this.requestQueue.then(async () => {
       const waitMs = Math.max(0, this.nextRequestAt - Date.now());
       if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
+      await this.acquireDistributedPermit();
       this.nextRequestAt = Date.now() + 1000;
       try {
         const response = await providerHttpClient.get<unknown>(`${this.baseUrl}${path}`, {
@@ -113,8 +153,11 @@ export class OsmGeocodingAdapter extends GeocodingPort {
     const mapped = Array.isArray(result) ? result[0] : result;
     const value = mapResult(mapped);
     this.cache.set(cacheKey, { expiresAt: Date.now() + this.cacheTtlMs, value });
+    await this.sharedCacheSet(cacheKey, value);
     return value;
   }
+
+  async onModuleDestroy() { await this.redis.quit().catch(() => undefined); }
 
   async reverse(latitude: number, longitude: number): Promise<GeocodingResult> {
     return this.request('/reverse', {

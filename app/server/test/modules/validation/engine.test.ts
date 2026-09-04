@@ -33,16 +33,18 @@ describe('server validation engine', () => {
     const decision = decideValidation([
       sample(-6.884, 107.613), sample(-6.8855, 107.613, 12, 1), sample(-6.884, 107.6145, 14, 2),
     ], address, reverseGeocode, config);
-    expect(decision.result).toBe('MANUAL_REVIEW');
+    expect(decision.result).toBe('WAITING_FOR_HOME');
     expect(decision.reasonCodes).toContain('GPS_SAMPLE_INCONSISTENT');
+    expect(decision.reasonCodes).toContain('WAITING_FOR_HOME');
   });
 
   it('returns low accuracy before applying address/radius rules', () => {
     const decision = decideValidation([
       sample(-6.884, 107.613, 60), sample(-6.88401, 107.61301, 65, 1), sample(-6.88399, 107.61299, 70, 2),
     ], address, reverseGeocode, config);
-    expect(decision.result).toBe('LOW_GPS_ACCURACY');
+    expect(decision.result).toBe('WAITING_FOR_HOME');
     expect(decision.reasonCodes).toContain('LOW_GPS_ACCURACY');
+    expect(decision.reasonCodes).toContain('WAITING_FOR_HOME');
   });
 
   it('enforces the street match threshold as a hard rule', () => {
@@ -54,11 +56,11 @@ describe('server validation engine', () => {
     expect(decision.reasonCodes).toContain('STREET_MISMATCH');
   });
 
-  it('does not invent a distance or approve a capture when the reference coordinate is null', () => {
+  it('does not invent a distance when the reference coordinate is null', () => {
     const decision = decideValidation([
       sample(-6.884, 107.613), sample(-6.88401, 107.61301, 12, 1), sample(-6.88399, 107.61299, 14, 2),
     ], { ...address, referenceLatitude: null, referenceLongitude: null }, reverseGeocode, config);
-    expect(decision.result).toBe('MANUAL_REVIEW');
+    expect(decision.result).toBe('LOCATION_VALID');
     expect(decision.distanceFromReferenceMeters).toBeNull();
     expect(decision.reasonCodes).toContain('REFERENCE_LOCATION_MISSING');
   });
@@ -116,14 +118,6 @@ describe('server validation engine', () => {
     expect(decision.result).toBe('MANUAL_REVIEW');
   });
 
-  it('routes an address without a trusted reference to manual review when reverse GPS matches', () => {
-    const decision = decideValidation([
-      sample(-6.2, 106.784), sample(-6.20001, 106.78401, 12, 1), sample(-6.19999, 106.78399, 14, 2),
-    ], { ...address, referenceLatitude: null, referenceLongitude: null, referencePrecision: 'UNKNOWN' }, reverseGeocode, config);
-    expect(decision.result).toBe('MANUAL_REVIEW');
-    expect(decision.reasonCodes).toContain('REFERENCE_LOCATION_MISSING');
-  });
-
   it('routes a complete address mismatch to mismatch even without a master coordinate', () => {
     const decision = decideValidation([
       sample(-6.2, 106.784), sample(-6.20001, 106.78401, 12, 1), sample(-6.19999, 106.78399, 14, 2),
@@ -146,12 +140,12 @@ describe('server validation engine', () => {
     expect(decision.reasonCodes).not.toContain('MANUAL_REVIEW_REQUIRED');
   });
 
-  it('does not label an unreferenced address as only a GPS accuracy failure', () => {
+  it('asks the customer to retry before reviewing an unreferenced address when GPS is weak', () => {
     const decision = decideValidation([
       sample(-6.2, 106.784, 35), sample(-6.20001, 106.78401, 36, 1), sample(-6.19999, 106.78399, 37, 2),
     ], { ...address, houseNumber: 'UNKNOWN', postalCode: '00000', referenceLatitude: null, referenceLongitude: null, referencePrecision: 'UNKNOWN' }, reverseGeocode, config);
-    expect(decision.result).toBe('MANUAL_REVIEW');
-    expect(decision.reasonCodes).toEqual(expect.arrayContaining(['LOW_GPS_ACCURACY', 'REFERENCE_LOCATION_MISSING', 'ADDRESS_INCOMPLETE']));
+    expect(decision.result).toBe('WAITING_FOR_HOME');
+    expect(decision.reasonCodes).toEqual(expect.arrayContaining(['LOW_GPS_ACCURACY', 'REFERENCE_LOCATION_MISSING', 'ADDRESS_INCOMPLETE', 'WAITING_FOR_HOME']));
   });
 
   it('routes incomplete addresses to manual review even when GPS and reference match', () => {
@@ -160,5 +154,14 @@ describe('server validation engine', () => {
     ], { ...address, houseNumber: 'UNKNOWN', postalCode: '00000' }, reverseGeocode, config);
     expect(decision.result).toBe('MANUAL_REVIEW');
     expect(decision.reasonCodes).toContain('ADDRESS_INCOMPLETE');
+  });
+
+  it('asks the customer to retry when GPS is weak even if the address also needs review', () => {
+    const decision = decideValidation([
+      sample(-6.884, 107.613, 60), sample(-6.88401, 107.61301, 65, 1), sample(-6.88399, 107.61299, 70, 2),
+    ], { ...address, houseNumber: 'UNKNOWN', postalCode: '00000', referencePrecision: 'UNKNOWN' }, reverseGeocode, config);
+    expect(decision.result).toBe('WAITING_FOR_HOME');
+    expect(decision.reasonCodes).toEqual(expect.arrayContaining(['LOW_GPS_ACCURACY', 'ADDRESS_INCOMPLETE', 'WAITING_FOR_HOME']));
+    expect(decision.reasonCodes).not.toContain('MANUAL_REVIEW_REQUIRED');
   });
 });

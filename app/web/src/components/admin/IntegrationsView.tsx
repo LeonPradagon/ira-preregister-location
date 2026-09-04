@@ -28,15 +28,17 @@ export const IntegrationsView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cursors, setCursors] = useState<Record<number, string>>({});
   const load = async () => {
     setLoading(true); setError(null);
     try {
-      const response = await api.outbox({ page, pageSize, search: searchTerm, status: statusFilter });
+      const response = await api.outbox({ page, pageSize, search: searchTerm, status: statusFilter, cursor: page === 1 ? undefined : cursors[page] });
+      if (response.nextCursor) setCursors((previous) => ({ ...previous, [page + 1]: response.nextCursor! }));
       setOutboxEvents(response.items as unknown as IntegrationOutboxEvent[]); setTotal(response.total);
     } catch (cause) { setError(cause instanceof Error ? cause.message : t('integrations.loadError')); }
     finally { setLoading(false); }
   };
-  useEffect(() => setPage(1), [searchTerm, statusFilter]);
+  useEffect(() => { setPage(1); setCursors({}); }, [searchTerm, statusFilter]);
   useEffect(() => { void load(); }, [page, pageSize, searchTerm, statusFilter]);
 
   return (
@@ -180,7 +182,7 @@ export const IntegrationsView: React.FC = () => {
             {t('integrations.empty')}
           </div>
         )}
-        <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} disabled={loading} />
+        <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); setCursors({}); }} disabled={loading} />
       </div>
     </div>
   );

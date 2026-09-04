@@ -91,12 +91,12 @@ describe('API contracts', () => {
     expect(campaignCreateSchema.safeParse({ name: 'Invalid', customerIds: [], targetFilter: { locationStatus: 'UNVERIFIED' } }).success).toBe(false);
   });
 
-  it('requires a reminder range endpoint', () => {
+  it('accepts one reminder time and lets the server schedule the remaining reminders', () => {
     const valid = reminderSchema.safeParse({
       scheduledAt: '2026-09-02T05:00:00.000Z',
       reminderUntilAt: '2026-09-04T05:00:00.000Z',
     });
     expect(valid.success).toBe(true);
-    expect(reminderSchema.safeParse({ scheduledAt: '2026-09-02T05:00:00.000Z' }).success).toBe(false);
+    expect(reminderSchema.safeParse({ scheduledAt: '2026-09-02T05:00:00.000Z' }).success).toBe(true);
   });
 });

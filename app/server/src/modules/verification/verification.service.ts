@@ -8,9 +8,10 @@ import { DomainError, NotFoundError } from '../../common/errors.js';
 import { GeocodingPort, GeocodingResult } from '../../integrations/geocoding/geocoding.port.js';
 import { decideValidation, AddressEvidence, ReverseGeocodeEvidence } from '../validation/engine.js';
 import { assertTransition } from './state-machine.js';
-import { isReminderScheduledBeforeSessionExpiry, nextReminderNumber, ReminderPreference, scheduleReminderInTimezone, spreadReminderTimes } from '../reminders/reminder.policy.js';
+import { automaticReminderTimes, isReminderScheduledBeforeSessionExpiry, nextReminderNumber, ReminderPreference, scheduleReminderInTimezone, spreadReminderTimes } from '../reminders/reminder.policy.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
 import { parseVerificationToken, verifyVerificationToken } from './verification-token.js';
+import { shouldAutoApprove } from './approval-policy.js';
 const now = () => new Date();
 
 function maskName(value: string): string {
@@ -168,13 +169,27 @@ export class VerificationService {
       streetSoftMatchThreshold: config.STREET_SOFT_MATCH_THRESHOLD,
       addressScoreThreshold: config.ADDRESS_SCORE_THRESHOLD,
     });
-    if (!geocodingAvailable && !(decision.result === 'LOCATION_MISMATCH' && decision.distanceFromReferenceMeters != null && decision.distanceFromReferenceMeters > config.HOME_RADIUS_METERS)) {
+    if (!geocodingAvailable && decision.result !== 'WAITING_FOR_HOME' && !(decision.result === 'LOCATION_MISMATCH' && decision.distanceFromReferenceMeters != null && decision.distanceFromReferenceMeters > config.HOME_RADIUS_METERS)) {
       decision.result = 'MANUAL_REVIEW';
       decision.reasonCodes = [...decision.reasonCodes, 'GEOCODING_UNAVAILABLE', 'MANUAL_REVIEW_REQUIRED'];
     } else if (!geocodingAvailable) {
       decision.reasonCodes = [...decision.reasonCodes, 'GEOCODING_UNAVAILABLE'];
     }
-    if (decision.result === 'LOCATION_VALID' && config.ENABLE_MANUAL_REVIEW) {
+    const autoApprovalThreshold = Math.max(0.9, config.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD);
+    // Disabling the manual-review queue selects the automatic path. The
+    // explicit auto-approval flag remains useful when Ops wants a hybrid mode
+    // where only high-confidence results skip the queue.
+    const autoApprovalEligible = shouldAutoApprove({
+      result: decision.result,
+      addressScore: decision.addressScore,
+      customerConfirmationStatus: row.session.customerConfirmationStatus,
+      enableManualReview: config.ENABLE_MANUAL_REVIEW,
+      enableAutoApproval: config.ENABLE_AUTO_APPROVAL,
+      threshold: autoApprovalThreshold,
+    });
+    if (autoApprovalEligible) {
+      decision.reasonCodes = [...decision.reasonCodes, 'AUTO_APPROVED'];
+    } else if (decision.result === 'LOCATION_VALID' && config.ENABLE_MANUAL_REVIEW) {
       // A passing engine result is evidence for Ops, not the final customer
       // decision. Address/customer records change only after reviewer approval.
       decision.result = 'MANUAL_REVIEW';
@@ -216,7 +231,8 @@ export class VerificationService {
         completedAt: decision.result === 'LOCATION_VALID' ? timestamp : null, updatedAt: timestamp,
       }).where(eq(verificationSessions.id, row.session.id));
       await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Validation Engine', action: 'LOCATION_VALIDATION_COMPLETED', entityType: 'VALIDATION', entityId: resultId, after: { result: decision.result, reasonCodes: decision.reasonCodes, accuracyMeters: decision.bestSample.accuracyMeters, distanceMeters: decision.distanceFromReferenceMeters, addressScore: decision.addressScore }, timestamp });
-      if (decision.result === 'LOW_GPS_ACCURACY') await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Validation Engine', action: 'GPS_ACCURACY_REJECTED', entityType: 'VALIDATION', entityId: resultId, after: { accuracyMeters: decision.bestSample.accuracyMeters, threshold: config.GPS_MAX_ACCURACY_METERS }, timestamp });
+      if (autoApprovalEligible) await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Validation Engine', action: 'LOCATION_AUTO_APPROVED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, after: { result: decision.result, addressScore: decision.addressScore, threshold: autoApprovalThreshold, customerConfirmationStatus: row.session.customerConfirmationStatus }, reason: 'Customer data confirmed and validation score met the automatic approval threshold', timestamp });
+      if (decision.result === 'WAITING_FOR_HOME' || decision.result === 'LOW_GPS_ACCURACY') await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Validation Engine', action: 'GPS_ACCURACY_REJECTED', entityType: 'VALIDATION', entityId: resultId, after: { accuracyMeters: decision.bestSample.accuracyMeters, threshold: config.GPS_MAX_ACCURACY_METERS, result: decision.result, reasonCodes: decision.reasonCodes }, timestamp });
       if (decision.result === 'LOCATION_MISMATCH') await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Validation Engine', action: 'HOME_VALIDATION_FAILED', entityType: 'VALIDATION', entityId: resultId, after: { distanceMeters: decision.distanceFromReferenceMeters, radiusMeters: config.HOME_RADIUS_METERS, reasonCodes: decision.reasonCodes }, timestamp });
       if (decision.result === 'LOCATION_VALID') {
         await tx.update(customerAddresses).set({ addressStatus: 'SUPERSEDED', addressType: 'HISTORICAL', isActive: false, validTo: timestamp, updatedAt: timestamp }).where(and(eq(customerAddresses.customerId, row.customer.id), eq(customerAddresses.isActive, true), ne(customerAddresses.id, row.address.id)));
@@ -244,12 +260,15 @@ export class VerificationService {
     if (!reminderNumber) throw new DomainError('Reminder limit reached', 409, 'REMINDER_LIMIT_REACHED');
     const currentTime = now();
     const scheduledAt = scheduledAtInput ? new Date(scheduledAtInput) : scheduleReminderInTimezone(preference ?? 'DEFAULT', currentTime, process.env.REMINDER_TIMEZONE ?? 'Asia/Jakarta');
-    const reminderUntilAt = reminderUntilAtInput ? new Date(reminderUntilAtInput) : null;
+    const requestedReminderUntilAt = reminderUntilAtInput ? new Date(reminderUntilAtInput) : null;
     if (Number.isNaN(scheduledAt.getTime()) || scheduledAt <= currentTime) throw new DomainError('Reminder time must be in the future', 422, 'REMINDER_TIME_INVALID');
-    if (!reminderUntilAt || Number.isNaN(reminderUntilAt.getTime()) || reminderUntilAt <= scheduledAt) throw new DomainError('Reminder end time must be after the first reminder', 422, 'REMINDER_RANGE_INVALID');
     if (!isReminderScheduledBeforeSessionExpiry(scheduledAt, row.session.expiresAt)) throw new DomainError('Reminder time must be before the verification session expires', 422, 'REMINDER_TIME_EXCEEDS_SESSION');
-    if (!isReminderScheduledBeforeSessionExpiry(reminderUntilAt, row.session.expiresAt)) throw new DomainError('Reminder end time must be before the verification session expires', 422, 'REMINDER_TIME_EXCEEDS_SESSION');
-    const reminderTimes = spreadReminderTimes(scheduledAt, reminderUntilAt, max - row.session.reminderCount);
+    if (requestedReminderUntilAt && (Number.isNaN(requestedReminderUntilAt.getTime()) || requestedReminderUntilAt <= scheduledAt)) throw new DomainError('Reminder end time must be after the first reminder', 422, 'REMINDER_RANGE_INVALID');
+    if (requestedReminderUntilAt && !isReminderScheduledBeforeSessionExpiry(requestedReminderUntilAt, row.session.expiresAt)) throw new DomainError('Reminder end time must be before the verification session expires', 422, 'REMINDER_TIME_EXCEEDS_SESSION');
+    const reminderTimes = requestedReminderUntilAt
+      ? spreadReminderTimes(scheduledAt, requestedReminderUntilAt, max - row.session.reminderCount)
+      : automaticReminderTimes(scheduledAt, max - row.session.reminderCount, row.session.expiresAt);
+    const effectiveReminderUntilAt = reminderTimes[reminderTimes.length - 1];
     const finalReminderNumber = row.session.reminderCount + reminderTimes.length;
     const nextStatus = finalReminderNumber >= max ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME';
     assertTransition(row.session.verificationStatus, nextStatus);
@@ -260,10 +279,10 @@ export class VerificationService {
         return { id: randomUUID(), sessionId: row.session.id, reminderNumber, channel: 'WHATSAPP', scheduledAt: time, status: 'SCHEDULED', messageText: `Halo ${row.customer.name}, pengingat ${reminderNumber} dari ${max}. Tautan baru berlaku maksimal ${config.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`, retryCount: 0, createdAt: timestamp };
       }));
       await tx.update(verificationSessions).set({ reminderCount: finalReminderNumber, verificationStatus: nextStatus, updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
-      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'WAITING_FOR_HOME_SELECTED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, after: { preference: preference ?? 'CUSTOM', reminderCount: finalReminderNumber, scheduledAt: scheduledAt.toISOString(), reminderUntilAt: reminderUntilAt.toISOString() }, timestamp });
-      await tx.insert(auditLogs).values(reminderTimes.map((time, index) => ({ actorUserId: 'system', actorName: 'Reminder Scheduler', action: 'REMINDER_SCHEDULED', entityType: 'REMINDER', entityId: row.session.id, after: { reminderNumber: row.session.reminderCount + index + 1, scheduledAt: time.toISOString(), reminderUntilAt: reminderUntilAt.toISOString() }, timestamp })));
+      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'WAITING_FOR_HOME_SELECTED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, after: { preference: preference ?? 'CUSTOM', reminderCount: finalReminderNumber, scheduledAt: scheduledAt.toISOString(), reminderUntilAt: effectiveReminderUntilAt.toISOString(), automaticSchedule: !requestedReminderUntilAt }, timestamp });
+      await tx.insert(auditLogs).values(reminderTimes.map((time, index) => ({ actorUserId: 'system', actorName: 'Reminder Scheduler', action: 'REMINDER_SCHEDULED', entityType: 'REMINDER', entityId: row.session.id, after: { reminderNumber: row.session.reminderCount + index + 1, scheduledAt: time.toISOString(), reminderUntilAt: effectiveReminderUntilAt.toISOString(), automaticSchedule: !requestedReminderUntilAt }, timestamp })));
     });
-    return { status: nextStatus, reminderNumber: finalReminderNumber, reminderCount: finalReminderNumber, scheduledAt: scheduledAt.toISOString(), reminderUntilAt: reminderUntilAt.toISOString() };
+    return { status: nextStatus, reminderNumber: finalReminderNumber, reminderCount: finalReminderNumber, scheduledAt: scheduledAt.toISOString(), reminderUntilAt: effectiveReminderUntilAt.toISOString() };
   }
 
   async addressStatus(token: string, sameAddress: boolean) {

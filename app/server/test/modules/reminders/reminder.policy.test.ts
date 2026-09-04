@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isReminderScheduledBeforeSessionExpiry, nextReminderNumber, reminderLinkExpiresAt, scheduleReminder, scheduleReminderInTimezone, spreadReminderTimes } from '../../../src/modules/reminders/reminder.policy.js';
+import { automaticReminderTimes, isReminderScheduledBeforeSessionExpiry, nextReminderNumber, reminderLinkExpiresAt, scheduleReminder, scheduleReminderInTimezone, spreadReminderTimes } from '../../../src/modules/reminders/reminder.policy.js';
 
 describe('reminder policy', () => {
   it('caps reminders at three per session', () => {
@@ -39,6 +39,16 @@ describe('reminder policy', () => {
     const start = new Date('2026-01-01T10:00:00.000Z');
     const until = new Date('2026-01-03T10:00:00.000Z');
     expect(spreadReminderTimes(start, until, 3).map((time) => time.toISOString())).toEqual([
+      '2026-01-01T10:00:00.000Z',
+      '2026-01-02T10:00:00.000Z',
+      '2026-01-03T10:00:00.000Z',
+    ]);
+  });
+
+  it('creates three reminders from one selected time at daily intervals', () => {
+    const start = new Date('2026-01-01T10:00:00.000Z');
+    const expiry = new Date('2026-01-10T00:00:00.000Z');
+    expect(automaticReminderTimes(start, 3, expiry).map((time) => time.toISOString())).toEqual([
       '2026-01-01T10:00:00.000Z',
       '2026-01-02T10:00:00.000Z',
       '2026-01-03T10:00:00.000Z',

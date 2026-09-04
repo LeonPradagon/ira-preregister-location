@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, gt, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { db } from '../../db/client.js';
 import { auditLogs, customerAddresses, customers, verificationCampaignItems, verificationCampaigns, verificationSessions } from '../../db/schema/index.js';
@@ -8,6 +8,8 @@ import { DomainError, NotFoundError } from '../../common/errors.js';
 import { RequestAdmin } from '../../common/request-user.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
 import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/whatsapp/whatsapp.templates.js';
+import { ReadCacheService } from '../../common/read-cache.service.js';
+import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js';
 
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
@@ -36,7 +38,7 @@ function filtersForTarget(target: StoredTargetFilter, cursor?: string) {
 
 @Injectable()
 export class CampaignService {
-  constructor(private readonly validationConfig: ValidationConfigService) {}
+  constructor(private readonly validationConfig: ValidationConfigService, private readonly readCache: ReadCacheService) {}
 
   async previewWhatsApp(input: WhatsAppPreviewInput) {
     const template = getWhatsAppTemplate('INVITATION');
@@ -50,6 +52,9 @@ export class CampaignService {
     const config = await this.validationConfig.get();
     query.set('homeRadiusMeters', String(config.HOME_RADIUS_METERS));
     query.set('gpsMaxAccuracyMeters', String(config.GPS_MAX_ACCURACY_METERS));
+    query.set('manualReview', String(config.ENABLE_MANUAL_REVIEW));
+    query.set('autoApprovalEnabled', String(config.ENABLE_AUTO_APPROVAL));
+    query.set('autoApprovalScoreThreshold', String(Math.max(0.9, config.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD)));
     const verificationLink = `${process.env.WEB_ORIGIN ?? 'http://localhost:5173'}/v/simulasi-${randomUUID()}?${query.toString()}`;
     return {
       simulation: true,
@@ -60,7 +65,7 @@ export class CampaignService {
       verificationLink,
       referenceLocation: input.referenceLatitude == null || input.referenceLongitude == null ? null : { latitude: input.referenceLatitude, longitude: input.referenceLongitude },
       referencePrecision: input.referencePrecision ?? null,
-      simulationConfig: { homeRadiusMeters: config.HOME_RADIUS_METERS, gpsMaxAccuracyMeters: config.GPS_MAX_ACCURACY_METERS },
+      simulationConfig: { homeRadiusMeters: config.HOME_RADIUS_METERS, gpsMaxAccuracyMeters: config.GPS_MAX_ACCURACY_METERS, manualReview: config.ENABLE_MANUAL_REVIEW, autoApprovalEnabled: config.ENABLE_AUTO_APPROVAL, autoApprovalScoreThreshold: Math.max(0.9, config.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD) },
     };
   }
 
@@ -137,9 +142,14 @@ export class CampaignService {
     }
     if (query.status) filters.push(eq(verificationCampaigns.status, query.status as typeof verificationCampaigns.$inferSelect.status));
     const where = and(...filters);
-    const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(verificationCampaigns).where(where);
-    const items = await db.select().from(verificationCampaigns).where(where).orderBy(desc(verificationCampaigns.createdAt), desc(verificationCampaigns.id)).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
-    return { items, page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize) };
+    const cachedCount = await this.readCache.count('campaigns', { search: query.search, status: query.status }, async () => {
+      const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(verificationCampaigns).where(where);
+      return Number(total);
+    });
+    const cursor = decodeListCursor(query.cursor);
+    const cursorWhere = cursor ? or(lt(verificationCampaigns.createdAt, new Date(cursor.value)), and(eq(verificationCampaigns.createdAt, new Date(cursor.value)), lt(verificationCampaigns.id, cursor.id))) : undefined;
+    const items = await db.select().from(verificationCampaigns).where(cursorWhere ? and(where, cursorWhere) : where).orderBy(desc(verificationCampaigns.createdAt), desc(verificationCampaigns.id)).offset(cursor ? 0 : (query.page - 1) * query.pageSize).limit(query.pageSize);
+    return { items, page: query.page, pageSize: query.pageSize, total: cachedCount.total, totalPages: Math.ceil(cachedCount.total / query.pageSize), nextCursor: items.length === query.pageSize ? encodeListCursor(items[items.length - 1].createdAt, items[items.length - 1].id) : null, hasMore: items.length === query.pageSize, countAsOf: cachedCount.countAsOf };
   }
 
   async detail(campaignId: string) {
@@ -151,16 +161,26 @@ export class CampaignService {
   async items(campaignId: string, query: AdminListQueryInput) {
     const [campaign] = await db.select({ id: verificationCampaigns.id }).from(verificationCampaigns).where(eq(verificationCampaigns.id, campaignId));
     if (!campaign) throw new NotFoundError('Campaign not found');
-    const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(verificationCampaignItems).where(eq(verificationCampaignItems.campaignId, campaignId));
+    const itemFilters = [eq(verificationCampaignItems.campaignId, campaignId)];
+    if (query.search) {
+      const pattern = `%${query.search}%`;
+      itemFilters.push(or(ilike(customers.name, pattern), ilike(customers.externalId, pattern), ilike(customers.phoneE164, pattern)) as typeof itemFilters[number]);
+    }
+    const cachedCount = await this.readCache.count('campaign-items', { campaignId, search: query.search }, async () => {
+      const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(verificationCampaignItems).innerJoin(customers, eq(customers.id, verificationCampaignItems.customerId)).where(and(...itemFilters));
+      return Number(total);
+    });
+    const cursor = decodeListCursor(query.cursor);
+    const cursorWhere = cursor ? or(lt(verificationCampaignItems.createdAt, new Date(cursor.value)), and(eq(verificationCampaignItems.createdAt, new Date(cursor.value)), lt(verificationCampaignItems.id, cursor.id))) : undefined;
     const items = await db.select({ item: verificationCampaignItems, customer: customers, sessionStatus: verificationSessions.verificationStatus })
       .from(verificationCampaignItems)
       .innerJoin(customers, eq(customers.id, verificationCampaignItems.customerId))
       .innerJoin(verificationSessions, eq(verificationSessions.id, verificationCampaignItems.sessionId))
-      .where(eq(verificationCampaignItems.campaignId, campaignId))
+      .where(cursorWhere ? and(...itemFilters, cursorWhere) : and(...itemFilters))
       .orderBy(desc(verificationCampaignItems.createdAt), desc(verificationCampaignItems.id))
-      .limit(query.pageSize)
-      .offset((query.page - 1) * query.pageSize);
-    return { items, page: query.page, pageSize: query.pageSize, total: Number(total), totalPages: Math.ceil(Number(total) / query.pageSize) };
+      .offset(cursor ? 0 : (query.page - 1) * query.pageSize)
+      .limit(query.pageSize);
+    return { items, page: query.page, pageSize: query.pageSize, total: cachedCount.total, totalPages: Math.ceil(cachedCount.total / query.pageSize), nextCursor: items.length === query.pageSize ? encodeListCursor(items[items.length - 1].item.createdAt, items[items.length - 1].item.id) : null, hasMore: items.length === query.pageSize, countAsOf: cachedCount.countAsOf };
   }
 
   async materializeNext(campaignId: string) {

@@ -6,6 +6,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module.js';
 import { loadConfig } from './config/configuration.js';
 import { DomainErrorFilter } from './common/domain-error.filter.js';
+import { logEvent } from './common/structured-log.js';
 
 async function bootstrap() {
   const config = loadConfig();
@@ -17,6 +18,7 @@ async function bootstrap() {
     },
     rawBody: true,
   });
+  app.getHttpAdapter().getInstance().set('trust proxy', config.TRUST_PROXY);
   app.use((request: Request, response: Response, next: NextFunction) => {
     const correlationId = request.header('x-correlation-id') || randomUUID();
     response.setHeader('x-correlation-id', correlationId);
@@ -29,6 +31,6 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => {
-  console.error(error);
+  logEvent('error', 'api.bootstrap_failed', { error: error instanceof Error ? error.message : String(error) });
   process.exitCode = 1;
 });

@@ -57,7 +57,7 @@ const toDateTimeLocalValue = (date: Date) => {
   return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
 };
 
-const createSimulationContext = (customerName: string, customerAddress: string, referenceLocation: { latitude: number; longitude: number } | null, referencePrecision: string, simulationConfig: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number; manualReview: boolean }): PublicVerificationContextApi => ({
+const createSimulationContext = (customerName: string, customerAddress: string, referenceLocation: { latitude: number; longitude: number } | null, referencePrecision: string, simulationConfig: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number; manualReview: boolean; autoApprovalEnabled?: boolean; autoApprovalScoreThreshold?: number }): PublicVerificationContextApi => ({
   session: { id: 'simulation-session', status: 'CREATED', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(), linkExpiresAt: new Date(Date.now() + 7 * 86400000).toISOString(), customerConfirmationStatus: 'UNCONFIRMED', reminderCount: 0 },
   customer: { id: 'simulation-customer', name: customerName, phoneE164: '+628111111111' },
   address: { id: 'simulation-address', addressType: 'MASTER', rawAddress: customerAddress, province: 'Jawa Barat', city: 'Bandung', district: 'Coblong', subdistrict: 'Dago', street: 'Jalan Ir H Juanda', houseNumber: '10', referencePrecision, referenceLocation, simulationConfig },
@@ -75,7 +75,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   const simulationReferencePrecision = simulationParams?.get('referencePrecision') || 'UNKNOWN';
   const simulationHomeRadiusMeters = Number(simulationParams?.get('homeRadiusMeters')) || 50;
   const simulationGpsMaxAccuracyMeters = Number(simulationParams?.get('gpsMaxAccuracyMeters')) || 30;
-  const simulationConfig = { homeRadiusMeters: simulationHomeRadiusMeters, gpsMaxAccuracyMeters: simulationGpsMaxAccuracyMeters, manualReview: true };
+  const simulationConfig = { homeRadiusMeters: simulationHomeRadiusMeters, gpsMaxAccuracyMeters: simulationGpsMaxAccuracyMeters, manualReview: simulationParams?.get('manualReview') !== 'false', autoApprovalEnabled: simulationParams?.get('autoApprovalEnabled') === 'true', autoApprovalScoreThreshold: Number(simulationParams?.get('autoApprovalScoreThreshold')) || 0.9 };
   const [context, setContext] = useState<PublicVerificationContextApi | null>(() => simulation ? createSimulationContext(simulationName, simulationAddress, simulationReferenceLocation, simulationReferencePrecision, simulationConfig) : null);
   const [decision, setDecision] = useState<ServerValidationDecision | null>(null);
   const [addressForm, setAddressForm] = useState<AddressForm>({});
@@ -91,7 +91,6 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   const [gpsPermissionDenied, setGpsPermissionDenied] = useState(false);
   const [gpsRetryAvailable, setGpsRetryAvailable] = useState(false);
   const [reminderDateTime, setReminderDateTime] = useState(() => toDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)));
-  const [reminderUntilAt, setReminderUntilAt] = useState(() => toDateTimeLocalValue(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)));
   const [reminderScheduledNow, setReminderScheduledNow] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,7 +116,6 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     setGpsPermissionDenied(false);
     setGpsRetryAvailable(false);
     setReminderDateTime(toDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)));
-    setReminderUntilAt(toDateTimeLocalValue(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)));
     setReminderScheduledNow(false);
     setError(null);
   };
@@ -138,15 +136,23 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
           homeRadiusMeters: 50,
           gpsMaxAccuracyMeters: 30,
           manualReview: true,
+          autoApprovalEnabled: false,
+          autoApprovalScoreThreshold: 0.9,
         };
         const referenceLocation = simulationContext.address.referenceLocation;
         const distanceFromReferenceMeters = referenceLocation ? calculateGeodesicDistanceMeters(evaluation.bestSample, referenceLocation) : null;
         const reasonCodes: string[] = [];
+        const automaticApproval = (simulationConfig.autoApprovalEnabled || !simulationConfig.manualReview) && 1 >= (simulationConfig.autoApprovalScoreThreshold ?? 0.9);
         let result = 'LOCATION_VALID';
-        if (evaluation.bestSample.accuracyMeters > simulationConfig.gpsMaxAccuracyMeters) { result = 'LOW_GPS_ACCURACY'; reasonCodes.push('LOW_GPS_ACCURACY'); }
-        else if (!evaluation.isConsistent) { result = 'MANUAL_REVIEW'; reasonCodes.push('GPS_SAMPLE_INCONSISTENT'); }
-        else if (!referenceLocation) { result = 'MANUAL_REVIEW'; reasonCodes.push('REFERENCE_LOCATION_MISSING'); }
+        if (evaluation.bestSample.accuracyMeters > simulationConfig.gpsMaxAccuracyMeters) { result = 'WAITING_FOR_HOME'; reasonCodes.push('LOW_GPS_ACCURACY', 'WAITING_FOR_HOME'); }
+        else if (!evaluation.isConsistent) { result = 'WAITING_FOR_HOME'; reasonCodes.push('GPS_SAMPLE_INCONSISTENT', 'WAITING_FOR_HOME'); }
         else if (distanceFromReferenceMeters != null && distanceFromReferenceMeters > simulationConfig.homeRadiusMeters) { result = 'LOCATION_MISMATCH'; reasonCodes.push('HOME_RADIUS_EXCEEDED'); }
+        else if (automaticApproval) {
+          if (!referenceLocation) reasonCodes.push('REFERENCE_LOCATION_MISSING');
+          else if (!['EXACT_MASTER', 'ROOFTOP', 'HOUSE'].includes(simulationContext.address.referencePrecision)) reasonCodes.push('REFERENCE_LOCATION_NOT_PRECISE');
+          reasonCodes.push('LOCATION_VALID', 'AUTO_APPROVED');
+        }
+        else if (!referenceLocation) { result = 'MANUAL_REVIEW'; reasonCodes.push('REFERENCE_LOCATION_MISSING'); }
         else if (!['EXACT_MASTER', 'ROOFTOP', 'HOUSE'].includes(simulationContext.address.referencePrecision)) { result = 'MANUAL_REVIEW'; reasonCodes.push('REFERENCE_LOCATION_NOT_PRECISE'); }
         else if (simulationConfig.manualReview) { result = 'MANUAL_REVIEW'; reasonCodes.push('AUTOMATED_VALIDATION_PASSED', 'MANUAL_REVIEW_REQUIRED'); }
         else reasonCodes.push('LOCATION_VALID');
@@ -173,17 +179,8 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
 
   const scheduleReminder = () => {
     const scheduledAt = new Date(reminderDateTime);
-    const untilAt = new Date(reminderUntilAt);
     if (Number.isNaN(scheduledAt.getTime()) || scheduledAt <= new Date()) {
       setError(t('customer.reminderInvalid'));
-      return;
-    }
-    if (Number.isNaN(untilAt.getTime()) || untilAt <= scheduledAt) {
-      setError(t('customer.reminderRangeInvalid'));
-      return;
-    }
-    if (context && untilAt >= new Date(context.session.expiresAt)) {
-      setError(t('customer.reminderSessionExpiry'));
       return;
     }
     setReminderScheduledNow(true);
@@ -192,7 +189,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
         const remaining = Math.max(1, 3 - (context?.session.reminderCount ?? 0));
         updateSimulationSession({ status: (context?.session.reminderCount ?? 0) + remaining >= 3 ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME', reminderCount: (context?.session.reminderCount ?? 0) + remaining });
       })
-      : run(() => api.waitForHome(token, { scheduledAt: scheduledAt.toISOString(), reminderUntilAt: untilAt.toISOString() }));
+      : run(() => api.waitForHome(token, { scheduledAt: scheduledAt.toISOString() }));
   };
 
   const captureAfterTransition = async (transition: () => Promise<unknown> | unknown) => {
@@ -368,9 +365,10 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       {busy && ['CONSENTED', 'GPS_CAPTURING', 'ADDRESS_PROPOSED'].includes(status) && <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-relaxed text-blue-800"><Loader2 className="h-4 w-4 shrink-0 animate-spin" />{t('customer.gpsAutomatic')}</div>}
       {reminderLinkFlow && <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4"><p className="text-xs font-semibold text-blue-900">{t('customer.stillAtAddress')}</p>{context.session.linkExpiresAt && <p className="text-[11px] text-blue-700">{formatLinkExpiry(context.session.linkExpiresAt, t)}</p>}<button disabled={busy} onClick={() => void captureAfterTransition(() => simulation ? updateSimulationSession({ status: 'GPS_CAPTURING' }) : api.addressStatus(token, true))} className="w-full rounded-lg bg-gray-900 px-3 py-3 text-xs font-medium text-white">{t('customer.yesCorrect')}</button>{addressChangeAction}</div>}
       {mismatch && !reminderLinkFlow && <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-sm font-semibold text-amber-900">{t('customer.previousMismatch')}</p>{decision && <ValidationEvidence decision={decision} /> }<button disabled={busy} onClick={() => void captureGps()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"><Compass className="h-5 w-5" />{t('customer.retryGps')}</button>{addressChangeAction}</div>}
-      {status === 'LOCATION_MISMATCH' && !reminderLinkFlow && <ReminderPicker value={reminderDateTime} onChange={setReminderDateTime} untilValue={reminderUntilAt} onUntilChange={setReminderUntilAt} disabled={busy || context.session.reminderCount >= 3} max={toDateTimeLocalValue(new Date(context.session.expiresAt))} onSubmit={scheduleReminder} />}
-      {status === 'WAITING_FOR_HOME' && !reminderLinkFlow && <ResultPanel icon={<Clock3 className="h-7 w-7 text-amber-600" />} title={t('customer.waitingAtHome')} text={`${t('customer.reminderScheduled')} ${formatLinkExpiry(context.session.linkExpiresAt, t)}`} />}
-      {status === 'REMINDER_LIMIT_REACHED' && !reminderLinkFlow && <ResultPanel icon={<Clock3 className="h-7 w-7 text-amber-600" />} title={t('customer.reminderLimit')} text={t('customer.returnToLink')} />}
+      {status === 'LOCATION_MISMATCH' && !reminderLinkFlow && <ReminderPicker value={reminderDateTime} onChange={setReminderDateTime} disabled={busy || context.session.reminderCount >= 3} max={toDateTimeLocalValue(new Date(context.session.expiresAt))} onSubmit={scheduleReminder} />}
+      {status === 'WAITING_FOR_HOME' && !reminderLinkFlow && <div className="space-y-3"><ResultPanel icon={<Clock3 className="h-7 w-7 text-amber-600" />} title={t('customer.waitingAtHome')} text={t('customer.gpsNeedsRetry')} />{decision && <ValidationEvidence decision={decision} />}<button disabled={busy} onClick={() => void captureGps()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"><Compass className="h-5 w-5" />{t('customer.retryGps')}</button></div>}
+      {reminderScheduledNow && status === 'REMINDER_LIMIT_REACHED' && <ResultPanel icon={<Clock3 className="h-7 w-7 text-emerald-600" />} title={t('customer.reminderScheduled')} text={t('customer.remindersScheduledAutomatically')} />}
+      {status === 'REMINDER_LIMIT_REACHED' && !reminderLinkFlow && !reminderScheduledNow && <ResultPanel icon={<Clock3 className="h-7 w-7 text-amber-600" />} title={t('customer.reminderLimit')} text={t('customer.returnToLink')} />}
       {status === 'CUSTOMER_DATA_MISMATCH' && <ResultPanel icon={<XCircle className="h-7 w-7 text-rose-600" />} title={t('customer.dataNeedsUpdate')} text={t('customer.contactSupport')} />}
       {status === 'ADDRESS_PROPOSED' && <div className="space-y-3"><ResultPanel icon={<MapPin className="h-7 w-7 text-blue-600" />} title={t('customer.newAddressSubmitted')} text={t('customer.addressWaitingGps')} /><button disabled={busy} onClick={() => void captureAfterTransition(() => simulation ? updateSimulationSession({ status: 'GPS_CAPTURING' }) : api.addressStatus(token, true))} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"><Compass className="h-5 w-5" />{t('customer.retryGps')}</button></div>}
       {status === 'MANUAL_REVIEW' && <><ResultPanel icon={<ShieldCheck className="h-7 w-7 text-amber-600" />} title={t('customer.manualReview')} text={t('customer.manualReviewNotice')} />{decision && <ValidationEvidence decision={decision} />}</>}
@@ -393,7 +391,7 @@ const ValidationEvidence: React.FC<{ decision: ServerValidationDecision }> = ({ 
     <p className="mt-2 break-words text-slate-500">Catatan: {decision.reasonCodes.map(userFriendlyReason).join(', ')}</p>
   </div>;
 };
-const ReminderPicker: React.FC<{ value: string; onChange: (value: string) => void; untilValue: string; onUntilChange: (value: string) => void; disabled: boolean; max: string; onSubmit: () => void }> = ({ value, onChange, untilValue, onUntilChange, disabled, max, onSubmit }) => { const { t } = useTranslation(); const minimum = toDateTimeLocalValue(new Date(Date.now() + 60_000)); return <div className="min-w-0 space-y-3 rounded-lg border border-amber-200 bg-white p-3"><div><label className="block break-words text-xs font-medium text-gray-700">{t('customer.reminderDateTime')}</label><input type="datetime-local" min={minimum} max={max} disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 block w-full min-w-0 rounded-lg border border-gray-300 px-3 py-2 text-sm sm:text-xs" /></div><div><label className="block break-words text-xs font-medium text-gray-700">{t('customer.reminderUntilDateTime')}</label><input type="datetime-local" min={value || minimum} max={max} disabled={disabled} value={untilValue} onChange={(event) => onUntilChange(event.target.value)} className="mt-1 block w-full min-w-0 rounded-lg border border-gray-300 px-3 py-2 text-sm sm:text-xs" /></div><p className="break-words text-[11px] text-gray-500">{t('customer.reminderRangeHelp')} {t('customer.reminderTimezone')}</p><button type="button" disabled={disabled} onClick={onSubmit} className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium"><Clock3 className="h-4 w-4 shrink-0" />{t('customer.askReminder')}</button></div>; };
+const ReminderPicker: React.FC<{ value: string; onChange: (value: string) => void; disabled: boolean; max: string; onSubmit: () => void }> = ({ value, onChange, disabled, max, onSubmit }) => { const { t } = useTranslation(); const minimum = toDateTimeLocalValue(new Date(Date.now() + 60_000)); return <div className="min-w-0 space-y-3 rounded-lg border border-amber-200 bg-white p-3"><div><label className="block break-words text-xs font-medium text-gray-700">{t('customer.reminderDateTime')}</label><input type="datetime-local" min={minimum} max={max} disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 block w-full min-w-0 rounded-lg border border-gray-300 px-3 py-2 text-sm sm:text-xs" /></div><p className="break-words text-[11px] text-gray-500">{t('customer.reminderRangeHelp')} {t('customer.reminderTimezone')}</p><button type="button" disabled={disabled} onClick={onSubmit} className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium"><Clock3 className="h-4 w-4 shrink-0" />{t('customer.askReminder')}</button></div>; };
 
 function formatLinkExpiry(value: string | undefined, translate: (key: string, values?: Record<string, string | number>) => string): string {
   if (!value) return '';

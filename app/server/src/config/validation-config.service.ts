@@ -10,6 +10,7 @@ export interface RuntimeValidationConfig extends Record<string, unknown> {
   STREET_MATCH_THRESHOLD: number;
   STREET_SOFT_MATCH_THRESHOLD: number;
   ADDRESS_SCORE_THRESHOLD: number;
+  AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: number;
   MAX_LOCATION_ATTEMPTS: number;
   MAX_REMINDERS_PER_SESSION: number;
   COORDINATE_DISPLAY_DECIMALS: number;
@@ -22,6 +23,7 @@ export interface RuntimeValidationConfig extends Record<string, unknown> {
   ENABLE_IRA_COVERAGE: boolean;
   ENABLE_TICKETING: boolean;
   ENABLE_MANUAL_REVIEW: boolean;
+  ENABLE_AUTO_APPROVAL: boolean;
   ENABLE_ADDRESS_EDIT: boolean;
   ENABLE_REMINDERS: boolean;
 }
@@ -35,6 +37,7 @@ export class ValidationConfigService {
       STREET_MATCH_THRESHOLD: Number(process.env.STREET_MATCH_THRESHOLD ?? 0.9),
       STREET_SOFT_MATCH_THRESHOLD: Number(process.env.STREET_SOFT_MATCH_THRESHOLD ?? 0.7),
       ADDRESS_SCORE_THRESHOLD: Number(process.env.ADDRESS_SCORE_THRESHOLD ?? 0.9),
+      AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: Number(process.env.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD ?? 0.9),
       MAX_LOCATION_ATTEMPTS: Number(process.env.MAX_LOCATION_ATTEMPTS ?? 5),
       MAX_REMINDERS_PER_SESSION: Number(process.env.MAX_REMINDERS_PER_SESSION ?? 3),
       COORDINATE_DISPLAY_DECIMALS: Number(process.env.COORDINATE_DISPLAY_DECIMALS ?? 6),
@@ -47,6 +50,7 @@ export class ValidationConfigService {
       ENABLE_IRA_COVERAGE: process.env.ENABLE_IRA_COVERAGE === 'true',
       ENABLE_TICKETING: process.env.ENABLE_TICKETING === 'true',
       ENABLE_MANUAL_REVIEW: process.env.ENABLE_MANUAL_REVIEW !== 'false',
+      ENABLE_AUTO_APPROVAL: process.env.ENABLE_AUTO_APPROVAL === 'true',
       ENABLE_ADDRESS_EDIT: process.env.ENABLE_ADDRESS_EDIT !== 'false',
       ENABLE_REMINDERS: process.env.ENABLE_REMINDERS !== 'false',
     };

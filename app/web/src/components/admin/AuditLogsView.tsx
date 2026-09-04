@@ -30,12 +30,14 @@ export const AuditLogsView: React.FC = () => {
   const [pageSize, setPageSize] = useState<TablePageSize>(25);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cursors, setCursors] = useState<Record<number, string>>({});
 
-  useEffect(() => setPage(1), [searchTerm, actorFilter, entityFilter]);
+  useEffect(() => { setPage(1); setCursors({}); }, [searchTerm, actorFilter, entityFilter]);
   const load = async () => {
     setLoading(true); setError(null);
     try {
-      const response = await api.auditLogs({ page, pageSize, search: searchTerm, status: entityFilter, actor: actorFilter });
+      const response = await api.auditLogs({ page, pageSize, search: searchTerm, status: entityFilter, actor: actorFilter, cursor: page === 1 ? undefined : cursors[page] });
+      if (response.nextCursor) setCursors((previous) => ({ ...previous, [page + 1]: response.nextCursor! }));
       setAuditLogs(response.items as unknown as AuditLog[]); setTotal(response.total);
     } catch (cause) { setError(cause instanceof Error ? cause.message : t('audit.loadError')); }
     finally { setLoading(false); }
@@ -200,7 +202,7 @@ export const AuditLogsView: React.FC = () => {
           {!loading && error && <div className="p-10 text-center text-xs text-rose-600">{error}</div>}
           {!loading && !error && !auditLogs.length && <div className="p-10 text-center text-xs text-gray-500">Belum ada audit log.</div>}
         </div>
-        <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} disabled={loading} />
+        <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); setCursors({}); }} disabled={loading} />
       </div>
     </div>
   );

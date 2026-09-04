@@ -13,7 +13,7 @@ import {
   Smartphone,
   XCircle,
 } from 'lucide-react';
-import { mapApiCustomer, mapApiSession, mapApiValidationResult, useApp } from '../../context/AppContext';
+import { mapApiCustomer, mapApiSession, useApp } from '../../context/AppContext';
 import { api } from '../../lib/apiClient';
 import { Customer } from '../../types';
 import { VerificationSession, VerificationStatus } from '../../types';
@@ -38,21 +38,18 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<TablePageSize>(25);
+  const [cursors, setCursors] = useState<Record<number, string>>({});
 
-  useEffect(() => setPage(1), [searchTerm, statusFilter]);
+  useEffect(() => { setPage(1); setCursors({}); }, [searchTerm, statusFilter]);
   const load = async () => {
     setLoading(true); setError(null);
     try {
-      const response = await api.verifications({ page, pageSize, search: searchTerm, status: statusFilter });
-      const mapped = await Promise.all(response.items.map(async (row) => {
+      const response = await api.verifications({ page, pageSize, search: searchTerm, status: statusFilter, cursor: page === 1 ? undefined : cursors[page] });
+      if (response.nextCursor) setCursors((previous) => ({ ...previous, [page + 1]: response.nextCursor! }));
+      const mapped = response.items.map((row) => {
         const session = mapApiSession(row.session);
-        try {
-                  const detail = await api.verification(session.id);
-          const results = Array.isArray(detail.results) ? detail.results : [];
-          if (results[0]) session.lastValidationResult = mapApiValidationResult(results[0] as Record<string, unknown>);
-        } catch { /* detail loads when the row is opened */ }
         return { session, customer: mapApiCustomer(row.customer) };
-      }));
+      });
       setRows(mapped); setTotal(response.total);
     } catch (cause) { setError(cause instanceof Error ? cause.message : t('verifications.loadError')); }
     finally { setLoading(false); }
@@ -164,7 +161,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
       {/* Verifications Table */}
       <AdminTable
         minWidthClass="min-w-[1050px]"
-        footer={<TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} disabled={loading} />}
+        footer={<TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); setCursors({}); }} disabled={loading} />}
       >
             <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">
               <tr>

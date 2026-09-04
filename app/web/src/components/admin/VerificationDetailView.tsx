@@ -750,7 +750,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
                     </td>
                   </tr>
                   <tr>
-                    <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Jarak vs Toleransi Rumah</td>
+                    <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Jarak Toleransi Rumah</td>
                     <td className="px-3.5 py-2 font-mono text-[11px]">&le; {validationConfig.HOME_RADIUS_METERS}m</td>
                     <td className="px-3.5 py-2 font-mono text-[11px]">
                       {distanceToCurrentReference == null ? 'Belum ada referensi' : `${distanceToCurrentReference.toFixed(1)}m`}

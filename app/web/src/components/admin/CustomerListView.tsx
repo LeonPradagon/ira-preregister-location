@@ -45,7 +45,7 @@ const statusBadgeClass = (status: CustomerStatus) => {
 type RegionLevel = 'province' | 'city' | 'district' | 'subdistrict';
 const regionLevels: RegionLevel[] = ['province', 'city', 'district', 'subdistrict'];
 
-const generateCustomerExternalId = () => `REREG-NON-CUSTOMER-${Math.floor(Math.random() * 900000 + 100000)}`;
+const generateCustomerExternalId = () => `PREREREG-NON-CUSTOMER-${Math.floor(Math.random() * 900000 + 100000)}`;
 const getPhoneNationalPart = (phone: string) => {
   const digits = phone.replace(/\D/g, '');
   return digits.startsWith('62') ? digits.slice(2) : digits.startsWith('0') ? digits.slice(1) : digits;

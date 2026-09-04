@@ -348,6 +348,25 @@ export const auditLogs = pgTable('audit_logs', {
   timestamp: timestamp('timestamp', { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const importJobs = pgTable('import_jobs', {
+  id: id(),
+  fileName: varchar('file_name', { length: 255 }).notNull(),
+  filePath: text('file_path').notNull(),
+  status: varchar('status', { length: 32 }).notNull().default('QUEUED'),
+  rowsRead: integer('rows_read').notNull().default(0),
+  rowsProcessed: integer('rows_processed').notNull().default(0),
+  rowsFailed: integer('rows_failed').notNull().default(0),
+  customersUpserted: integer('customers_upserted').notNull().default(0),
+  addressesInserted: integer('addresses_inserted').notNull().default(0),
+  addressesUpdated: integer('addresses_updated').notNull().default(0),
+  errorSummary: text('error_summary'),
+  createdBy: text('created_by').notNull().references(() => authUsers.id),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 export const customerRelations = relations(customers, ({ many }) => ({
   addresses: many(customerAddresses),
   sessions: many(verificationSessions),

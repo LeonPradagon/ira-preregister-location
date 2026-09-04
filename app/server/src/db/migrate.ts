@@ -6,6 +6,7 @@ import { db, pool } from './client.js';
 
 const migrationsDir = resolve(import.meta.dirname, 'migrations');
 const migrationName = /^\d{4}_.+\.sql$/;
+const noTransactionMarker = '-- migration: no-transaction';
 
 const main = async () => {
   const migrationFiles = (await readdir(migrationsDir))
@@ -28,12 +29,16 @@ const main = async () => {
   for (const fileName of migrationFiles) {
     if (applied.has(fileName)) continue;
     const migration = await readFile(resolve(migrationsDir, fileName), 'utf8');
-    await db.transaction(async (transaction) => {
-      for (const statement of migration.split('-- statement-breakpoint').map((item) => item.trim()).filter(Boolean)) {
-        await transaction.execute(sql.raw(statement));
-      }
-      await transaction.execute(sql`INSERT INTO "app_migrations" ("filename") VALUES (${fileName})`);
-    });
+    const statements = migration.split('-- statement-breakpoint').map((item) => item.trim()).filter(Boolean);
+    if (migration.includes(noTransactionMarker)) {
+      for (const statement of statements) await db.execute(sql.raw(statement));
+      await db.execute(sql`INSERT INTO "app_migrations" ("filename") VALUES (${fileName})`);
+    } else {
+      await db.transaction(async (transaction) => {
+        for (const statement of statements) await transaction.execute(sql.raw(statement));
+        await transaction.execute(sql`INSERT INTO "app_migrations" ("filename") VALUES (${fileName})`);
+      });
+    }
     console.log(`Applied migration ${fileName}`);
   }
   await pool.end();
