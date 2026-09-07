@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Clock3, Compass, Edit3, Loader2, MapPin, ShieldCheck, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, Compass, Edit3, MapPin, ShieldCheck, XCircle } from 'lucide-react';
 import { api, PublicVerificationContextApi, ServerValidationDecision } from '../../lib/apiClient';
 import { useTranslation } from '../../i18n';
+import { AppLoader } from '../common/AppLoader';
 import { calculateGeodesicDistanceMeters, evaluateBestGpsSample, formatAddressForDisplay } from '../../lib/validationEngine';
-import { userFriendlyReason } from '../../lib/statusLabels';
 import { findRegionOption, regionOptionValue } from '../../lib/regionSelection';
+import { shouldShowCustomerConfirmation, shouldShowLocationRetry, shouldShowReminderResume } from '../../lib/customerVerificationFlow';
+import { confirmAction } from '../../lib/swal';
 
 interface Props { token: string; simulation?: boolean }
 type AddressForm = Record<string, string>;
@@ -12,7 +14,7 @@ type RegionLevel = 'province' | 'city' | 'district' | 'subdistrict';
 type RegionOption = { code: string; name: string; postalCode?: string | null };
 const regionLevels: RegionLevel[] = ['province', 'city', 'district', 'subdistrict'];
 const fields = ['street', 'province', 'city', 'district', 'subdistrict', 'houseNumber', 'postalCode', 'addressDetail'];
-const fieldLabels: Record<string, string> = { province: 'Provinsi', city: 'Kota / Kabupaten', district: 'Kecamatan', subdistrict: 'Kelurahan / Desa', postalCode: 'Kode pos', street: 'Nama jalan / perumahan', houseNumber: 'Nomor rumah', addressDetail: 'Detail alamat & patokan' };
+const fieldLabels: Record<string, string> = { province: 'Provinsi', city: 'Kota / Kabupaten', district: 'Kecamatan', subdistrict: 'Kelurahan / Desa', postalCode: 'Kode pos', street: 'Nama jalan / perumahan', houseNumber: 'Nomor rumah', addressDetail: 'Detail alamat & patokan (optional)' };
 const fieldPlaceholders: Record<string, string> = { province: 'Contoh: Jawa Barat', city: 'Contoh: Kota Bandung', district: 'Contoh: Coblong', subdistrict: 'Contoh: Dago', postalCode: 'Contoh: 40135', street: 'Contoh: Jalan Ir. H. Juanda atau Perumahan Griya Asri', houseNumber: 'Contoh: 10 atau A-12', addressDetail: 'Contoh: Blok A lantai 2, dekat pos satpam, sebelah minimarket' };
 const GPS_SAMPLE_TARGET = 5;
 const GPS_CAPTURE_TIMEOUT_MS = 30_000;
@@ -57,8 +59,8 @@ const toDateTimeLocalValue = (date: Date) => {
   return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
 };
 
-const createSimulationContext = (customerName: string, customerAddress: string, referenceLocation: { latitude: number; longitude: number } | null, referencePrecision: string, simulationConfig: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number; manualReview: boolean; autoApprovalEnabled?: boolean; autoApprovalScoreThreshold?: number }): PublicVerificationContextApi => ({
-  session: { id: 'simulation-session', status: 'CREATED', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(), linkExpiresAt: new Date(Date.now() + 7 * 86400000).toISOString(), customerConfirmationStatus: 'UNCONFIRMED', reminderCount: 0 },
+const createSimulationContext = (customerName: string, customerAddress: string, referenceLocation: { latitude: number; longitude: number } | null, referencePrecision: string, simulationConfig: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number; manualReview: boolean; autoApprovalEnabled: boolean; autoApprovalScoreThreshold: number }): PublicVerificationContextApi => ({
+  session: { id: 'simulation-session', status: 'CREATED', expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(), linkExpiresAt: new Date(Date.now() + 7 * 86400000).toISOString(), customerConfirmationStatus: 'UNCONFIRMED', reminderCount: 0, isReminderLink: false },
   customer: { id: 'simulation-customer', name: customerName, phoneE164: '+628111111111' },
   address: { id: 'simulation-address', addressType: 'MASTER', rawAddress: customerAddress, province: 'Jawa Barat', city: 'Bandung', district: 'Coblong', subdistrict: 'Dago', street: 'Jalan Ir H Juanda', houseNumber: '10', referencePrecision, referenceLocation, simulationConfig },
 });
@@ -142,7 +144,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
         const referenceLocation = simulationContext.address.referenceLocation;
         const distanceFromReferenceMeters = referenceLocation ? calculateGeodesicDistanceMeters(evaluation.bestSample, referenceLocation) : null;
         const reasonCodes: string[] = [];
-        const automaticApproval = (simulationConfig.autoApprovalEnabled || !simulationConfig.manualReview) && 1 >= (simulationConfig.autoApprovalScoreThreshold ?? 0.9);
+        const automaticApproval = simulationConfig.autoApprovalEnabled && 1 >= (simulationConfig.autoApprovalScoreThreshold ?? 0.9);
         let result = 'LOCATION_VALID';
         if (evaluation.bestSample.accuracyMeters > simulationConfig.gpsMaxAccuracyMeters) { result = 'WAITING_FOR_HOME'; reasonCodes.push('LOW_GPS_ACCURACY', 'WAITING_FOR_HOME'); }
         else if (!evaluation.isConsistent) { result = 'WAITING_FOR_HOME'; reasonCodes.push('GPS_SAMPLE_INCONSISTENT', 'WAITING_FOR_HOME'); }
@@ -154,8 +156,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
         }
         else if (!referenceLocation) { result = 'MANUAL_REVIEW'; reasonCodes.push('REFERENCE_LOCATION_MISSING'); }
         else if (!['EXACT_MASTER', 'ROOFTOP', 'HOUSE'].includes(simulationContext.address.referencePrecision)) { result = 'MANUAL_REVIEW'; reasonCodes.push('REFERENCE_LOCATION_NOT_PRECISE'); }
-        else if (simulationConfig.manualReview) { result = 'MANUAL_REVIEW'; reasonCodes.push('AUTOMATED_VALIDATION_PASSED', 'MANUAL_REVIEW_REQUIRED'); }
-        else reasonCodes.push('LOCATION_VALID');
+        else { result = 'MANUAL_REVIEW'; reasonCodes.push('AUTOMATED_VALIDATION_PASSED', 'MANUAL_REVIEW_REQUIRED'); }
         setDecision({ id: 'simulation-result', result, reasonCodes, bestSample: evaluation.bestSample, distanceFromReferenceMeters, addressScore: result === 'LOCATION_VALID' || reasonCodes.includes('AUTOMATED_VALIDATION_PASSED') ? 1 : 0, sampleSpreadMeters: evaluation.sampleSpreadMeters, capturedLocation: { ...evaluation.bestSample, coordinateText: `${evaluation.bestSample.latitude.toFixed(6)}, ${evaluation.bestSample.longitude.toFixed(6)}`, googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${evaluation.bestSample.latitude},${evaluation.bestSample.longitude}` } });
         updateSimulationSession({ status: result });
         return;
@@ -186,8 +187,8 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     setReminderScheduledNow(true);
     return simulation
       ? run(async () => {
-        const remaining = Math.max(1, 3 - (context?.session.reminderCount ?? 0));
-        updateSimulationSession({ status: (context?.session.reminderCount ?? 0) + remaining >= 3 ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME', reminderCount: (context?.session.reminderCount ?? 0) + remaining });
+        const nextReminderCount = (context?.session.reminderCount ?? 0) + 1;
+        updateSimulationSession({ status: nextReminderCount >= 3 ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME', reminderCount: nextReminderCount });
       })
       : run(() => api.waitForHome(token, { scheduledAt: scheduledAt.toISOString() }));
   };
@@ -213,6 +214,13 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     if (required.some((field) => field === 'postalCode' ? !postalCode : !addressForm[field]?.trim())) { setError(t('customer.requiredAddressFieldsWithPostal')); return; }
     if (!/^\d{5}$/.test(postalCode)) { setError(t('customer.postalCodeInvalid')); return; }
     const submittedAddress: AddressForm = { ...addressForm, postalCode, houseNumber: addressForm.houseNumber.trim() };
+    const confirmed = await confirmAction({
+      title: t('crud.updateQuestion'),
+      text: t('crud.updateText'),
+      confirmButtonText: t('crud.continue'),
+      cancelButtonText: t('crud.cancel'),
+    });
+    if (!confirmed) return;
     setBusy(true); setError(null);
     try {
       if (simulation) {
@@ -318,15 +326,20 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   }, [editingAddress, simulation, addressForm.province, addressForm.city, addressForm.district, addressForm.subdistrict, addressForm.postalCode]);
 
   if (error && !context) return <Panel><XCircle className="mx-auto mb-3 h-12 w-12 text-rose-500" /><h2 className="break-words text-base font-semibold">{t('customer.invalidLink')}</h2><p className="mt-2 break-words text-xs text-gray-600">{error}</p></Panel>;
-  if (!context) return <Panel><Loader2 className="mx-auto h-9 w-9 animate-spin text-blue-600" /><p className="mt-4 break-words text-sm font-medium text-gray-700">{t('customer.loading')}</p><p className="mt-1 text-xs leading-relaxed text-gray-500">{t('customer.loadingHint')}</p></Panel>;
+  if (!context) return <Panel><AppLoader size={72} label={t('customer.loading')} className="mx-auto" /><p className="mt-4 break-words text-sm font-medium text-gray-700">{t('customer.loading')}</p><p className="mt-1 text-xs leading-relaxed text-gray-500">{t('customer.loadingHint')}</p></Panel>;
 
   const status = String(context.session.status || 'LINK_OPENED').trim().toUpperCase();
   const confirmationStatus = String(context.session.customerConfirmationStatus || 'UNCONFIRMED').trim().toUpperCase();
   const confirmed = confirmationStatus === 'CONFIRMED';
-  const showConfirmation = !confirmed && ['CREATED', 'MESSAGE_SENT', 'LINK_OPENED'].includes(status);
+  const showConfirmation = shouldShowCustomerConfirmation(status, confirmationStatus);
   const mismatch = ['LOCATION_MISMATCH', 'LOW_GPS_ACCURACY'].includes(status);
+  const locationMismatchStatus = status === 'LOCATION_MISMATCH';
   const addressChangeAvailable = context.address.addressType !== 'PROPOSED';
-  const reminderLinkFlow = !reminderScheduledNow && confirmed && context.session.reminderCount > 0 && ['WAITING_FOR_HOME', 'REMINDER_LIMIT_REACHED'].includes(status);
+  const selectedReminderWaiting = reminderScheduledNow || (!context.session.isReminderLink && confirmed && context.session.reminderCount > 0 && ['WAITING_FOR_HOME', 'REMINDER_LIMIT_REACHED'].includes(status));
+  const reminderLinkFlow = !selectedReminderWaiting && confirmed && context.session.reminderCount > 0 && ['WAITING_FOR_HOME', 'REMINDER_LIMIT_REACHED'].includes(status);
+  // A customer who has selected a reminder must wait for that schedule.
+  // Keep the resume action reserved for a later, unique reminder link.
+  const reminderResumeAvailable = !selectedReminderWaiting && shouldShowReminderResume(status, confirmationStatus, context.session.reminderCount, context.session.isReminderLink, busy);
   const renderAddressField = (field: string) => {
     const regionLevel = regionLevels.includes(field as RegionLevel) ? field as RegionLevel : null;
     const parentLevel = regionLevel ? regionLevels[regionLevels.indexOf(regionLevel) - 1] : undefined;
@@ -362,16 +375,17 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       {error && <div className="space-y-2 break-words rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"><div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span className="min-w-0 break-words">{error}</span></div>{gpsRetryAvailable && <button type="button" disabled={busy} onClick={() => void captureGps()} className="w-full rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-medium text-rose-800 sm:w-auto">{gpsPermissionDenied ? t('customer.requestGpsAgain') : t('customer.retryGps')}</button>}</div>}
       {showConfirmation && <div className="space-y-3"><p className="text-base font-medium leading-relaxed text-slate-700">{t('customer.confirmData')}</p><button disabled={busy} onClick={() => void run(() => simulation ? Promise.resolve(updateSimulationSession({ status: 'CONSENTED', customerConfirmationStatus: 'CONFIRMED' })) : api.confirm(token, true))} className="w-full rounded-xl bg-blue-600 px-4 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50">{t('customer.yesCorrect')}</button><button disabled={busy} onClick={() => void run(() => simulation ? Promise.resolve(updateSimulationSession({ status: 'CUSTOMER_DATA_MISMATCH', customerConfirmationStatus: 'MISMATCH' })) : api.confirm(token, false))} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 disabled:opacity-50">{t('customer.notMyData')}</button></div>}
       {status === 'CONSENTED' && <div className="space-y-3"><div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-relaxed text-blue-800">{t('customer.locationPermission')}</div><button disabled={busy} onClick={() => void captureAfterTransition(() => simulation ? updateSimulationSession({ status: 'GPS_CAPTURING' }) : api.consent(token))} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"><ShieldCheck className="h-5 w-5" />{t('customer.allowAndStart')}</button></div>}
-      {busy && ['CONSENTED', 'GPS_CAPTURING', 'ADDRESS_PROPOSED'].includes(status) && <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-relaxed text-blue-800"><Loader2 className="h-4 w-4 shrink-0 animate-spin" />{t('customer.gpsAutomatic')}</div>}
-      {reminderLinkFlow && <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4"><p className="text-xs font-semibold text-blue-900">{t('customer.stillAtAddress')}</p>{context.session.linkExpiresAt && <p className="text-[11px] text-blue-700">{formatLinkExpiry(context.session.linkExpiresAt, t)}</p>}<button disabled={busy} onClick={() => void captureAfterTransition(() => simulation ? updateSimulationSession({ status: 'GPS_CAPTURING' }) : api.addressStatus(token, true))} className="w-full rounded-lg bg-gray-900 px-3 py-3 text-xs font-medium text-white">{t('customer.yesCorrect')}</button>{addressChangeAction}</div>}
-      {mismatch && !reminderLinkFlow && <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-sm font-semibold text-amber-900">{t('customer.previousMismatch')}</p>{decision && <ValidationEvidence decision={decision} /> }<button disabled={busy} onClick={() => void captureGps()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"><Compass className="h-5 w-5" />{t('customer.retryGps')}</button>{addressChangeAction}</div>}
-      {status === 'LOCATION_MISMATCH' && !reminderLinkFlow && <ReminderPicker value={reminderDateTime} onChange={setReminderDateTime} disabled={busy || context.session.reminderCount >= 3} max={toDateTimeLocalValue(new Date(context.session.expiresAt))} onSubmit={scheduleReminder} />}
-      {status === 'WAITING_FOR_HOME' && !reminderLinkFlow && <div className="space-y-3"><ResultPanel icon={<Clock3 className="h-7 w-7 text-amber-600" />} title={t('customer.waitingAtHome')} text={t('customer.gpsNeedsRetry')} />{decision && <ValidationEvidence decision={decision} />}<button disabled={busy} onClick={() => void captureGps()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"><Compass className="h-5 w-5" />{t('customer.retryGps')}</button></div>}
-      {reminderScheduledNow && status === 'REMINDER_LIMIT_REACHED' && <ResultPanel icon={<Clock3 className="h-7 w-7 text-emerald-600" />} title={t('customer.reminderScheduled')} text={t('customer.remindersScheduledAutomatically')} />}
-      {status === 'REMINDER_LIMIT_REACHED' && !reminderLinkFlow && !reminderScheduledNow && <ResultPanel icon={<Clock3 className="h-7 w-7 text-amber-600" />} title={t('customer.reminderLimit')} text={t('customer.returnToLink')} />}
+      {busy && ['CONSENTED', 'GPS_CAPTURING', 'ADDRESS_PROPOSED'].includes(status) && <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-relaxed text-blue-800"><AppLoader size={28} label={t('customer.gpsAutomatic')} />{t('customer.gpsAutomatic')}</div>}
+      {selectedReminderWaiting && <ResultPanel icon={<Clock3 className="h-7 w-7 text-emerald-600" />} title={t('customer.reminderScheduled')} text={t(context.session.reminderCount >= 3 ? 'customer.reminderLimitScheduled' : 'customer.remindersScheduledAutomatically')} />}
+      {reminderResumeAvailable && <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4"><div><p className="text-sm font-semibold text-blue-900">{t('customer.stillAtAddress')}</p><p className="mt-1 break-words text-xs leading-relaxed text-blue-800">{t('customer.reminderContinueHelp')}</p></div>{context.session.linkExpiresAt && <p className="text-[11px] text-blue-700">{formatLinkExpiry(context.session.linkExpiresAt, t)}</p>}<button disabled={busy} onClick={() => void captureAfterTransition(() => simulation ? updateSimulationSession({ status: 'GPS_CAPTURING' }) : api.addressStatus(token, true))} className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-3 text-xs font-semibold text-white"><Compass className="h-4 w-4" />{t('customer.startVerificationNow')}</button>{addressChangeAction}</div>}
+      {mismatch && !selectedReminderWaiting && <div role="status" className="space-y-4 rounded-xl border border-amber-200 bg-amber-50 p-4"><div className="flex items-start gap-3"><div className="shrink-0 rounded-full bg-amber-100 p-2 text-amber-700"><AlertTriangle className="h-5 w-5" /></div><div className="min-w-0"><p className="break-words text-base font-semibold text-amber-950">{t(locationMismatchStatus ? 'customer.locationMismatchTitle' : 'customer.locationAccuracyTitle')}</p><p className="mt-1 break-words text-sm leading-relaxed text-amber-900">{t(locationMismatchStatus ? 'customer.locationMismatchText' : 'customer.locationAccuracyText')}</p></div></div><div className="rounded-lg bg-white/70 p-3"><p className="text-xs font-semibold text-amber-950">{t('customer.locationNextSteps')}</p><p className="mt-1 break-words text-xs leading-relaxed text-amber-900">{t(locationMismatchStatus ? 'customer.locationMismatchSteps' : 'customer.locationAccuracySteps')}</p></div><button disabled={busy} onClick={() => void captureGps()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"><Compass className="h-5 w-5" />{t('customer.retryLocation')}</button>{addressChangeAction}</div>}
+      {mismatch && !selectedReminderWaiting && <ReminderPicker value={reminderDateTime} onChange={setReminderDateTime} disabled={busy || context.session.reminderCount >= 3} max={toDateTimeLocalValue(new Date(context.session.expiresAt))} onSubmit={scheduleReminder} />}
+      {shouldShowLocationRetry(status, confirmationStatus, busy) && !selectedReminderWaiting && <div className="space-y-3"><ResultPanel icon={<Compass className="h-7 w-7 text-blue-600" />} title={t('customer.locationWaitingTitle')} text={t('customer.locationWaitingText')} /><button disabled={busy} onClick={() => void captureGps()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"><Compass className="h-5 w-5" />{t('customer.startVerificationNow')}</button></div>}
+      {status === 'WAITING_FOR_HOME' && !selectedReminderWaiting && !showConfirmation && <div className="space-y-3"><ResultPanel icon={<Clock3 className="h-7 w-7 text-amber-600" />} title={t('customer.locationWaitingTitle')} text={t('customer.locationWaitingText')} /><button disabled={busy} onClick={() => void captureGps()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"><Compass className="h-5 w-5" />{t('customer.retryLocation')}</button></div>}
+      {status === 'REMINDER_LIMIT_REACHED' && !selectedReminderWaiting && !showConfirmation && <ResultPanel icon={<Clock3 className="h-7 w-7 text-amber-600" />} title={t('customer.reminderLimit')} text={t('customer.returnToLink')} />}
       {status === 'CUSTOMER_DATA_MISMATCH' && <ResultPanel icon={<XCircle className="h-7 w-7 text-rose-600" />} title={t('customer.dataNeedsUpdate')} text={t('customer.contactSupport')} />}
       {status === 'ADDRESS_PROPOSED' && <div className="space-y-3"><ResultPanel icon={<MapPin className="h-7 w-7 text-blue-600" />} title={t('customer.newAddressSubmitted')} text={t('customer.addressWaitingGps')} /><button disabled={busy} onClick={() => void captureAfterTransition(() => simulation ? updateSimulationSession({ status: 'GPS_CAPTURING' }) : api.addressStatus(token, true))} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"><Compass className="h-5 w-5" />{t('customer.retryGps')}</button></div>}
-      {status === 'MANUAL_REVIEW' && <><ResultPanel icon={<ShieldCheck className="h-7 w-7 text-amber-600" />} title={t('customer.manualReview')} text={t('customer.manualReviewNotice')} />{decision && <ValidationEvidence decision={decision} />}</>}
+      {status === 'MANUAL_REVIEW' && <ManualReviewPanel />}
       {status === 'LOCATION_VALID' && <><ResultPanel icon={<CheckCircle2 className="h-7 w-7 text-emerald-600" />} title={t('customer.locationVerified')} text={t('customer.addressValidated')} />{decision?.capturedLocation && <div className="rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800">Koordinat: <span className="font-mono font-semibold">{decision.capturedLocation.coordinateText}</span>{decision.distanceFromReferenceMeters != null && <><br />Jarak: {decision.distanceFromReferenceMeters.toFixed(1)} meter</>}</div>}</>}
     </div><div className="border-t border-gray-200 bg-gray-50 px-5 py-3 text-center text-[10px] text-gray-500">{t('customer.doNotShareLink')}</div>
   </div>{showAddressChangeConfirmation && <AddressChangeConfirmation busy={busy} onCancel={() => setShowAddressChangeConfirmation(false)} onConfirm={confirmAddressChange} />}</div>;
@@ -379,19 +393,25 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
 
 const Panel: React.FC<{ children: React.ReactNode }> = ({ children }) => <div className="flex min-h-[100dvh] w-full items-center justify-center bg-slate-50 px-4 py-8 text-center"><div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">{children}</div></div>;
 const ResultPanel: React.FC<{ icon: React.ReactNode; title: string; text: string }> = ({ icon, title, text }) => <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-center sm:p-5"><div className="mb-2 flex justify-center">{icon}</div><p className="break-words text-sm font-semibold text-gray-900">{title}</p><p className="mt-1 break-words text-xs leading-relaxed text-gray-600">{text}</p></div>;
-const AddressChangeConfirmation: React.FC<{ busy: boolean; onCancel: () => void; onConfirm: () => void | Promise<void> }> = ({ busy, onCancel, onConfirm }) => { const { t } = useTranslation(); return <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-3 sm:p-5"><div role="dialog" aria-modal="true" aria-labelledby="address-change-confirmation-title" className="max-h-[calc(100dvh-1.5rem)] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5"><div className="flex items-start gap-3"><div className="shrink-0 rounded-full bg-amber-100 p-2 text-amber-700"><Edit3 className="h-5 w-5" /></div><div className="min-w-0"><h2 id="address-change-confirmation-title" className="break-words text-base font-semibold text-slate-900">{t('customer.addressChangeConfirmTitle')}</h2><p className="mt-2 break-words text-sm leading-relaxed text-slate-600">{t('customer.addressChangeConfirmText')}</p></div></div><div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row"><button type="button" disabled={busy} onClick={onCancel} className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-xs font-medium text-slate-700 disabled:opacity-50">{t('customer.addressChangeConfirmNo')}</button><button type="button" disabled={busy} onClick={() => void onConfirm()} className="w-full rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-50">{t('customer.addressChangeConfirmYes')}</button></div></div></div>; };
-const ValidationEvidence: React.FC<{ decision: ServerValidationDecision }> = ({ decision }) => {
-  return <div className="rounded-lg border border-amber-200 bg-white/70 p-3 text-[11px] text-slate-700">
-    <div className="grid grid-cols-2 gap-2">
-      <span className="break-words">Akurasi lokasi: <strong>±{decision.bestSample.accuracyMeters.toFixed(1)} m</strong></span>
-      <span className="break-words">Perbedaan titik: <strong>{decision.sampleSpreadMeters == null ? 'belum tersedia' : `${decision.sampleSpreadMeters.toFixed(1)} m`}</strong></span>
-      <span className="break-words">Jarak dari alamat: <strong>{decision.distanceFromReferenceMeters == null ? 'belum tersedia' : `${decision.distanceFromReferenceMeters.toFixed(1)} m`}</strong></span>
-      <span className="break-words">Kecocokan alamat: <strong>{Math.round(decision.addressScore * 100)}%</strong></span>
+const ManualReviewPanel: React.FC = () => {
+  const { t } = useTranslation();
+  const steps = ['customer.manualReviewStep1', 'customer.manualReviewStep2', 'customer.manualReviewStep3'];
+  return <div role="status" aria-live="polite" className="space-y-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+    <div className="flex items-start gap-3">
+      <div className="shrink-0 rounded-full bg-blue-100 p-2 text-blue-700"><ShieldCheck className="h-5 w-5" /></div>
+      <div className="min-w-0 text-left">
+        <p className="break-words text-base font-semibold text-blue-950">{t('customer.manualReviewTitle')}</p>
+        <p className="mt-1 break-words text-sm leading-relaxed text-blue-900">{t('customer.manualReviewText')}</p>
+      </div>
     </div>
-    <p className="mt-2 break-words text-slate-500">Catatan: {decision.reasonCodes.map(userFriendlyReason).join(', ')}</p>
+    <ol className="space-y-2 rounded-lg bg-white/80 p-3 text-left">
+      {steps.map((step, index) => <li key={step} className="flex items-center gap-3 text-xs text-blue-950"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-600 font-semibold text-white">{index + 1}</span><span className={index === 1 ? 'font-semibold' : ''}>{t(step)}</span></li>)}
+    </ol>
+    <p className="break-words text-left text-xs leading-relaxed text-blue-800">{t('customer.manualReviewHelp')}</p>
   </div>;
 };
-const ReminderPicker: React.FC<{ value: string; onChange: (value: string) => void; disabled: boolean; max: string; onSubmit: () => void }> = ({ value, onChange, disabled, max, onSubmit }) => { const { t } = useTranslation(); const minimum = toDateTimeLocalValue(new Date(Date.now() + 60_000)); return <div className="min-w-0 space-y-3 rounded-lg border border-amber-200 bg-white p-3"><div><label className="block break-words text-xs font-medium text-gray-700">{t('customer.reminderDateTime')}</label><input type="datetime-local" min={minimum} max={max} disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 block w-full min-w-0 rounded-lg border border-gray-300 px-3 py-2 text-sm sm:text-xs" /></div><p className="break-words text-[11px] text-gray-500">{t('customer.reminderRangeHelp')} {t('customer.reminderTimezone')}</p><button type="button" disabled={disabled} onClick={onSubmit} className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium"><Clock3 className="h-4 w-4 shrink-0" />{t('customer.askReminder')}</button></div>; };
+const AddressChangeConfirmation: React.FC<{ busy: boolean; onCancel: () => void; onConfirm: () => void | Promise<void> }> = ({ busy, onCancel, onConfirm }) => { const { t } = useTranslation(); return <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-3 sm:p-5"><div role="dialog" aria-modal="true" aria-labelledby="address-change-confirmation-title" className="max-h-[calc(100dvh-1.5rem)] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5"><div className="flex items-start gap-3"><div className="shrink-0 rounded-full bg-amber-100 p-2 text-amber-700"><Edit3 className="h-5 w-5" /></div><div className="min-w-0"><h2 id="address-change-confirmation-title" className="break-words text-base font-semibold text-slate-900">{t('customer.addressChangeConfirmTitle')}</h2><p className="mt-2 break-words text-sm leading-relaxed text-slate-600">{t('customer.addressChangeConfirmText')}</p></div></div><div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row"><button type="button" disabled={busy} onClick={onCancel} className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-xs font-medium text-slate-700 disabled:opacity-50">{t('customer.addressChangeConfirmNo')}</button><button type="button" disabled={busy} onClick={() => void onConfirm()} className="w-full rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-50">{t('customer.addressChangeConfirmYes')}</button></div></div></div>; };
+const ReminderPicker: React.FC<{ value: string; onChange: (value: string) => void; disabled: boolean; max: string; onSubmit: () => void }> = ({ value, onChange, disabled, max, onSubmit }) => { const { t } = useTranslation(); const minimum = toDateTimeLocalValue(new Date(Date.now() + 60_000)); return <div className="min-w-0 space-y-3 rounded-lg border border-amber-200 bg-white p-3"><div><p className="break-words text-sm font-semibold text-amber-950">{t('customer.reminderQuestion')}</p><p className="mt-1 break-words text-xs leading-relaxed text-gray-600">{t('customer.reminderHelp')}</p></div><div><label className="block break-words text-xs font-medium text-gray-700">{t('customer.reminderDateTime')}</label><input type="datetime-local" min={minimum} max={max} disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 block w-full min-w-0 rounded-lg border border-gray-300 px-3 py-2 text-sm sm:text-xs" /></div><p className="break-words text-[11px] text-gray-500">{t('customer.reminderRangeHelp')} {t('customer.reminderTimezone')}</p><button type="button" disabled={disabled} onClick={onSubmit} className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium"><Clock3 className="h-4 w-4 shrink-0" />{t('customer.askReminder')}</button></div>; };
 
 function formatLinkExpiry(value: string | undefined, translate: (key: string, values?: Record<string, string | number>) => string): string {
   if (!value) return '';

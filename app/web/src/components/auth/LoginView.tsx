@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Lock, Mail, Shield, ArrowRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../i18n';
-import { LanguageSwitcher } from '../common/LanguageSwitcher';
 
 export const LoginView: React.FC = () => {
   const { loginAdmin } = useApp();
@@ -35,7 +34,6 @@ export const LoginView: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
-      <div className="fixed right-4 top-4"><LanguageSwitcher /></div>
       <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-800">
         {/* Top Branding */}
         <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-8 text-center border-b border-gray-100 dark:border-gray-800">

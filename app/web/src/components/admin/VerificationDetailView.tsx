@@ -15,7 +15,7 @@ import {
   Info,
   MapPin,
   MessageSquare,
-  RefreshCw,
+  RefreshCw as RefreshCwIcon,
   Send,
   ShieldAlert,
   ShieldCheck,
@@ -32,6 +32,12 @@ import { userFriendlyStatus } from '../../lib/statusLabels';
 import { hasCapability } from '../../lib/accessControl';
 import { AdminTable } from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
+import { confirmAction } from '../../lib/swal';
+import { AppLoader } from '../common/AppLoader';
+
+const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) => props.className?.includes('animate-spin')
+  ? <AppLoader size={18} label="Loading" />
+  : <RefreshCwIcon {...props} />;
 
 interface VerificationDetailViewProps {
   sessionId: string;
@@ -104,8 +110,8 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
 
   if (!session || !customer || !address) {
     return (
-      <div className="p-8 text-center bg-slate-950 rounded-2xl border border-slate-800 text-slate-400">
-        {detailLoading || !detailError ? 'Memuat detail sesi verifikasi...' : `Detail sesi tidak dapat dimuat: ${detailError}`}
+      <div className="flex flex-col items-center gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-8 text-center text-slate-400">
+        {detailLoading || !detailError ? <><AppLoader size={64} label="Loading verification details" /><span>Memuat detail sesi verifikasi...</span></> : `Detail sesi tidak dapat dimuat: ${detailError}`}
         <button onClick={onBack} className="block mx-auto mt-4 px-4 py-2 bg-slate-800 text-white rounded-xl text-xs">
           Kembali
         </button>
@@ -142,6 +148,13 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
   };
 
   const handleSendManualReminder = async () => {
+    const confirmed = await confirmAction({
+      title: 'Kirim pengingat sekarang?',
+      text: 'Customer akan menerima pengingat WhatsApp untuk melanjutkan pemeriksaan lokasi.',
+      confirmButtonText: 'Ya, kirim pengingat',
+      cancelButtonText: 'Batal',
+    });
+    if (!confirmed) return;
     const res = await sendManualReminder(session.id);
     if (res.success) {
       setReminderFeedback({ type: 'success', message: res.message });
@@ -153,7 +166,13 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
 
   const handleUpdateAddressFromGps = async () => {
     if (!capturedLoc || addressUpdateBusy) return;
-    if (!window.confirm('Gunakan GPS hasil pemeriksaan ini untuk melengkapi alamat yang kosong dan memperbarui titik referensi rumah?')) return;
+    const confirmed = await confirmAction({
+      title: 'Perbarui alamat dari GPS?',
+      text: 'Titik GPS hasil pemeriksaan akan disimpan sebagai referensi alamat rumah.',
+      confirmButtonText: 'Ya, perbarui alamat',
+      cancelButtonText: 'Batal',
+    });
+    if (!confirmed) return;
     setAddressUpdateBusy(true);
     setAddressUpdateFeedback(null);
     try {
@@ -178,10 +197,38 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
       return;
     }
 
-    await performManualReview(session.id, reviewDecision, reviewReasonCode, reviewNote.trim());
-    setReviewModalOpen(false);
-    setReviewNote('');
-    setReviewError('');
+    const confirmed = await confirmAction({
+      title: 'Simpan keputusan pemeriksaan?',
+      text: 'Keputusan ini akan mengubah status verifikasi customer dan tercatat di audit trail.',
+      confirmButtonText: 'Ya, simpan keputusan',
+      cancelButtonText: 'Batal',
+    });
+    if (!confirmed) return;
+
+    try {
+      await performManualReview(session.id, reviewDecision, reviewReasonCode, reviewNote.trim());
+      setReviewModalOpen(false);
+      setReviewNote('');
+      setReviewError('');
+    } catch (cause) {
+      setReviewError(cause instanceof Error ? cause.message : 'Keputusan pemeriksaan gagal disimpan.');
+    }
+  };
+
+  const handleResendInvitation = async () => {
+    const confirmed = await confirmAction({
+      title: 'Kirim ulang undangan?',
+      text: 'Link verifikasi baru akan dikirim ke nomor WhatsApp customer.',
+      confirmButtonText: 'Ya, kirim ulang',
+      cancelButtonText: 'Batal',
+    });
+    if (!confirmed) return;
+    try {
+      await resendInvitation(session.id);
+      setReminderFeedback({ type: 'success', message: 'Undangan berhasil dikirim ulang.' });
+    } catch (cause) {
+      setReminderFeedback({ type: 'error', message: cause instanceof Error ? cause.message : 'Undangan gagal dikirim ulang.' });
+    }
   };
 
   // RBAC permission check for manual review
@@ -227,7 +274,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({
           {/* Resend WhatsApp Link */}
           <button
             type="button"
-            onClick={() => resendInvitation(session.id)}
+            onClick={() => void handleResendInvitation()}
             disabled={!canSendVerification}
             title={!canSendVerification ? 'Role ini tidak dapat mengirim ulang undangan' : 'Kirim ulang undangan WhatsApp'}
             className="px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"

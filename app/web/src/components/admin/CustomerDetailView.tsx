@@ -19,6 +19,7 @@ import { VerificationMap } from '../maps/VerificationMap';
 import { useTranslation } from '../../i18n';
 import { buildGoogleMapsDeepLink, formatAddressForDisplay, isIncompleteAddress } from '../../lib/validationEngine';
 import { userFriendlyStatus } from '../../lib/statusLabels';
+import { confirmAction } from '../../lib/swal';
 
 interface CustomerDetailViewProps {
   customerId: string;
@@ -50,6 +51,18 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
   }
 
   const masterAddress = custAddresses.find((a) => a.addressType === 'MASTER') || custAddresses[0];
+
+  const handleOptOut = async () => {
+    const confirmed = await confirmAction({
+      title: 'Hentikan pesan WhatsApp?',
+      text: 'Customer ini tidak akan menerima pesan WhatsApp berikutnya dari sistem.',
+      confirmButtonText: 'Ya, hentikan pesan',
+      cancelButtonText: 'Batal',
+      icon: 'warning',
+      confirmButtonColor: '#dc2626',
+    });
+    if (confirmed) await optOutCustomer(customer.id);
+  };
 
   return (
     <div className="space-y-6">
@@ -86,7 +99,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
               <span>Coverage: <strong className="text-gray-700 dark:text-gray-300">{customer.coverageStatus || '—'}</strong></span>
               <span>BTS: <strong className="text-gray-700 dark:text-gray-300">{customer.btsName || '—'}{customer.isCoverBts ? ' (cover)' : ''}</strong></span>
             </div>
-            <div className="mt-2 flex items-center gap-2 text-[10px]"><span className={customer.whatsappOptOutAt ? 'text-rose-600' : 'text-emerald-600'}>{customer.whatsappOptOutAt ? 'WhatsApp opt-out — pengiriman diblokir' : 'WhatsApp eligible — belum opt-out'}</span>{!customer.whatsappOptOutAt && <button type="button" onClick={() => { if (window.confirm('Hentikan seluruh pesan WhatsApp untuk customer ini?')) void optOutCustomer(customer.id); }} className="rounded border border-rose-200 px-2 py-1 text-rose-700">Stop pesan</button>}</div>
+            <div className="mt-2 flex items-center gap-2 text-[10px]"><span className={customer.whatsappOptOutAt ? 'text-rose-600' : 'text-emerald-600'}>{customer.whatsappOptOutAt ? 'WhatsApp opt-out — pengiriman diblokir' : 'WhatsApp eligible — belum opt-out'}</span>{!customer.whatsappOptOutAt && <button type="button" onClick={() => void handleOptOut()} className="rounded border border-rose-200 px-2 py-1 text-rose-700">Stop pesan</button>}</div>
           </div>
         </div>
 

@@ -5,22 +5,27 @@ import {
   ArrowRight,
   Bell,
   CheckCircle2,
-  Clock,
+  ChevronRight,
+  Clock3,
   Compass,
   MapPin,
   MessageSquare,
   Radio,
-  RefreshCw,
+  RefreshCw as RefreshCwIcon,
   ShieldCheck,
   Users,
+  Wifi,
   XCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { VerificationSession } from '../../types';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
-import { userFriendlyStatus } from '../../lib/statusLabels';
+import { AppLoader } from '../common/AppLoader';
+
+const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) => props.className?.includes('animate-spin')
+  ? <AppLoader size={18} label="Loading" />
+  : <RefreshCwIcon {...props} />;
 
 type DashboardDestination = 'customers' | 'campaigns' | 'verifications' | 'reminders';
 
@@ -36,386 +41,137 @@ interface DashboardMetricCardProps {
   icon: LucideIcon;
   iconClassName: string;
   valueClassName?: string;
-  detailClassName?: string;
   onClick: () => void;
 }
 
-const DashboardMetricCard: React.FC<DashboardMetricCardProps> = ({
-  label,
-  value,
-  detail,
-  icon: Icon,
-  iconClassName,
-  valueClassName = 'text-gray-900 dark:text-white',
-  detailClassName = 'text-gray-400 dark:text-gray-500',
-  onClick,
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className="w-full text-left bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3.5 rounded-xl shadow-xs hover:border-gray-400 dark:hover:border-gray-600 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-600"
-  >
-    <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-1">
-      <span className="text-[11px] font-medium">{label}</span>
-      <Icon className={`w-4 h-4 ${iconClassName}`} />
+const DashboardMetricCard: React.FC<DashboardMetricCardProps> = ({ label, value, detail, icon: Icon, iconClassName, valueClassName = 'text-slate-900 dark:text-white', onClick }) => (
+  <button type="button" onClick={onClick} className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-700">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+        <p className={`mt-2 text-2xl font-bold tracking-tight ${valueClassName}`}>{value.toLocaleString('en-US')}</p>
+        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{detail}</p>
+      </div>
+      <span className={`rounded-xl bg-slate-50 p-2.5 dark:bg-slate-800 ${iconClassName}`}><Icon className="h-5 w-5" /></span>
     </div>
-    <div className={`text-xl font-bold tracking-tight ${valueClassName}`}>{value.toLocaleString('id-ID')}</div>
-    <div className={`text-[10px] mt-1 font-mono ${detailClassName}`}>{detail}</div>
+    <div className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-indigo-600 opacity-0 transition group-hover:opacity-100 dark:text-indigo-400"><span>{'View details'}</span><ChevronRight className="h-3.5 w-3.5" /></div>
   </button>
 );
 
-export const DashboardView: React.FC<DashboardViewProps> = ({
-  onSelectVerification,
-  onNavigate,
-}) => {
-  const { customers, verificationSessions, dashboardSummary, refreshDashboard, validationConfig, integrationConfigs } = useApp();
+interface AttentionCardProps {
+  label: string;
+  description: string;
+  value: number;
+  icon: LucideIcon;
+  colorClassName: string;
+  onClick: () => void;
+}
+
+const AttentionCard: React.FC<AttentionCardProps> = ({ label, description, value, icon: Icon, colorClassName, onClick }) => (
+  <button type="button" onClick={onClick} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left transition hover:border-slate-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700">
+    <span className={`rounded-xl p-2.5 ${colorClassName}`}><Icon className="h-5 w-5" /></span>
+    <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</span><span className="mt-0.5 block text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">{description}</span></span>
+    <span className="text-xl font-bold text-slate-900 dark:text-white">{value.toLocaleString('en-US')}</span>
+  </button>
+);
+
+const statusText: Record<string, string> = {
+  LOCATION_VALID: 'Location matched',
+  WAITING_FOR_HOME: 'Waiting for customer',
+  MANUAL_REVIEW: 'Needs team review',
+  LOW_GPS_ACCURACY: 'Location signal is weak',
+  ADDRESS_PROPOSED: 'Address needs review',
+  CUSTOMER_DATA_MISMATCH: 'Customer data does not match',
+  GPS_CAPTURING: 'Checking location',
+  CONSENTED: 'Waiting for location permission',
+  CREATED: 'Not started',
+};
+
+const getStatusText = (status: string) => statusText[status] ?? 'In progress';
+
+const getStatusClassName = (status: string) => {
+  if (status === 'LOCATION_VALID') return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300';
+  if (['MANUAL_REVIEW', 'ADDRESS_PROPOSED', 'WAITING_FOR_HOME'].includes(status)) return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300';
+  if (['LOW_GPS_ACCURACY', 'CUSTOMER_DATA_MISMATCH'].includes(status)) return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300';
+  return 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300';
+};
+
+const progressPercent = (value: number, total: number) => total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
+
+export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerification, onNavigate }) => {
+  const { customers, verificationSessions, dashboardSummary, refreshDashboard, integrationConfigs } = useApp();
   const { t } = useTranslation();
   const [sessionPage, setSessionPage] = useState(1);
   const [sessionPageSize, setSessionPageSize] = useState<TablePageSize>(10);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const pagedVerificationSessions = verificationSessions.slice((sessionPage - 1) * sessionPageSize, sessionPage * sessionPageSize);
 
   const customerStats = dashboardSummary.customers;
   const verificationStats = dashboardSummary.verifications;
   const reminderStats = dashboardSummary.reminders;
   const outboxStats = dashboardSummary.outbox;
   const totalCustomers = customerStats.total;
-  const totalCreated = verificationStats.total;
-  const invitationsSent = verificationStats.invitationsSent;
-  const linksOpened = verificationStats.linksOpened;
-  const customersConfirmed = verificationStats.customersConfirmed;
-  const customersMismatch = verificationStats.customersMismatch;
-  const gpsCaptured = verificationStats.gpsCaptured;
-  const lowGpsAccuracyCount = verificationStats.lowGpsAccuracy;
-  const waitingForHomeCount = verificationStats.waitingForHome;
-  const addressChangedCount = verificationStats.addressChanged;
-  const manualReviewCount = verificationStats.manualReview;
+  const totalChecks = verificationStats.total;
   const locationValidCount = verificationStats.locationValid;
-  const reminder1Count = reminderStats.byNumber['1'] ?? 0;
-  const reminder2Count = reminderStats.byNumber['2'] ?? 0;
-  const reminder3Count = reminderStats.byNumber['3'] ?? 0;
+  const needsAttentionCount = verificationStats.manualReview + verificationStats.lowGpsAccuracy + verificationStats.addressChanged + verificationStats.customersMismatch;
+  const matchRate = progressPercent(locationValidCount, totalChecks);
+  const pagedVerificationSessions = verificationSessions.slice((sessionPage - 1) * sessionPageSize, sessionPage * sessionPageSize);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    try {
-      await refreshDashboard();
-    } finally {
-      setIsRefreshing(false);
-    }
+    try { await refreshDashboard(); } finally { setIsRefreshing(false); }
   };
 
-  const getStatusBadge = (status: VerificationSession['verificationStatus']) => {
-    switch (status) {
-      case 'LOCATION_VALID':
-        return (
-          <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
-            <CheckCircle2 className="w-3 h-3" />
-            <span>{userFriendlyStatus(status)}</span>
-          </span>
-        );
-      case 'WAITING_FOR_HOME':
-        return (
-          <span className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
-            <Clock className="w-3 h-3" />
-            <span>{userFriendlyStatus(status)}</span>
-          </span>
-        );
-      case 'MANUAL_REVIEW':
-        return (
-          <span className="inline-flex items-center gap-1 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
-            <ShieldCheck className="w-3 h-3" />
-            <span>{userFriendlyStatus(status)}</span>
-          </span>
-        );
-      case 'LOW_GPS_ACCURACY':
-        return (
-          <span className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
-            <AlertTriangle className="w-3 h-3" />
-            <span>{userFriendlyStatus(status)}</span>
-          </span>
-        );
-      case 'ADDRESS_PROPOSED':
-        return (
-          <span className="inline-flex items-center gap-1 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
-            <MapPin className="w-3 h-3" />
-            <span>{userFriendlyStatus(status)}</span>
-          </span>
-        );
-      case 'CUSTOMER_DATA_MISMATCH':
-        return (
-          <span className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
-            <XCircle className="w-3 h-3" />
-            <span>{userFriendlyStatus(status)}</span>
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 px-2 py-0.5 rounded-md text-[11px] font-medium">
-            <span>{userFriendlyStatus(status)}</span>
-          </span>
-        );
-    }
-  };
+  const progressSteps = [
+    { label: t('dashboard.invitationsSent'), value: verificationStats.invitationsSent, percent: 100, icon: MessageSquare, color: 'bg-indigo-500' },
+    { label: t('dashboard.linksOpened'), value: verificationStats.linksOpened, percent: progressPercent(verificationStats.linksOpened, verificationStats.invitationsSent), icon: CheckCircle2, color: 'bg-blue-500' },
+    { label: t('dashboard.gpsReceived'), value: verificationStats.gpsCaptured, percent: progressPercent(verificationStats.gpsCaptured, verificationStats.invitationsSent), icon: Compass, color: 'bg-violet-500' },
+    { label: t('dashboard.locationsMatched'), value: locationValidCount, percent: progressPercent(locationValidCount, verificationStats.invitationsSent), icon: MapPin, color: 'bg-emerald-500' },
+  ];
 
   return (
-    <div className="space-y-4">
-      {/* Top Banner / Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs">
-        <div>
-          <h1 className="text-base font-semibold text-gray-900 dark:text-white tracking-tight">
-            {t('dashboard.title')}
-          </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            {t('dashboard.description')}
-          </p>
-          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 font-mono">
-            {t('dashboard.apiUpdated')}: {dashboardSummary.generatedAt ? new Date(dashboardSummary.generatedAt).toLocaleString('id-ID') : t('dashboard.loading')}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => void handleRefresh()}
-            disabled={isRefreshing}
-            className="flex items-center gap-2 px-3.5 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 text-xs font-medium rounded-lg transition-all"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span>{t('dashboard.refresh')}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Primary KPI Grid (PRD Section 33.2 Operational Metrics) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <DashboardMetricCard
-          label={t('dashboard.totalCustomers')}
-          value={totalCustomers}
-          detail={`${customerStats.verified.toLocaleString('id-ID')} ${t('dashboard.verified')}`}
-          icon={Users}
-          iconClassName="text-gray-400"
-          onClick={() => onNavigate('customers')}
-        />
-        <DashboardMetricCard
-          label={t('dashboard.whatsappInvitations')}
-          value={invitationsSent}
-          detail={`${linksOpened.toLocaleString('id-ID')} ${t('dashboard.linksOpened')}`}
-          icon={MessageSquare}
-          iconClassName="text-emerald-600 dark:text-emerald-400"
-          detailClassName="text-emerald-600 dark:text-emerald-400"
-          onClick={() => onNavigate('campaigns')}
-        />
-        <DashboardMetricCard
-          label={t('dashboard.confirmedData')}
-          value={customersConfirmed}
-          detail={`${customersMismatch.toLocaleString('id-ID')} ${t('dashboard.mismatch')}`}
-          icon={CheckCircle2}
-          iconClassName="text-emerald-600 dark:text-emerald-400"
-          detailClassName="text-rose-600 dark:text-rose-400"
-          onClick={() => onNavigate('verifications')}
-        />
-        <DashboardMetricCard
-          label={t('dashboard.gpsCaptured')}
-          value={gpsCaptured}
-          detail={t('dashboard.multiSample')}
-          icon={Compass}
-          iconClassName="text-gray-600 dark:text-gray-300"
-          onClick={() => onNavigate('verifications')}
-        />
-        <DashboardMetricCard
-          label={t('dashboard.manualReview')}
-          value={manualReviewCount}
-          detail={t('dashboard.addressQa')}
-          icon={ShieldCheck}
-          iconClassName="text-purple-600 dark:text-purple-400"
-          valueClassName="text-purple-700 dark:text-purple-400"
-          detailClassName="text-purple-600 dark:text-purple-400"
-          onClick={() => onNavigate('verifications')}
-        />
-        <DashboardMetricCard
-          label={t('dashboard.locationValid')}
-          value={locationValidCount}
-          detail={`${outboxStats.total.toLocaleString('id-ID')} ${t('dashboard.outboxEvents')}`}
-          icon={CheckCircle2}
-          iconClassName="text-emerald-600 dark:text-emerald-400"
-          valueClassName="text-emerald-700 dark:text-emerald-400"
-          detailClassName="text-emerald-600 dark:text-emerald-400"
-          onClick={() => onNavigate('verifications')}
-        />
-      </div>
-
-      {/* Funnel Sub-Metrics & Breakdown Bar */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 rounded-xl space-y-3 shadow-xs">
-        <div className="flex items-center justify-between">
-          <div className="text-xs font-semibold text-gray-900 dark:text-white">{t('dashboard.funnel')}:</div>
-          <div className="text-[11px] font-mono text-gray-500 dark:text-gray-400">{t('dashboard.totalSessions')}: {totalCreated}</div>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <button type="button" onClick={() => onNavigate('verifications')} className="w-full text-left bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between hover:border-gray-400 dark:hover:border-gray-600 transition-colors">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <span className="text-gray-700 dark:text-gray-300 font-medium">{t('dashboard.waitingAtHome')}:</span>
-            </div>
-            <span className="font-semibold text-amber-700 dark:text-amber-400">{waitingForHomeCount}</span>
-          </button>
-
-          <button type="button" onClick={() => onNavigate('verifications')} className="w-full text-left bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between hover:border-gray-400 dark:hover:border-gray-600 transition-colors">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-              <span className="text-gray-700 dark:text-gray-300 font-medium">{t('dashboard.lowAccuracy')} (&gt;{validationConfig.GPS_MAX_ACCURACY_METERS}m):</span>
-            </div>
-            <span className="font-semibold text-rose-700 dark:text-rose-400">{lowGpsAccuracyCount}</span>
-          </button>
-
-          <button type="button" onClick={() => onNavigate('verifications')} className="w-full text-left bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between hover:border-gray-400 dark:hover:border-gray-600 transition-colors">
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span className="text-gray-700 dark:text-gray-300 font-medium">{t('dashboard.addressChanged')}:</span>
-            </div>
-            <span className="font-semibold text-blue-700 dark:text-blue-400">{addressChangedCount}</span>
-          </button>
-
-          <button type="button" onClick={() => onNavigate('reminders')} className="w-full text-left bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-between hover:border-gray-400 dark:hover:border-gray-600 transition-colors">
-            <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-gray-600 dark:text-gray-300" />
-              <span className="text-gray-700 dark:text-gray-300 font-medium">{t('dashboard.reminders')}:</span>
-            </div>
-            <span className="font-semibold text-gray-900 dark:text-white">
-              {reminder1Count.toLocaleString('id-ID')} / {reminder2Count.toLocaleString('id-ID')} / {reminder3Count.toLocaleString('id-ID')}
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* Future Integrations Readiness Cards (PRD Section 33.2 & Section 36) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* IRA Coverage Integration Card */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 rounded-xl space-y-2 shadow-xs">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-600 dark:text-gray-300">
-                <Radio className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-gray-900 dark:text-white">Pemeriksaan Jangkauan Jaringan</div>
-                <div className="text-[10px] text-gray-500 dark:text-gray-400">Ketersediaan jaringan di sekitar lokasi</div>
-              </div>
-            </div>
-                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md border font-medium ${integrationConfigs.IRA_COVERAGE.enabled ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'}`}>
-              {integrationConfigs.IRA_COVERAGE.enabled ? 'Aktif' : userFriendlyStatus(integrationConfigs.IRA_COVERAGE.status)}
-            </span>
-          </div>
-          <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
-            {integrationConfigs.IRA_COVERAGE.description}. Pembaruan pemeriksaan tetap dicatat untuk diteruskan saat koneksi tersedia.
-          </p>
-        </div>
-
-        {/* Ticketing / Work Order System Card */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 rounded-xl space-y-2 shadow-xs">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-600 dark:text-gray-300">
-                <Activity className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-gray-900 dark:text-white">Tugas Pemasangan</div>
-                <div className="text-[10px] text-gray-500 dark:text-gray-400">Penerusan pekerjaan ke tim teknisi</div>
-              </div>
-            </div>
-                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md border font-medium ${integrationConfigs.TICKETING.enabled ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'}`}>
-              {integrationConfigs.TICKETING.enabled ? 'Aktif' : userFriendlyStatus(integrationConfigs.TICKETING.status)}
-            </span>
-          </div>
-          <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
-            {integrationConfigs.TICKETING.description}. Data akan siap diteruskan saat koneksi sistem tersedia.
-          </p>
-        </div>
-      </div>
-
-      {/* Recent Verification Sessions Table */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-xs">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+    <div className="mx-auto max-w-7xl space-y-5">
+      <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-indigo-50/60 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/30">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xs font-semibold text-gray-900 dark:text-white uppercase tracking-wider">
-              {t('dashboard.recentSessions')}
-            </h2>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-              {t('dashboard.recentDescription')}
-            </p>
+            <div className="flex items-center gap-2"><span className="rounded-xl bg-indigo-100 p-2 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"><Activity className="h-5 w-5" /></span><h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">{t('dashboard.title')}</h1></div>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">{t('dashboard.description')}</p>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t('dashboard.apiUpdated')}: {dashboardSummary.generatedAt ? new Date(dashboardSummary.generatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : t('dashboard.loading')}</p>
           </div>
+          <button type="button" onClick={() => void handleRefresh()} disabled={isRefreshing} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"><RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />{t('dashboard.refresh')}</button>
         </div>
+      </section>
 
-        <AdminTable
-          minWidthClass="min-w-[950px]"
-          footer={<TablePagination page={sessionPage} pageSize={sessionPageSize} total={verificationSessions.length} onPageChange={setSessionPage} onPageSizeChange={(size) => { setSessionPageSize(size); setSessionPage(1); }} />}
-        >
-            <thead className="bg-gray-50 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-800">
-              <tr>
-                <th className="px-4 py-2.5">{t('dashboard.customer')}</th>
-                <th className="px-4 py-2.5">{t('dashboard.phone')}</th>
-                <th className="px-4 py-2.5">{t('dashboard.verificationStatus')}</th>
-                <th className="px-4 py-2.5">{t('dashboard.gpsDistance')}</th>
-                <th className="px-4 py-2.5">{t('nav.reminders')}</th>
-                <th className="px-4 py-2.5 text-right">{t('dashboard.action')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {pagedVerificationSessions.map((session) => {
-                const customer = customers.find((c) => c.id === session.customerId);
-                const lastVal = session.lastValidationResult;
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <DashboardMetricCard label={t('dashboard.totalCustomers')} value={totalCustomers} detail={`${customerStats.active.toLocaleString('en-US')} ${t('dashboard.activeCustomers')}`} icon={Users} iconClassName="text-slate-600 dark:text-slate-300" onClick={() => onNavigate('customers')} />
+        <DashboardMetricCard label={t('dashboard.totalChecks')} value={totalChecks} detail={`${locationValidCount.toLocaleString('en-US')} ${t('dashboard.locationsMatched').toLowerCase()}`} icon={MapPin} iconClassName="text-indigo-600 dark:text-indigo-300" onClick={() => onNavigate('verifications')} />
+        <DashboardMetricCard label={t('dashboard.needsAttention')} value={needsAttentionCount} detail={`${verificationStats.manualReview.toLocaleString('en-US')} ${t('dashboard.teamReview').toLowerCase()}`} icon={AlertTriangle} iconClassName="text-amber-600 dark:text-amber-300" valueClassName="text-amber-700 dark:text-amber-300" onClick={() => onNavigate('verifications')} />
+        <DashboardMetricCard label={t('dashboard.matchRate')} value={matchRate} detail={t('dashboard.matchRateDetail')} icon={ShieldCheck} iconClassName="text-emerald-600 dark:text-emerald-300" valueClassName="text-emerald-700 dark:text-emerald-300" onClick={() => onNavigate('verifications')} />
+      </section>
 
-                return (
-                  <tr key={session.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="font-semibold text-gray-900 dark:text-white">{customer?.name || 'Pelanggan'}</div>
-                      <div className="text-[10px] font-mono text-gray-500 dark:text-gray-400">{customer?.externalId}</div>
-                    </td>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('dashboard.attentionTitle')}</h2><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('dashboard.attentionDescription')}</p></div><button type="button" onClick={() => onNavigate('verifications')} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 sm:mt-0 dark:text-indigo-400">{t('dashboard.openChecks')}<ArrowRight className="h-3.5 w-3.5" /></button></div>
+        {needsAttentionCount > 0 ? <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4"><AttentionCard label={t('dashboard.teamReview')} description={t('dashboard.teamReviewDescription')} value={verificationStats.manualReview} icon={ShieldCheck} colorClassName="bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-300" onClick={() => onNavigate('verifications')} /><AttentionCard label={t('dashboard.locationSignal')} description={t('dashboard.locationSignalDescription')} value={verificationStats.lowGpsAccuracy} icon={AlertTriangle} colorClassName="bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300" onClick={() => onNavigate('verifications')} /><AttentionCard label={t('dashboard.addressUpdates')} description={t('dashboard.addressUpdatesDescription')} value={verificationStats.addressChanged} icon={MapPin} colorClassName="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300" onClick={() => onNavigate('verifications')} /><AttentionCard label={t('dashboard.dataMismatch')} description={t('dashboard.dataMismatchDescription')} value={verificationStats.customersMismatch} icon={XCircle} colorClassName="bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300" onClick={() => onNavigate('verifications')} /></div> : <div className="mt-4 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"><CheckCircle2 className="h-5 w-5" />{t('dashboard.noAttention')}</div>}
+      </section>
 
-                    <td className="px-4 py-3 font-mono text-gray-700 dark:text-gray-300 text-[11px]">
-                      {session.registeredPhoneSnapshot}
-                    </td>
+      <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('dashboard.progressTitle')}</h2><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('dashboard.progressDescription')}</p></div><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">{matchRate}% {t('dashboard.matched')}</span></div>
+          <div className="mt-5 space-y-4">{progressSteps.map((step) => <div key={step.label}><div className="flex items-center justify-between gap-3 text-xs"><span className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200"><span className={`rounded-lg p-1.5 text-white ${step.color}`}><step.icon className="h-3.5 w-3.5" /></span>{step.label}</span><span className="font-semibold text-slate-900 dark:text-white">{step.value.toLocaleString('en-US')} <span className="font-normal text-slate-400">({step.percent}%)</span></span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className={`h-full rounded-full ${step.color} transition-all`} style={{ width: `${step.percent}%` }} /></div></div>)}</div>
+        </section>
 
-                    <td className="px-4 py-3">{getStatusBadge(session.verificationStatus)}</td>
-
-                    <td className="px-4 py-3">
-                      {lastVal ? (
-                        <div>
-                          <div className="font-mono text-[11px] text-gray-900 dark:text-gray-200 font-medium">
-                            {lastVal.capturedLocation.latitude.toFixed(6)}, {lastVal.capturedLocation.longitude.toFixed(6)}
-                          </div>
-                          <div className="text-[10px] text-gray-500 dark:text-gray-400">
-                            Jarak: {lastVal.distanceFromReferenceMeters == null ? 'Belum ada referensi' : `${lastVal.distanceFromReferenceMeters.toFixed(1)}m`} • Akurasi: &plusmn;{lastVal.gpsAccuracyM}m
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-gray-400 dark:text-gray-500 text-[11px] italic">{t('dashboard.noGps')}</span>
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <span className="text-[11px] font-medium text-gray-700 dark:text-gray-300">
-                        {session.reminderCount} / {validationConfig.MAX_REMINDERS_PER_SESSION}x
-                      </span>
-                    </td>
-
-                    <td className="px-4 py-3 text-right space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => onSelectVerification(session.id)}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-white text-white dark:text-gray-900 text-[11px] font-medium transition-colors"
-                      >
-                        <span>{t('dashboard.detailMap')}</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {!pagedVerificationSessions.length && <tr><td colSpan={6} className="px-4 py-10 text-center text-xs text-gray-400 dark:text-gray-500">{t('dashboard.noSessions')}</td></tr>}
-            </tbody>
-        </AdminTable>
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-start justify-between"><div><h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('dashboard.systemHealth')}</h2><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('dashboard.systemHealthDescription')}</p></div><Wifi className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /></div>
+          <div className="mt-4 space-y-3"><div className="flex items-center justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60"><div className="flex items-center gap-2"><Bell className="h-4 w-4 text-indigo-600 dark:text-indigo-300" /><span className="text-xs font-medium text-slate-700 dark:text-slate-200">{t('dashboard.reminderQueue')}</span></div><span className="text-xs font-semibold text-slate-900 dark:text-white">{reminderStats.scheduled} {t('dashboard.scheduled')}</span></div><div className="flex items-center justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60"><div className="flex items-center gap-2"><Activity className="h-4 w-4 text-amber-600 dark:text-amber-300" /><span className="text-xs font-medium text-slate-700 dark:text-slate-200">{t('dashboard.systemUpdates')}</span></div><span className="text-xs font-semibold text-slate-900 dark:text-white">{outboxStats.pending} {t('dashboard.pending')}</span></div><div className="flex items-center justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60"><div className="flex items-center gap-2"><Radio className="h-4 w-4 text-slate-600 dark:text-slate-300" /><span className="text-xs font-medium text-slate-700 dark:text-slate-200">{t('dashboard.networkCoverage')}</span></div><span className={`text-xs font-semibold ${integrationConfigs.IRA_COVERAGE.enabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}`}>{integrationConfigs.IRA_COVERAGE.enabled ? t('dashboard.connected') : t('dashboard.notConnected')}</span></div><div className="flex items-center justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60"><div className="flex items-center gap-2"><Activity className="h-4 w-4 text-slate-600 dark:text-slate-300" /><span className="text-xs font-medium text-slate-700 dark:text-slate-200">{t('dashboard.installationTasks')}</span></div><span className={`text-xs font-semibold ${integrationConfigs.TICKETING.enabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}`}>{integrationConfigs.TICKETING.enabled ? t('dashboard.connected') : t('dashboard.notConnected')}</span></div></div>
+        </section>
       </div>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col gap-1 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800"><div><h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('dashboard.recentSessions')}</h2><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('dashboard.recentDescription')}</p></div><button type="button" onClick={() => onNavigate('verifications')} className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400">{t('dashboard.viewAllChecks')}<ArrowRight className="h-3.5 w-3.5" /></button></div>
+        <AdminTable minWidthClass="min-w-[760px]" footer={<TablePagination page={sessionPage} pageSize={sessionPageSize} total={verificationSessions.length} onPageChange={setSessionPage} onPageSizeChange={(size) => { setSessionPageSize(size); setSessionPage(1); }} />}>
+          <thead className="border-b border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-400"><tr><th className="px-4 py-3">{t('dashboard.customer')}</th><th className="px-4 py-3">{t('dashboard.verificationStatus')}</th><th className="px-4 py-3">{t('dashboard.locationResult')}</th><th className="px-4 py-3 text-right">{t('dashboard.action')}</th></tr></thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">{pagedVerificationSessions.map((session) => { const customer = customers.find((item) => item.id === session.customerId); const lastVal = session.lastValidationResult; const status = session.verificationStatus; const result = lastVal?.result ?? ''; return <tr key={session.id} className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40"><td className="px-4 py-3"><div className="font-semibold text-slate-900 dark:text-white">{customer?.name || t('dashboard.unknownCustomer')}</div><div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{customer?.externalId || session.registeredPhoneSnapshot}</div></td><td className="px-4 py-3"><span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${getStatusClassName(status)}`}>{status === 'LOCATION_VALID' ? <CheckCircle2 className="h-3.5 w-3.5" /> : status === 'CUSTOMER_DATA_MISMATCH' ? <XCircle className="h-3.5 w-3.5" /> : <Clock3 className="h-3.5 w-3.5" />}{getStatusText(status)}</span></td><td className="px-4 py-3">{lastVal ? <div><div className={`text-xs font-semibold ${result === 'LOCATION_VALID' ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>{result === 'LOCATION_VALID' ? t('dashboard.locationMatched') : t('dashboard.locationNeedsReview')}</div><div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{lastVal.distanceFromReferenceMeters == null ? t('dashboard.noReference') : `${lastVal.distanceFromReferenceMeters.toFixed(1)}m away`} · ±{lastVal.gpsAccuracyM}m accuracy</div></div> : <span className="text-xs italic text-slate-400">{t('dashboard.noLocation')}</span>}</td><td className="px-4 py-3 text-right"><button type="button" onClick={() => onSelectVerification(session.id)} className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">{t('dashboard.viewDetails')}<ArrowRight className="h-3.5 w-3.5" /></button></td></tr>; })}{!pagedVerificationSessions.length && <tr><td colSpan={4} className="px-4 py-12 text-center text-sm text-slate-500 dark:text-slate-400">{t('dashboard.noSessions')}</td></tr>}</tbody>
+        </AdminTable>
+      </section>
     </div>
   );
 };

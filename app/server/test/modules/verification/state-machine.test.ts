@@ -22,6 +22,11 @@ describe('verification state machine', () => {
     expect(() => assertTransition('REMINDER_LIMIT_REACHED', 'GPS_CAPTURING')).not.toThrow();
   });
 
+  it.each(['WAITING_FOR_HOME', 'REMINDER_LIMIT_REACHED'] as const)('allows an unconfirmed reminder session to continue through customer confirmation from %s', (status) => {
+    expect(() => assertTransition(status, 'CONSENTED')).not.toThrow();
+    expect(() => assertTransition(status, 'CUSTOMER_DATA_MISMATCH')).not.toThrow();
+  });
+
   it('moves a reminder customer to address editing when the address changed', () => {
     expect(() => assertTransition('WAITING_FOR_HOME', 'ADDRESS_EDITING')).not.toThrow();
     expect(() => assertTransition('REMINDER_LIMIT_REACHED', 'ADDRESS_EDITING')).not.toThrow();

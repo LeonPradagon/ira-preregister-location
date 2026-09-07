@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, ilike, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
-import { auditLogs, customerAddresses, customers, integrationConfigs, integrationOutbox, locationCaptures, reminders, spatialPointSql, validationResults, verificationCampaignItems, verificationReviews, verificationSessions, whatsappDeliveryLogs } from '../../db/schema/index.js';
+import { auditLogs, customerAddresses, customers, integrationConfigs, integrationOutbox, locationCaptures, reminders, validationResults, verificationCampaignItems, verificationReviews, verificationSessions, whatsappDeliveryLogs } from '../../db/schema/index.js';
 import { AddressChangeInput, AdminListQueryInput, CustomerCreateInput, CustomerListQueryInput, CustomerUpdateInput, ReviewInput, ValidationConfigInput } from '../../common/contracts.js';
 import { DomainError, NotFoundError } from '../../common/errors.js';
 import { RequestAdmin } from '../../common/request-user.js';
@@ -14,8 +14,12 @@ import { createVerificationToken } from '../verification/verification-token.js';
 import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/whatsapp/whatsapp.templates.js';
 import { ReadCacheService } from '../../common/read-cache.service.js';
 import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js';
+import { buildVerificationSimulationConfig } from '../verification/simulation-config.js';
+import { buildVerifiedAddressReference } from '../verification/verified-location.js';
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
+const customerAuditActorIds = ['customer', 'customer-token'];
+const systemAuditActorIds = ['system', 'whatsapp-webhook', 'whatsapp-inbound'];
 const addressPlaceholders = new Set(['', 'unknown', 'tidak diketahui', 'tanpa nomor', 'n/a', 'na', '-', '00000']);
 const addressText = (value: unknown) => typeof value === 'string' ? value.trim() : '';
 const isMissingAddressText = (value: unknown) => addressPlaceholders.has(addressText(value).toLowerCase());
@@ -426,7 +430,7 @@ export class AdminService {
       verificationLink,
       referenceLocation: addressRow.referenceLatitude == null || addressRow.referenceLongitude == null ? null : { latitude: Number(addressRow.referenceLatitude), longitude: Number(addressRow.referenceLongitude) },
       referencePrecision: addressRow.address.referencePrecision,
-      simulationConfig: { homeRadiusMeters: config.HOME_RADIUS_METERS, gpsMaxAccuracyMeters: config.GPS_MAX_ACCURACY_METERS },
+      simulationConfig: buildVerificationSimulationConfig(config),
       expiresAt: session.expiresAt,
     };
   }
@@ -511,15 +515,13 @@ export class AdminService {
       nextAddress.postalCode,
     ].filter(Boolean).join(', ');
     const updatedAt = timestamp();
+    const verifiedAddressReference = buildVerifiedAddressReference(latitude, longitude);
 
     await db.transaction(async (tx) => {
       await tx.update(customerAddresses).set({
         ...nextAddress,
         rawAddress,
-        referenceLocation: spatialPointSql(latitude, longitude),
-        referenceSource: 'MASTER_COORDINATE',
-        referencePrecision: 'HOUSE',
-        referenceConfidence: '0.950',
+        ...verifiedAddressReference,
         updatedAt,
       }).where(eq(customerAddresses.id, detail.address.id));
       await tx.insert(auditLogs).values({
@@ -640,10 +642,7 @@ export class AdminService {
         await tx.update(customerAddresses).set({
           // Manual approval turns the captured, reviewed GPS point into the
           // durable reference for the verified installation address.
-          referenceLocation: approvedResult ? spatialPointSql(Number(approvedResult.capturedLatitude), Number(approvedResult.capturedLongitude)) : undefined,
-          referenceSource: approvedResult ? 'MASTER_COORDINATE' : undefined,
-          referencePrecision: approvedResult ? 'HOUSE' : undefined,
-          referenceConfidence: approvedResult ? '0.980' : undefined,
+          ...(approvedResult ? buildVerifiedAddressReference(Number(approvedResult.capturedLatitude), Number(approvedResult.capturedLongitude)) : {}),
           isVerified: true,
           addressStatus: 'VERIFIED',
           addressType: 'VERIFIED_INSTALLATION',
@@ -682,9 +681,9 @@ export class AdminService {
       filters.push(or(ilike(auditLogs.action, pattern), ilike(auditLogs.actorName, pattern), ilike(auditLogs.entityId, pattern), ilike(auditLogs.reason, pattern)));
     }
     if (query.status) filters.push(eq(auditLogs.entityType, query.status as typeof auditLogs.$inferSelect.entityType));
-    if (query.actor === 'CUSTOMER') filters.push(eq(auditLogs.actorUserId, 'customer'));
-    if (query.actor === 'SYSTEM') filters.push(eq(auditLogs.actorUserId, 'system'));
-    if (query.actor === 'ADMIN') filters.push(ilike(auditLogs.actorUserId, 'usr-admin%'));
+    if (query.actor === 'CUSTOMER') filters.push(inArray(auditLogs.actorUserId, customerAuditActorIds));
+    if (query.actor === 'SYSTEM') filters.push(inArray(auditLogs.actorUserId, systemAuditActorIds));
+    if (query.actor === 'ADMIN') filters.push(sql`${auditLogs.actorUserId} NOT IN (${sql.join([...customerAuditActorIds, ...systemAuditActorIds].map((actorId) => sql`${actorId}`), sql`, `)})`);
     const where = and(...filters);
     const cachedCount = await this.readCache.count('audit-logs', { search: query.search, status: query.status, actor: query.actor }, async () => {
       const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(auditLogs).where(where);

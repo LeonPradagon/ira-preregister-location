@@ -378,7 +378,7 @@ export interface AuditLog {
   actorUserId: string;
   actorName: string;
   action: string;
-  entityType: 'CUSTOMER' | 'ADDRESS' | 'VERIFICATION_SESSION' | 'VALIDATION' | 'REVIEW' | 'REMINDER' | 'CONFIG' | 'AUTH';
+  entityType: string;
   entityId: string;
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;

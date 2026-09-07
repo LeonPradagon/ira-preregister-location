@@ -18,7 +18,7 @@ import { createVerificationToken } from './modules/verification/verification-tok
 import { CampaignService } from './modules/campaigns/campaign.service.js';
 import { ValidationConfigService } from './config/validation-config.service.js';
 import { getWhatsAppTemplate } from './integrations/whatsapp/whatsapp.templates.js';
-import { reminderLinkExpiresAt } from './modules/reminders/reminder.policy.js';
+import { nextAutomaticReminderAt, reminderLinkExpiresAt } from './modules/reminders/reminder.policy.js';
 import { CampaignItemState } from './modules/campaigns/campaign-item-state.js';
 import { ReadCacheService } from './common/read-cache.service.js';
 import { logEvent } from './common/structured-log.js';
@@ -148,15 +148,24 @@ const reminderWorker = runs('messaging') ? new Worker(
     }
     try {
       const verificationToken = await createVerificationToken();
-      const reminderTtlHours = (await reminderConfig.get()).REMINDER_LINK_TTL_HOURS;
+      const runtimeConfig = await reminderConfig.get();
+      const reminderTtlHours = runtimeConfig.REMINDER_LINK_TTL_HOURS;
       const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
       const sent = await whatsapp.send({ phoneE164: target.customer.phoneE164, templateName: reminderTemplate.name, templateLanguage: reminderTemplate.language, templateParameters: [target.customer.name, verificationLink], idempotencyKey: `reminder:${reminderId}` });
       const sentAt = new Date();
       const tokenExpiresAt = reminderLinkExpiresAt(sentAt, target.session.expiresAt, reminderTtlHours);
+      const nextReminderNumber = target.reminder.reminderNumber + 1;
+      const nextScheduledAt = nextReminderNumber <= runtimeConfig.MAX_REMINDERS_PER_SESSION
+        ? nextAutomaticReminderAt(target.reminder.scheduledAt, target.session.expiresAt)
+        : null;
       await db.transaction(async (tx) => {
         await tx.update(reminders).set({ tokenInvalidatedAt: sentAt }).where(and(eq(reminders.sessionId, target.session.id), ne(reminders.id, reminderId), isNotNull(reminders.tokenId), isNull(reminders.tokenInvalidatedAt)));
-        await tx.update(verificationSessions).set({ tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, updatedAt: sentAt }).where(eq(verificationSessions.id, target.session.id));
+        await tx.update(verificationSessions).set({ tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, reminderCount: nextScheduledAt ? nextReminderNumber : target.session.reminderCount, verificationStatus: nextScheduledAt && nextReminderNumber >= runtimeConfig.MAX_REMINDERS_PER_SESSION ? 'REMINDER_LIMIT_REACHED' : target.session.verificationStatus, updatedAt: sentAt }).where(eq(verificationSessions.id, target.session.id));
         await tx.update(reminders).set({ status: 'SENT', sentAt, providerMessageId: sent.providerMessageId, tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, tokenExpiresAt }).where(eq(reminders.id, reminderId));
+        if (nextScheduledAt) {
+          await tx.insert(reminders).values({ id: randomUUID(), sessionId: target.session.id, reminderNumber: nextReminderNumber, channel: 'WHATSAPP', scheduledAt: nextScheduledAt, status: 'SCHEDULED', messageText: `Halo ${target.customer.name}, pengingat ${nextReminderNumber} dari ${runtimeConfig.MAX_REMINDERS_PER_SESSION}. Tautan baru berlaku maksimal ${runtimeConfig.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`, retryCount: 0, createdAt: sentAt });
+          await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Reminder Scheduler', action: 'REMINDER_SCHEDULED', entityType: 'REMINDER', entityId: target.session.id, after: { reminderNumber: nextReminderNumber, scheduledAt: nextScheduledAt.toISOString(), automaticSchedule: true, trigger: 'PREVIOUS_LINK_NOT_OPENED' }, timestamp: sentAt });
+        }
       });
       await recordProviderOutcome(true);
       await recordDelivery(target.customer.phoneE164, 'REMINDER', `reminder:${reminderId}`, sent.providerMessageId);

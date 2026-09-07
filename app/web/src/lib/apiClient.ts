@@ -21,11 +21,11 @@ export class ApiClientError extends Error {
 }
 
 export interface PublicVerificationContextApi {
-  session: { id: string; status: string; expiresAt: string; linkExpiresAt: string; customerConfirmationStatus: string; reminderCount: number };
+  session: { id: string; status: string; expiresAt: string; linkExpiresAt: string; customerConfirmationStatus: string; reminderCount: number; isReminderLink: boolean };
   customer: { id: string; name: string; phoneE164: string };
   address: {
     id: string; addressType: string; rawAddress: string; province: string; city: string; district: string; subdistrict: string;
-    street: string; houseNumber: string; referencePrecision: string; referenceLocation?: { latitude: number; longitude: number } | null; simulationConfig?: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number; manualReview?: boolean; autoApprovalEnabled?: boolean; autoApprovalScoreThreshold?: number };
+    street: string; houseNumber: string; referencePrecision: string; referenceLocation?: { latitude: number; longitude: number } | null; simulationConfig?: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number; manualReview: boolean; autoApprovalEnabled: boolean; autoApprovalScoreThreshold: number };
   };
 }
 
@@ -97,6 +97,11 @@ apiClient.interceptors.response.use(
 type ApiRequestOptions = Pick<AxiosRequestConfig, 'method' | 'headers' | 'timeout'> & { body?: unknown };
 
 async function request<T>(path: string, init: ApiRequestOptions = {}): Promise<T> {
+  const response = await requestWithStatus<T>(path, init);
+  return response.data;
+}
+
+async function requestWithStatus<T>(path: string, init: ApiRequestOptions = {}): Promise<{ data: T; status: number }> {
   if (!path.startsWith('/')) throw new Error('API path must be relative to the configured API base URL');
   const response = await apiClient.request<T>({
     url: path,
@@ -105,7 +110,7 @@ async function request<T>(path: string, init: ApiRequestOptions = {}): Promise<T
     headers: init.headers,
     timeout: init.timeout,
   });
-  return response.status === 204 ? (undefined as T) : response.data;
+  return { data: response.status === 204 ? (undefined as T) : response.data, status: response.status };
 }
 
 export interface AuthAdminApiUser {
@@ -271,13 +276,14 @@ const adminApi = {
   verification: (id: string) => request<Record<string, unknown>>(`/admin/verifications/${encodeURIComponent(id)}`),
   addressFromGps: (id: string) => request<{ status: string; addressId: string; updatedFields: string[]; referenceLocation: { latitude: number; longitude: number } }>(`/admin/verifications/${encodeURIComponent(id)}/address-from-gps`, { method: 'POST' }),
   createVerification: (customerId: string, addressId: string) => request<{ sessionId: string; verificationLink: string; expiresAt: string }>(`/admin/customers/${encodeURIComponent(customerId)}/verifications`, { method: 'POST', body: JSON.stringify({ addressId }) }),
-  createSimulationVerification: (customerId: string, addressId: string) => request<{ simulation: boolean; sessionId: string; recipient: { name: string; phoneE164: string }; templateName: string; language: string; message: string; verificationLink: string; referenceLocation: { latitude: number; longitude: number } | null; referencePrecision: string | null; simulationConfig: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number }; expiresAt: string }>(`/admin/customers/${encodeURIComponent(customerId)}/verifications/simulation`, { method: 'POST', body: JSON.stringify({ addressId }) }),
+  createSimulationVerification: (customerId: string, addressId: string) => request<{ simulation: boolean; sessionId: string; recipient: { name: string; phoneE164: string }; templateName: string; language: string; message: string; verificationLink: string; referenceLocation: { latitude: number; longitude: number } | null; referencePrecision: string | null; simulationConfig: { homeRadiusMeters: number; gpsMaxAccuracyMeters: number; manualReview: boolean; autoApprovalEnabled: boolean; autoApprovalScoreThreshold: number }; expiresAt: string }>(`/admin/customers/${encodeURIComponent(customerId)}/verifications/simulation`, { method: 'POST', body: JSON.stringify({ addressId }) }),
   resend: (id: string) => request<{ status: string; verificationLink: string; expiresAt: string }>(`/admin/verifications/${encodeURIComponent(id)}/resend`, { method: 'POST' }),
   revoke: (id: string) => request<{ status: string }>(`/admin/verifications/${encodeURIComponent(id)}/revoke`, { method: 'POST' }),
   reminder: (id: string) => request<{ status: string; reminderNumber: number }>(`/admin/verifications/${encodeURIComponent(id)}/reminders`, { method: 'POST' }),
   review: (id: string, body: unknown) => request<{ status: string }>(`/admin/verifications/${encodeURIComponent(id)}/review`, { method: 'POST', body: JSON.stringify(body) }),
   reminders: (query: AdminListQuery = {}) => request<AdminPageApi<Record<string, unknown>>>(`/admin/reminders${queryString(query)}`),
   auditLogs: (query: AdminListQuery = {}) => request<AdminPageApi<Record<string, unknown>>>(`/admin/audit-logs${queryString(query)}`),
+  auditLogsWithStatus: (query: AdminListQuery = {}) => requestWithStatus<AdminPageApi<Record<string, unknown>>>(`/admin/audit-logs${queryString(query)}`),
   settings: () => request<Record<string, unknown>>('/admin/settings/validation'),
   updateSettings: (body: unknown) => request<Record<string, unknown>>('/admin/settings/validation', { method: 'PUT', body: JSON.stringify(body) }),
   integrations: () => request<Array<Record<string, unknown>>>('/admin/integrations'),

@@ -133,11 +133,21 @@ describe('server validation engine', () => {
   it('routes a GPS point outside the home radius to mismatch before address review', () => {
     const decision = decideValidation([
       sample(-6.88, 107.613), sample(-6.88001, 107.61301, 12, 1), sample(-6.87999, 107.61299, 14, 2),
-    ], { ...address, referencePrecision: 'STREET' }, reverseGeocode, config);
+    ], { ...address, referencePrecision: 'HOUSE' }, reverseGeocode, config);
     expect(decision.distanceFromReferenceMeters).toBeGreaterThan(config.homeRadiusMeters);
     expect(decision.result).toBe('LOCATION_MISMATCH');
     expect(decision.reasonCodes).toContain('HOME_RADIUS_EXCEEDED');
     expect(decision.reasonCodes).not.toContain('MANUAL_REVIEW_REQUIRED');
+  });
+
+  it('accepts a matching address when its reference point is only street-level', () => {
+    const decision = decideValidation([
+      sample(-6.8835, 107.613), sample(-6.88351, 107.61301, 12, 1), sample(-6.88349, 107.61299, 14, 2),
+    ], { ...address, referencePrecision: 'STREET' }, reverseGeocode, config);
+    expect(decision.distanceFromReferenceMeters).toBeGreaterThan(config.homeRadiusMeters);
+    expect(decision.addressScore).toBeGreaterThanOrEqual(config.addressScoreThreshold);
+    expect(decision.result).toBe('LOCATION_VALID');
+    expect(decision.reasonCodes).not.toContain('HOME_RADIUS_EXCEEDED');
   });
 
   it('asks the customer to retry before reviewing an unreferenced address when GPS is weak', () => {

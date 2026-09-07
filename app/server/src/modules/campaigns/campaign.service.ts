@@ -10,6 +10,7 @@ import { ValidationConfigService } from '../../config/validation-config.service.
 import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/whatsapp/whatsapp.templates.js';
 import { ReadCacheService } from '../../common/read-cache.service.js';
 import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js';
+import { buildVerificationSimulationConfig } from '../verification/simulation-config.js';
 
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
@@ -65,7 +66,7 @@ export class CampaignService {
       verificationLink,
       referenceLocation: input.referenceLatitude == null || input.referenceLongitude == null ? null : { latitude: input.referenceLatitude, longitude: input.referenceLongitude },
       referencePrecision: input.referencePrecision ?? null,
-      simulationConfig: { homeRadiusMeters: config.HOME_RADIUS_METERS, gpsMaxAccuracyMeters: config.GPS_MAX_ACCURACY_METERS, manualReview: config.ENABLE_MANUAL_REVIEW, autoApprovalEnabled: config.ENABLE_AUTO_APPROVAL, autoApprovalScoreThreshold: Math.max(0.9, config.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD) },
+      simulationConfig: buildVerificationSimulationConfig(config),
     };
   }
 

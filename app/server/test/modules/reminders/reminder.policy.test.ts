@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { automaticReminderTimes, isReminderScheduledBeforeSessionExpiry, nextReminderNumber, reminderLinkExpiresAt, scheduleReminder, scheduleReminderInTimezone, spreadReminderTimes } from '../../../src/modules/reminders/reminder.policy.js';
+import { automaticReminderTimes, isReminderScheduledBeforeSessionExpiry, nextAutomaticReminderAt, nextReminderNumber, reminderLinkExpiresAt, scheduleReminder, scheduleReminderInTimezone, spreadReminderTimes } from '../../../src/modules/reminders/reminder.policy.js';
 
 describe('reminder policy', () => {
   it('caps reminders at three per session', () => {
@@ -45,13 +45,19 @@ describe('reminder policy', () => {
     ]);
   });
 
-  it('creates three reminders from one selected time at daily intervals', () => {
+  it('creates three reminders from one selected time two days apart', () => {
     const start = new Date('2026-01-01T10:00:00.000Z');
     const expiry = new Date('2026-01-10T00:00:00.000Z');
     expect(automaticReminderTimes(start, 3, expiry).map((time) => time.toISOString())).toEqual([
       '2026-01-01T10:00:00.000Z',
-      '2026-01-02T10:00:00.000Z',
       '2026-01-03T10:00:00.000Z',
+      '2026-01-05T10:00:00.000Z',
     ]);
+  });
+
+  it('schedules an unopened follow-up two days later at the same time', () => {
+    const previous = new Date('2026-09-01T05:30:00.000Z');
+    const expiry = new Date('2026-09-10T00:00:00.000Z');
+    expect(nextAutomaticReminderAt(previous, expiry)?.toISOString()).toBe('2026-09-03T05:30:00.000Z');
   });
 });

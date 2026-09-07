@@ -14,6 +14,7 @@ import { IntegrationsView } from './components/admin/IntegrationsView';
 import { BackendCustomerVerificationView } from './components/customer/BackendCustomerVerificationView';
 import { CampaignsView } from './components/admin/CampaignsView';
 import { I18nProvider, useTranslation } from './i18n';
+import { showActionError } from './lib/swal';
 
 const MainAppContent: React.FC = () => {
   const { currentAdmin, loadCustomerDetail } = useApp();
@@ -41,7 +42,7 @@ const MainAppContent: React.FC = () => {
       await loadCustomerDetail(customerId);
       setSelectedCustomerId(customerId);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : t('customer.requestFailed'));
+      void showActionError(t('crud.error'), error instanceof Error ? error.message : t('customer.requestFailed'));
     }
   };
 
@@ -64,5 +65,5 @@ const MainAppContent: React.FC = () => {
 
 export default function App() {
   const customerRoute = /^\/v\//.test(window.location.pathname);
-  return <I18nProvider defaultLanguage={customerRoute ? 'id' : undefined}><AppProvider><MainAppContent /></AppProvider></I18nProvider>;
+  return <I18nProvider defaultLanguage={customerRoute ? 'id' : 'en'}><AppProvider><MainAppContent /></AppProvider></I18nProvider>;
 }

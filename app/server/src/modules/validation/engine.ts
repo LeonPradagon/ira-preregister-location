@@ -165,7 +165,10 @@ export function decideValidation(
     latitude: address.referenceLatitude!,
     longitude: address.referenceLongitude!,
   }) : null;
-  const outsideHomeRadius = distanceFromReferenceMeters != null && distanceFromReferenceMeters > config.homeRadiusMeters;
+  // Street/area reference points are approximate and can sit well away from
+  // the actual house. Only apply the hard home-radius rule when the reference
+  // coordinate is precise enough to represent the installation address.
+  const outsideHomeRadius = precisionOk && distanceFromReferenceMeters != null && distanceFromReferenceMeters > config.homeRadiusMeters;
   if (bestSample.accuracyMeters > config.gpsMaxAccuracyMeters) reasonCodes.push('LOW_GPS_ACCURACY');
   if (spreadMeters > 100) reasonCodes.push('GPS_SAMPLE_INCONSISTENT');
   if (!hasReferenceLocation) reasonCodes.push('REFERENCE_LOCATION_MISSING');
@@ -178,7 +181,7 @@ export function decideValidation(
   else if (streetScore < config.streetMatchThreshold) reasonCodes.push('STREET_VARIATION');
   if (houseNumberMatch === false) reasonCodes.push('HOUSE_NUMBER_MISMATCH');
   if (addressIncomplete) reasonCodes.push('ADDRESS_INCOMPLETE');
-  if (distanceFromReferenceMeters != null && distanceFromReferenceMeters > config.homeRadiusMeters) reasonCodes.push('HOME_RADIUS_EXCEEDED');
+  if (outsideHomeRadius) reasonCodes.push('HOME_RADIUS_EXCEEDED');
 
   let result: ValidationResult = 'MANUAL_REVIEW';
   // A weak or unstable GPS capture is an actionable customer retry, not an
@@ -189,11 +192,11 @@ export function decideValidation(
   // needs review. The customer is not at the registered home, so do not send
   // this case to the Ops manual-review queue.
   else if (outsideHomeRadius || addressTextMismatch) result = 'LOCATION_MISMATCH';
-  // A complete reverse-GPS match is enough for the automatic path even when
-  // the master coordinate is absent or only has area/street precision. A
-  // trusted reference still wins when available because it adds the radius
-  // check; the service applies the manual-review flag after this decision.
-  else if (addressMatchPasses && (distanceFromReferenceMeters == null || distanceFromReferenceMeters <= config.homeRadiusMeters)) result = 'LOCATION_VALID';
+  // A complete reverse-GPS match is enough for the automatic path when the
+  // master coordinate is absent or only has area/street precision. Only a
+  // trusted reference can add a hard radius check; approximate points are
+  // useful evidence but must not reject a matching address.
+  else if (addressMatchPasses && (!precisionOk || distanceFromReferenceMeters == null || distanceFromReferenceMeters <= config.homeRadiusMeters)) result = 'LOCATION_VALID';
   else if (addressNeedsManualReview) result = 'MANUAL_REVIEW';
   // Without a trusted reference coordinate we cannot calculate whether the
   // customer is at the registered home. This is not proof of a mismatch.

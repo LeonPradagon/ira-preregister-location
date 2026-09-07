@@ -51,15 +51,15 @@ const reasonLabels: Record<string, string> = {
 };
 
 const auditLabels: Record<string, string> = {
-  CUSTOMER_CREATED: 'Pelanggan ditambahkan', CUSTOMER_UPDATED: 'Data pelanggan diperbarui', CUSTOMER_DEACTIVATED: 'Pelanggan dinonaktifkan',
-  ADDRESS_CREATED: 'Alamat ditambahkan', ADDRESS_UPDATED: 'Alamat diperbarui', ADDRESS_PROPOSED: 'Alamat baru diajukan',
-  VERIFICATION_CREATED: 'Pemeriksaan dibuat', VERIFICATION_STARTED: 'Pemeriksaan dimulai', LOCATION_CAPTURED: 'Lokasi diterima',
-  LOCATION_VALID: 'Lokasi dinyatakan sesuai', LOCATION_AUTO_APPROVED: 'Lokasi disetujui otomatis', MANUAL_REVIEW: 'Pemeriksaan tambahan dilakukan', CUSTOMER_DELETED: 'Pelanggan dihapus permanen', REMINDER_SCHEDULED: 'Pengingat dijadwalkan',
-  REMINDER_SENT: 'Pengingat dikirim', CAMPAIGN_CREATED: 'Pengiriman dibuat', CAMPAIGN_STARTED: 'Pengiriman dimulai', LOGIN: 'Masuk ke akun', LOGOUT: 'Keluar dari akun',
+  CUSTOMER_CREATED: 'Customer created', CUSTOMER_UPDATED: 'Customer updated', CUSTOMER_DEACTIVATED: 'Customer deactivated',
+  ADDRESS_CREATED: 'Address created', ADDRESS_UPDATED: 'Address updated', ADDRESS_PROPOSED: 'New address proposed',
+  VERIFICATION_CREATED: 'Verification created', VERIFICATION_STARTED: 'Verification started', VERIFICATION_SIMULATION_CREATED: 'Verification simulation created', VERIFICATION_REVOKED: 'Verification revoked', LOCATION_CAPTURED: 'Location captured',
+  LOCATION_VALID: 'Location matched', LOCATION_VALIDATION_COMPLETED: 'Location check completed', LOCATION_AUTO_APPROVED: 'Location auto-approved', GPS_ACCURACY_REJECTED: 'GPS accuracy rejected', HOME_VALIDATION_FAILED: 'Home-distance check failed', MANUAL_REVIEW: 'Manual review completed', MANUAL_REVIEW_APPROVED: 'Manual review approved', MANUAL_REVIEW_REJECTED: 'Manual review rejected', CUSTOMER_DELETED: 'Customer permanently deleted', CUSTOMER_IMPORT_COMPLETED: 'Customer import completed', REMINDER_SCHEDULED: 'Reminder scheduled',
+  REMINDER_SENT: 'Reminder sent', REMINDER_LINK_OPENED: 'Reminder link opened', REMINDER_FAILED: 'Reminder failed', CAMPAIGN_CREATED: 'Message campaign created', CAMPAIGN_STARTED: 'Message campaign started', CAMPAIGN_TARGETS_MATERIALIZED: 'Campaign targets prepared', CAMPAIGN_INVITATION_SENT: 'Campaign invitation sent', CAMPAIGN_INVITATION_FAILED: 'Campaign invitation failed', CONFIG_UPDATED: 'Validation rules updated', INVITATION_RESENT: 'Invitation resent', WHATSAPP_OPTED_OUT: 'WhatsApp messages stopped', WHATSAPP_SEND_BLOCKED: 'WhatsApp delivery blocked', LOGIN: 'Signed in', LOGOUT: 'Signed out',
 };
 
 const auditEntityLabels: Record<string, string> = {
-  VERIFICATION_SESSION: 'Pemeriksaan', VALIDATION: 'Pemeriksaan lokasi', CUSTOMER: 'Pelanggan', ADDRESS: 'Alamat', REMINDER: 'Pengingat', REVIEW: 'Peninjauan', AUTH: 'Akses akun',
+  VERIFICATION_SESSION: 'Verification', VALIDATION: 'Location check', CUSTOMER: 'Customer', ADDRESS: 'Address', REMINDER: 'Reminder', REVIEW: 'Review', CONFIG: 'Validation rules', CAMPAIGN: 'Message campaign', CAMPAIGN_ITEM: 'Campaign item', DELIVERY: 'WhatsApp message', AUTH: 'Account access',
 };
 
 export const userFriendlyStatus = (status: string | null | undefined): string =>
@@ -68,5 +68,10 @@ export const userFriendlyStatus = (status: string | null | undefined): string =>
 export const userFriendlyReason = (reason: string): string =>
   reasonLabels[reason] ?? 'Ada hal yang perlu diperiksa';
 
-export const userFriendlyAuditAction = (action: string): string => auditLabels[action] ?? 'Aktivitas diperbarui';
+export const userFriendlyAuditAction = (action: string): string => {
+  const knownLabel = auditLabels[action];
+  if (knownLabel) return knownLabel;
+  const fallbackLabel = action.toLowerCase().split('_').filter(Boolean).map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  return fallbackLabel || 'Activity recorded';
+};
 export const userFriendlyAuditEntity = (entity: string): string => auditEntityLabels[entity] ?? 'Data';

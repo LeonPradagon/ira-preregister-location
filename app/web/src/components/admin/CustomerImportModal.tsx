@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { AlertCircle, CheckCircle2, FileSpreadsheet, Loader2, Upload, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileSpreadsheet, Upload, X } from 'lucide-react';
 import { CustomerImportApiResult, api } from '../../lib/apiClient';
+import { confirmAction, showActionSuccess } from '../../lib/swal';
+import { AppLoader } from '../common/AppLoader';
 
 interface CustomerImportModalProps {
   onClose: () => void;
@@ -45,6 +47,13 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
       setError('Pilih file .xlsx atau .csv terlebih dahulu.');
       return;
     }
+    const confirmed = await confirmAction({
+      title: 'Mulai import data?',
+      text: 'Data customer dari file ini akan dibuat atau diperbarui di sistem.',
+      confirmButtonText: 'Ya, mulai import',
+      cancelButtonText: 'Batal',
+    });
+    if (!confirmed) return;
     setError('');
     setIsUploading(true);
     try {
@@ -60,6 +69,7 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
       if (imported.status !== 'COMPLETED') throw new Error('Import masih diproses. Silakan cek status job dan coba lagi nanti.');
       setResult(imported);
       await onImported();
+      await showActionSuccess('Import berhasil', 'Data customer berhasil disimpan ke sistem.');
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'File gagal diimpor.');
     } finally {
@@ -119,7 +129,7 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
 
           <div className="flex items-center justify-end gap-2 border-t border-gray-200 pt-3 dark:border-gray-800">
             <button type="button" onClick={onClose} disabled={isUploading} className="rounded-lg border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">{result ? 'Tutup' : 'Batal'}</button>
-            {!result && <button type="submit" disabled={!file || isUploading} className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 font-medium text-white shadow-xs hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white">{isUploading && <Loader2 className="h-4 w-4 animate-spin" />} {isUploading ? 'Mengimpor...' : 'Mulai Import'}</button>}
+            {!result && <button type="submit" disabled={!file || isUploading} className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 font-medium text-white shadow-xs hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white">{isUploading && <AppLoader size={20} label="Importing" />} {isUploading ? 'Mengimpor...' : 'Mulai Import'}</button>}
           </div>
         </form>
       </div>

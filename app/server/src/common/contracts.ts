@@ -195,6 +195,7 @@ export interface PublicVerificationContext {
     linkExpiresAt: string;
     customerConfirmationStatus: string;
     reminderCount: number;
+    isReminderLink: boolean;
   };
   customer: { id: string; name: string; phoneE164: string };
   address: Record<string, unknown>;

@@ -1,6 +1,6 @@
 export const MAX_REMINDERS_PER_SESSION = 3;
 export const DEFAULT_REMINDER_LINK_TTL_HOURS = 24;
-const AUTOMATIC_REMINDER_INTERVAL_HOURS = 24;
+const AUTOMATIC_REMINDER_INTERVAL_DAYS = 2;
 const REMINDER_EXPIRY_BUFFER_MS = 60 * 1000;
 
 export type ReminderPreference = 'IN_1_HOUR' | 'TONIGHT' | 'TOMORROW_MORNING' | 'DEFAULT';
@@ -35,8 +35,15 @@ export function automaticReminderTimes(startAt: Date, count: number, sessionExpi
   if (count === 1) return [new Date(startAt)];
   const latestAllowed = new Date(sessionExpiresAt.getTime() - REMINDER_EXPIRY_BUFFER_MS);
   if (latestAllowed <= startAt) throw new Error('Automatic reminders do not fit before session expiry');
-  const preferredEnd = new Date(startAt.getTime() + (count - 1) * AUTOMATIC_REMINDER_INTERVAL_HOURS * 60 * 60 * 1000);
+  const preferredEnd = new Date(startAt.getTime() + (count - 1) * AUTOMATIC_REMINDER_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
   return spreadReminderTimes(startAt, preferredEnd < latestAllowed ? preferredEnd : latestAllowed, count);
+}
+
+export function nextAutomaticReminderAt(previousScheduledAt: Date, sessionExpiresAt: Date, intervalDays = AUTOMATIC_REMINDER_INTERVAL_DAYS): Date | null {
+  if (!Number.isFinite(previousScheduledAt.getTime()) || !Number.isFinite(sessionExpiresAt.getTime())) throw new Error('Automatic reminder time must be valid');
+  if (!Number.isFinite(intervalDays) || intervalDays <= 0) throw new Error('Automatic reminder interval must be positive');
+  const next = new Date(previousScheduledAt.getTime() + intervalDays * 24 * 60 * 60 * 1000);
+  return next < sessionExpiresAt ? next : null;
 }
 
 export function scheduleReminder(preference: ReminderPreference, from = new Date()): Date {

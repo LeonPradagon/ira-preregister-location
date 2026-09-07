@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Check,
+  Bell,
   CheckCircle2,
+  Info,
   Lock,
-  RotateCcw,
+  MapPin,
   Save,
   Settings,
   Shield,
@@ -14,16 +15,37 @@ import {
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../i18n';
 import { ValidationConfig } from '../../types';
+import { confirmAction, showActionSuccess } from '../../lib/swal';
+
+type FeatureToggleItem = {
+  key: keyof ValidationConfig;
+  label: string;
+  desc: string;
+};
+
+const approvalToggleItem: FeatureToggleItem = {
+  key: 'ENABLE_AUTO_APPROVAL',
+  label: 'settings.feature.autoApproval',
+  desc: 'settings.feature.autoApprovalDesc',
+};
+
+const otherToggleItems: FeatureToggleItem[] = [
+  { key: 'ENABLE_ADDRESS_EDIT', label: 'settings.feature.addressEdit', desc: 'settings.feature.addressEditDesc' },
+  { key: 'ENABLE_REMINDERS', label: 'settings.feature.reminders', desc: 'settings.feature.remindersDesc' },
+  { key: 'ENABLE_IRA_COVERAGE', label: 'settings.feature.iraCoverage', desc: 'settings.feature.iraCoverageDesc' },
+  { key: 'ENABLE_TICKETING', label: 'settings.feature.ticketing', desc: 'settings.feature.ticketingDesc' },
+];
 
 export const ValidationSettingsView: React.FC = () => {
   const { validationConfig, updateValidationConfig, currentAdmin } = useApp();
   const { t } = useTranslation();
-  const [formData, setFormData] = useState<ValidationConfig>(validationConfig);
+  const [formData, setFormData] = useState<ValidationConfig>({ ...validationConfig, ENABLE_MANUAL_REVIEW: true });
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    setFormData(validationConfig);
+    // Manual review is the safety fallback for this single approval setting.
+    setFormData({ ...validationConfig, ENABLE_MANUAL_REVIEW: true });
   }, [validationConfig]);
 
   const canEditSettings = currentAdmin?.role === 'SUPER_ADMIN';
@@ -36,12 +58,58 @@ export const ValidationSettingsView: React.FC = () => {
     setFormData((prev) => ({ ...prev, [field]: !prev[field] }));
   };
 
+  const handleAutomaticApprovalToggle = () => {
+    setFormData((prev) => ({
+      ...prev,
+      ENABLE_AUTO_APPROVAL: !prev.ENABLE_AUTO_APPROVAL,
+      ENABLE_MANUAL_REVIEW: true,
+    }));
+  };
+
+  const renderToggle = (item: FeatureToggleItem, onToggle?: () => void) => {
+    const enabled = Boolean(formData[item.key]);
+    return (
+      <div
+        key={item.key}
+        className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-gray-50/70 p-3.5 dark:border-gray-700 dark:bg-gray-800/40"
+      >
+        <div className="min-w-0">
+          <div className="break-words text-xs font-semibold text-gray-900 dark:text-white">{t(item.label)}</div>
+          <div className="mt-0.5 break-words text-[11px] text-gray-500 dark:text-gray-400">{t(item.desc)}</div>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label={t(item.label)}
+          disabled={!canEditSettings}
+          onClick={onToggle ?? (() => handleToggle(item.key))}
+          className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors ${enabled ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400'}`}
+        >
+          <span>{enabled ? t('settings.enabled') : t('settings.disabled')}</span>
+          {enabled ? <ToggleRight className="h-8 w-8 text-indigo-600 dark:text-indigo-400" /> : <ToggleLeft className="h-8 w-8 text-gray-400 dark:text-gray-600" />}
+        </button>
+      </div>
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEditSettings) return;
     setSaveError(null);
+    const confirmed = await confirmAction({
+      title: t('crud.updateQuestion'),
+      text: t('crud.updateText'),
+      confirmButtonText: t('crud.continue'),
+      cancelButtonText: t('crud.cancel'),
+    });
+    if (!confirmed) return;
     try {
-      await updateValidationConfig(formData);
+      // Keep the legacy field enabled so the team-review fallback is always available.
+      const configToSave = { ...formData, ENABLE_MANUAL_REVIEW: true };
+      await updateValidationConfig(configToSave);
+      setFormData(configToSave);
+      await showActionSuccess(t('crud.updated'), t('settings.saved'));
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
     } catch (error) {
@@ -59,7 +127,7 @@ export const ValidationSettingsView: React.FC = () => {
             <span>{t('settings.title')}</span>
           </h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            {t('settings.description')}
+            {t('settings.pageIntro')}
           </p>
         </div>
 
@@ -79,13 +147,23 @@ export const ValidationSettingsView: React.FC = () => {
       )}
       {saveError && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-medium text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300">{saveError}</div>}
 
+      <section className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/20">
+        <div className="flex items-start gap-2 text-indigo-950 dark:text-indigo-100"><Info className="mt-0.5 h-4 w-4 shrink-0" /><div><h2 className="text-sm font-semibold">{t('settings.quickSummaryTitle')}</h2><p className="mt-1 text-xs leading-relaxed text-indigo-800 dark:text-indigo-200">{t('settings.quickSummaryText')}</p></div></div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/80 dark:bg-gray-900/50"><div className="flex items-center gap-2 text-xs font-semibold text-indigo-800 dark:text-indigo-200"><CheckCircle2 className="h-4 w-4" />{t('settings.autoApprovalSummary')}</div><p className="mt-1 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">{t('settings.autoApprovalSummaryText')}</p><span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${formData.ENABLE_AUTO_APPROVAL ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>{formData.ENABLE_AUTO_APPROVAL ? t('settings.enabled') : t('settings.disabled')}</span></div>
+          <div className="rounded-xl border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/80 dark:bg-gray-900/50"><div className="flex items-center gap-2 text-xs font-semibold text-indigo-800 dark:text-indigo-200"><Shield className="h-4 w-4" />{t('settings.teamReviewSummary')}</div><p className="mt-1 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">{t('settings.teamReviewSummaryText')}</p><span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">{t('settings.enabled')}</span></div>
+          <div className="rounded-xl border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/80 dark:bg-gray-900/50"><div className="flex items-center gap-2 text-xs font-semibold text-indigo-800 dark:text-indigo-200"><Bell className="h-4 w-4" />{t('settings.reminderSummary')}</div><p className="mt-1 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">{t('settings.reminderSummaryText', { count: formData.MAX_REMINDERS_PER_SESSION })}</p><span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">{formData.MAX_REMINDERS_PER_SESSION} {t('settings.maxReminders')}</span></div>
+        </div>
+      </section>
+
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* SPATIAL & GPS THRESHOLDS (PRD Section 16 & 27) */}
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 shadow-xs space-y-4">
           <h2 className="text-xs font-semibold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-            <Sliders className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <MapPin className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
             <span>{t('settings.spatial')}</span>
           </h2>
+          <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t('settings.spatialHelp')}</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
@@ -204,6 +282,7 @@ export const ValidationSettingsView: React.FC = () => {
             <Sliders className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
             <span>{t('settings.session')}</span>
           </h2>
+          <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t('settings.sessionHelp')}</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
             <div>
@@ -278,64 +357,22 @@ export const ValidationSettingsView: React.FC = () => {
             <Shield className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             <span>{t('settings.features')}</span>
           </h2>
+          <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t('settings.featuresHelp')}</p>
 
-          <div className="space-y-3 pt-1">
-            {[
-              {
-                key: 'ENABLE_AUTO_APPROVAL' as keyof ValidationConfig,
-                label: 'settings.feature.autoApproval',
-                desc: 'settings.feature.autoApprovalDesc',
-              },
-              {
-                key: 'ENABLE_MANUAL_REVIEW' as keyof ValidationConfig,
-                label: 'settings.feature.manualReview',
-                desc: 'settings.feature.manualReviewDesc',
-              },
-              {
-                key: 'ENABLE_ADDRESS_EDIT' as keyof ValidationConfig,
-                label: 'settings.feature.addressEdit',
-                desc: 'settings.feature.addressEditDesc',
-              },
-              {
-                key: 'ENABLE_REMINDERS' as keyof ValidationConfig,
-                label: 'settings.feature.reminders',
-                desc: 'settings.feature.remindersDesc',
-              },
-              {
-                key: 'ENABLE_IRA_COVERAGE' as keyof ValidationConfig,
-                label: 'settings.feature.iraCoverage',
-                desc: 'settings.feature.iraCoverageDesc',
-              },
-              {
-                key: 'ENABLE_TICKETING' as keyof ValidationConfig,
-                label: 'settings.feature.ticketing',
-                desc: 'settings.feature.ticketingDesc',
-              },
-            ].map((item) => (
-              <div
-                key={item.key}
-                className="p-3.5 bg-gray-50/70 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl flex items-center justify-between"
-              >
-                <div>
-                  <div className="font-semibold text-gray-900 dark:text-white text-xs">{t(item.label)}</div>
-                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{t(item.desc)}</div>
-                </div>
-                <button
-                  type="button"
-                  disabled={!canEditSettings}
-                  onClick={() => handleToggle(item.key)}
-                  className={`text-2xl transition-colors ${
-                    formData[item.key] ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-600'
-                  }`}
-                >
-                  {formData[item.key] ? (
-                    <ToggleRight className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
-                  ) : (
-                    <ToggleLeft className="w-8 h-8 text-gray-400 dark:text-gray-600" />
-                  )}
-                </button>
+          <div className="space-y-4 pt-1">
+            <div className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/60 p-3.5 dark:border-indigo-900 dark:bg-indigo-950/20">
+              <div>
+                <h3 className="text-xs font-semibold text-indigo-950 dark:text-indigo-100">{t('settings.approvalRulesTitle')}</h3>
+                <p className="mt-1 break-words text-[11px] leading-relaxed text-indigo-800 dark:text-indigo-200">{t('settings.approvalRulesDescription')}</p>
               </div>
-            ))}
+              <div className="space-y-2">{renderToggle(approvalToggleItem, handleAutomaticApprovalToggle)}</div>
+              <div className="space-y-1 rounded-lg bg-white/80 p-3 text-[11px] leading-relaxed text-indigo-900 dark:bg-gray-900/40 dark:text-indigo-100">
+                <p>{t('settings.approvalRulesAutoInfo')}</p>
+                <p>{t('settings.approvalRulesManualInfo')}</p>
+                <p className="font-semibold">{t('settings.approvalRulesSafety')}</p>
+              </div>
+            </div>
+            <div className="space-y-3">{otherToggleItems.map((item) => renderToggle(item))}</div>
           </div>
         </div>
 

@@ -23,7 +23,6 @@ import {
 import { useApp } from '../../context/AppContext';
 import { ThemeMode } from '../../types';
 import { useTranslation } from '../../i18n';
-import { LanguageSwitcher } from '../common/LanguageSwitcher';
 
 export type AdminTab =
   | 'dashboard'
@@ -228,8 +227,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               </div>
             )}
           </div>
-
-          <LanguageSwitcher compact />
 
           {/* User Role Badge & Dropdown */}
           <div className="relative">

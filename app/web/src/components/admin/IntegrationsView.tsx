@@ -13,6 +13,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../i18n';
 import { api } from '../../lib/apiClient';
+import { AppLoader } from '../common/AppLoader';
 import { IntegrationOutboxEvent } from '../../types';
 import { TablePagination, TablePageSize } from '../common/AdminTable';
 import { userFriendlyStatus } from '../../lib/statusLabels';
@@ -133,12 +134,12 @@ export const IntegrationsView: React.FC = () => {
               {t('integrations.streamDescription')}
             </p>
           </div>
-          <button type="button" onClick={() => void load()} disabled={loading} className="rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" aria-label={t('integrations.reload')} title={t('integrations.reload')}><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
+          <button type="button" onClick={() => void load()} disabled={loading} className="rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" aria-label={t('integrations.reload')} title={t('integrations.reload')}>{loading ? <AppLoader size={18} label={t('integrations.loading')} /> : <RefreshCw className="h-4 w-4" />}</button>
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row"><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder={t('integrations.search')} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-900 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white sm:w-96" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs dark:bg-gray-800"><option value="ALL">{t('integrations.allStatuses')}</option><option value="PENDING">Menunggu diproses</option><option value="PUBLISHED">Sudah diteruskan</option><option value="FAILED">Gagal</option></select></div>
 
-        {loading ? <div className="p-8 text-center text-xs text-gray-500">{t('integrations.loading')}</div> : error ? <div className="p-8 text-center text-xs text-rose-600">{error}</div> : outboxEvents.length > 0 ? (
+        {loading ? <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-xs text-gray-500"><AppLoader size={64} label={t('integrations.loading')} /><span>{t('integrations.loading')}</span></div> : error ? <div className="p-8 text-center text-xs text-rose-600">{error}</div> : outboxEvents.length > 0 ? (
           <div className="space-y-4">
             {outboxEvents.map((evt) => (
               <div key={evt.id} className="bg-gray-50/70 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-xs space-y-3">
