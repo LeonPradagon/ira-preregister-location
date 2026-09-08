@@ -13,6 +13,7 @@ import { RemindersView } from './components/admin/RemindersView';
 import { IntegrationsView } from './components/admin/IntegrationsView';
 import { BackendCustomerVerificationView } from './components/customer/BackendCustomerVerificationView';
 import { CampaignsView } from './components/admin/CampaignsView';
+import { UserManagementView } from './components/admin/UserManagementView';
 import { I18nProvider, useTranslation } from './i18n';
 import { showActionError } from './lib/swal';
 
@@ -47,23 +48,58 @@ const MainAppContent: React.FC = () => {
   };
 
   const renderTabContent = () => {
-    if (selectedVerificationId) return <VerificationDetailView sessionId={selectedVerificationId} onBack={() => setSelectedVerificationId(null)} />;
-    if (selectedCustomerId) return <CustomerDetailView customerId={selectedCustomerId} onBack={() => setSelectedCustomerId(null)} onSelectVerification={setSelectedVerificationId} />;
-    if (currentTab === 'dashboard') return <DashboardView onSelectVerification={setSelectedVerificationId} onNavigate={setCurrentTab} />;
-    if (currentTab === 'customers') return <CustomerListView onSelectCustomer={(customerId, alreadyLoaded) => void selectCustomer(customerId, alreadyLoaded)} />;
+    if (selectedVerificationId)
+      return (
+        <VerificationDetailView sessionId={selectedVerificationId} onBack={() => setSelectedVerificationId(null)} />
+      );
+    if (selectedCustomerId)
+      return (
+        <CustomerDetailView
+          customerId={selectedCustomerId}
+          onBack={() => setSelectedCustomerId(null)}
+          onSelectVerification={setSelectedVerificationId}
+        />
+      );
+    if (currentTab === 'dashboard')
+      return <DashboardView onSelectVerification={setSelectedVerificationId} onNavigate={setCurrentTab} />;
+    if (currentTab === 'customers')
+      return (
+        <CustomerListView
+          onSelectCustomer={(customerId, alreadyLoaded) => void selectCustomer(customerId, alreadyLoaded)}
+        />
+      );
     if (currentTab === 'campaigns') return <CampaignsView />;
-    if (currentTab === 'verifications') return <VerificationListView onSelectVerification={setSelectedVerificationId} />;
+    if (currentTab === 'verifications')
+      return <VerificationListView onSelectVerification={setSelectedVerificationId} />;
     if (currentTab === 'reminders') return <RemindersView onSelectVerification={setSelectedVerificationId} />;
     if (currentTab === 'audit-logs') return <AuditLogsView />;
     if (currentTab === 'settings') return <ValidationSettingsView />;
     if (currentTab === 'integrations') return <IntegrationsView />;
+    if (currentTab === 'users') return <UserManagementView />;
     return <DashboardView onSelectVerification={setSelectedVerificationId} onNavigate={setCurrentTab} />;
   };
 
-  return <AdminLayout currentTab={currentTab} onSelectTab={setCurrentTab} selectedCustomerId={selectedCustomerId} onSelectCustomer={setSelectedCustomerId} selectedVerificationId={selectedVerificationId} onSelectVerification={setSelectedVerificationId}>{renderTabContent()}</AdminLayout>;
+  return (
+    <AdminLayout
+      currentTab={currentTab}
+      onSelectTab={setCurrentTab}
+      selectedCustomerId={selectedCustomerId}
+      onSelectCustomer={setSelectedCustomerId}
+      selectedVerificationId={selectedVerificationId}
+      onSelectVerification={setSelectedVerificationId}
+    >
+      {renderTabContent()}
+    </AdminLayout>
+  );
 };
 
 export default function App() {
   const customerRoute = /^\/v\//.test(window.location.pathname);
-  return <I18nProvider defaultLanguage={customerRoute ? 'id' : 'en'}><AppProvider><MainAppContent /></AppProvider></I18nProvider>;
+  return (
+    <I18nProvider defaultLanguage={customerRoute ? 'id' : 'en'}>
+      <AppProvider>
+        <MainAppContent />
+      </AppProvider>
+    </I18nProvider>
+  );
 }

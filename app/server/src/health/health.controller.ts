@@ -6,7 +6,10 @@ import { MetricsService } from '../common/metrics.service.js';
 
 @Controller('health')
 export class HealthController implements OnModuleDestroy {
-  private readonly redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: 1, enableOfflineQueue: false }).on('error', () => undefined);
+  private readonly redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+  }).on('error', () => undefined);
 
   constructor(private readonly metrics: MetricsService) {}
 
@@ -17,14 +20,21 @@ export class HealthController implements OnModuleDestroy {
   }
 
   @Get('live')
-  live() { return { status: 'ok' }; }
+  live() {
+    return { status: 'ok' };
+  }
 
   @Get('ready')
-  async ready() { return { status: 'ok', checks: await this.readyChecks() }; }
+  async ready() {
+    return { status: 'ok', checks: await this.readyChecks() };
+  }
 
   @Get('metrics')
   metricsSnapshot() {
-    return { ...this.metrics.snapshot(), databasePool: { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount } };
+    return {
+      ...this.metrics.snapshot(),
+      databasePool: { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount },
+    };
   }
 
   private async readyChecks() {

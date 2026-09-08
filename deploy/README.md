@@ -1,32 +1,82 @@
-# Deployment Compose
+# Deployment IRA Preregist
 
-Deployment sengaja dipisah menjadi dua Compose project:
+## Satu host (default)
 
-- `docker-compose.backend.yml`: API NestJS, worker, PostgreSQL/PostGIS, Redis, dan migration runner.
-- `docker-compose.frontend.yml`: static React build melalui Nginx.
+Ikuti [README utama](../README.md#deploy-dengan-docker-compose): salin `.env.example` ke `.env` di root, isi secret/domain, lalu jalankan `docker compose up --build -d`.
 
-Gunakan file `.env` deployment yang tidak di-commit. Contoh variabel tersedia di `.env.example`.
+`docker-compose.yml` menjadi sumber konfigurasi stack lengkap. `docker-compose.prod.yml` hanya entry point kompatibilitas melalui [Compose include](https://docs.docker.com/compose/how-tos/multiple-compose-files/include/); tidak ada salinan stack production kedua yang harus dipelihara.
 
-## Backend
+Untuk tetap menyimpan environment di `deploy/.env`:
 
 ```powershell
 Copy-Item deploy/.env.example deploy/.env
-# Edit deploy/.env: replace database, Better Auth, and seed credentials first.
-docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yml up --build -d \
-  --scale api=3 --scale campaign-worker=2 --scale messaging-worker=2
-docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yml run --rm api node dist/db/seed.js
+# Edit secret, domain, dan akun admin terlebih dahulu.
+docker compose --env-file deploy/.env -f docker-compose.prod.yml up --build -d
 ```
 
-Migration dijalankan oleh service `migrate` sebelum API dan worker menjadi healthy. Seed hanya dijalankan eksplisit setelah secret dan akun admin production ditentukan.
+Template tersebut menetapkan `COMPOSE_ENV_FILE=./deploy/.env`, sehingga konfigurasi provider juga masuk ke container. Jika menggunakan file lain, set `COMPOSE_ENV_FILE` ke lokasi file itu; `--env-file` saja hanya mengatur substitusi Compose.
 
-`api-gateway` meneruskan traffic ke replica API. Worker dipisah berdasarkan queue: `campaign-worker`, `messaging-worker`, `import-worker`, dan `worker` untuk recovery/reconciliation. Migration `0003_production_indexes.sql` berjalan di luar transaction dan membuat index satu per satu dengan `CREATE INDEX CONCURRENTLY`; jalankan di staging dan pantau `pg_stat_progress_create_index` sebelum production.
+Web Nginx meneruskan `/v1` langsung ke API pada network Docker. Untuk domain publik, reverse proxy HTTPS meneruskan request ke `WEB_PORT`, mempertahankan Host dan `X-Forwarded-Proto`. Set `WEB_ORIGIN` dan `BETTER_AUTH_URL` ke origin publik yang sama. `TRUST_PROXY` mengikuti jumlah proxy terpercaya di depan API. Port `API_PORT` tersedia untuk deployment yang membutuhkan domain API terpisah.
 
-Budget koneksi default dihitung untuk 10 proses (`DATABASE_POOL_MAX=5`, sekitar 50 koneksi) dan masih menyisakan headroom PostgreSQL. Jika jumlah replica diubah, hitung ulang total `replica × pool maksimum` sebelum menaikkan nilai tersebut.
+Startup memakai [healthcheck dan dependency completion](https://docs.docker.com/compose/how-tos/startup-order/): database siap → migration selesai → bootstrap admin selesai → API/worker aktif → gateway/web aktif. Service `migrate` dan `seed` selesai dengan exit code 0; keduanya bukan daemon.
 
-## Frontend
+## Operasional dan upgrade
 
-```powershell
+```bash
+docker compose ps -a
+docker compose logs --tail=100 migrate seed api
+docker compose logs -f campaign-worker messaging-worker import-worker
+
+# Terapkan build, migration baru, dan restart service yang berubah
+docker compose up --build -d
+
+# Hentikan service tanpa menghapus named volume
+docker compose down
+```
+
+Backup database sebelum upgrade. Contoh berikut menulis backup di dalam container agar output biner tidak rusak oleh redirection PowerShell:
+
+```bash
+docker compose exec postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -f /tmp/ira_preregist.dump'
+docker compose cp postgres:/tmp/ira_preregist.dump ./ira_preregist.dump
+```
+
+Simpan backup di luar host dan backup juga volume import yang masih memiliki pekerjaan pending. Uji restore di database terpisah. Jangan menjalankan `docker compose down -v` pada data aktif.
+
+Saat upgrade dari konfigurasi lama:
+
+1. Selesaikan antrean import/pengiriman dengan worker versi sebelumnya, lalu hentikan stack lama. Nama antrean baru memakai prefix `ira_preregist`; job Redis lama tidak dipindahkan otomatis.
+2. Pertahankan `COMPOSE_PROJECT_NAME`, `POSTGRES_DB`, `POSTGRES_USER`, password, dan volume yang sudah dipakai jika ingin menggunakan database yang sama. Penggantian default nama di repository tidak menjalankan rename database/role/volume yang sudah ada. Instalasi baru memakai `ira_preregist`.
+3. Jika ingin mengganti identitas database dan project lama, lakukan backup/restore secara terencana ke stack baru. Jangan menghapus volume lama sebelum data hasil restore diperiksa.
+4. Periksa nama/ID template Qontak: perubahan nama di kode tidak mengubah template provider yang sudah disetujui.
+5. Jalankan stack baru, cek `/v1/health`, login, dan uji satu import kecil sebelum melanjutkan campaign.
+
+Bootstrap otomatis memakai `seed --if-missing` dan mempertahankan password/role pengguna yang sudah ada. Perintah manual `docker compose run --rm api node dist/db/seed.js` adalah reseed eksplisit yang memperbarui password dan role akun sesuai `SEED_ADMIN_*`; gunakan hanya saat memang ingin mereset akun tersebut.
+
+## Frontend/backend terpisah (opsional)
+
+File split dipertahankan untuk rilis independen atau host berbeda. Gunakan URL API publik, bukan nama service Docker:
+
+```dotenv
+BETTER_AUTH_URL=https://api.example.com
+WEB_ORIGIN=https://app.example.com
+VITE_API_URL=https://api.example.com/v1
+```
+
+```bash
+docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yml up --build -d
+docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yml run --rm api node dist/db/seed.js --if-missing
 docker compose --env-file deploy/.env -f deploy/docker-compose.frontend.yml up --build -d
 ```
 
-`VITE_API_URL` harus menggunakan URL API publik yang dapat diakses browser. Frontend dan backend dapat berada di host atau cluster berbeda; integrasinya melalui URL tersebut dan CORS `WEB_ORIGIN`.
+Split backend memiliki migration otomatis dan seed eksplisit. Split frontend menggunakan `app/web/nginx.conf` untuk static SPA; konfigurasi proxy satu origin hanya dipasang oleh stack lengkap. PostgreSQL/Redis split hanya bind ke loopback host. Atur CORS, HTTPS, dan domain sesuai kedua origin tersebut.
+
+Worker dipisah berdasarkan peran: maintenance, campaign, messaging, dan import. Mulai dengan kapasitas kecil, lalu atur replica setelah mengukur koneksi PostgreSQL dan beban Redis. Hitung total `jumlah proses × DATABASE_POOL_MAX`; kuota WhatsApp tetap global melalui Redis.
+
+## Pemeriksaan masalah umum
+
+- **`migrate` gagal:** periksa koneksi dan log SQL. PostgreSQL internal Compose memakai `DATABASE_SSL=false`; database eksternal ber-TLS dapat memakai `DATABASE_SSL=true` dengan sertifikat tepercaya.
+- **Login gagal:** periksa URL publik dan akun seed; perubahan `.env` tidak mereset akun yang sudah ada saat bootstrap otomatis.
+- **Upload gagal:** cek ukuran maksimal 50 MB, log API/import worker, dan shared volume `prod_imports` yang harus dapat ditulis user `node`.
+- **WhatsApp tidak terkirim:** cek provider, credential HMAC, channel/template ID, kuota, dan opt-out; default production memang `disabled`.
+- **GPS tidak tersedia:** gunakan HTTPS atau localhost dan berikan izin lokasi browser.

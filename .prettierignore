@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+package-lock.json
+app/web/loader.json
+app/server/src/db/migrations/
+.env*
+**/.env*

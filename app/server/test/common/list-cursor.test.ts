@@ -11,6 +11,8 @@ describe('list cursor', () => {
   it('rejects malformed cursors safely', () => {
     expect(decodeListCursor('not-a-cursor')).toBeNull();
     expect(decodeListCursor('')).toBeNull();
-    expect(decodeListCursor(Buffer.from(JSON.stringify({ value: 'invalid-date', id: 'x' })).toString('base64url'))).toBeNull();
+    expect(
+      decodeListCursor(Buffer.from(JSON.stringify({ value: 'invalid-date', id: 'x' })).toString('base64url')),
+    ).toBeNull();
   });
 });

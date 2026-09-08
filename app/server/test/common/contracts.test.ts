@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { addressChangeSchema, campaignCreateSchema, customerCreateSchema, locationSamplesSchema, reminderSchema } from '../../src/common/contracts.js';
+import {
+  addressChangeSchema,
+  campaignCreateSchema,
+  customerCreateSchema,
+  locationSamplesSchema,
+  reminderSchema,
+} from '../../src/common/contracts.js';
 
 describe('API contracts', () => {
   it('accepts a master customer address with E.164 phone and coordinates', () => {
@@ -54,8 +60,13 @@ describe('API contracts', () => {
       name: 'Customer Two',
       phoneE164: '+6281234567890',
       address: {
-        province: 'DKI Jakarta', city: 'Jakarta Barat', district: 'Palmerah', subdistrict: 'Palmerah',
-        postalCode: '11540', street: 'Jl. KH Syahdan', houseNumber: '10A',
+        province: 'DKI Jakarta',
+        city: 'Jakarta Barat',
+        district: 'Palmerah',
+        subdistrict: 'Palmerah',
+        postalCode: '11540',
+        street: 'Jl. KH Syahdan',
+        houseNumber: '10A',
       },
     });
 
@@ -70,25 +81,41 @@ describe('API contracts', () => {
 
   it('requires a five-digit postal code and a real house number', () => {
     const baseAddress = {
-      province: 'DKI Jakarta', city: 'Jakarta Barat', district: 'Palmerah', subdistrict: 'Palmerah',
-      postalCode: '11540', street: 'Jl. KH Syahdan', houseNumber: '10',
+      province: 'DKI Jakarta',
+      city: 'Jakarta Barat',
+      district: 'Palmerah',
+      subdistrict: 'Palmerah',
+      postalCode: '11540',
+      street: 'Jl. KH Syahdan',
+      houseNumber: '10',
     };
 
     expect(addressChangeSchema.safeParse({ ...baseAddress, houseNumber: '' }).success).toBe(false);
     expect(addressChangeSchema.safeParse({ ...baseAddress, houseNumber: 'TANPA NOMOR' }).success).toBe(false);
     expect(addressChangeSchema.safeParse({ ...baseAddress, postalCode: '1154' }).success).toBe(false);
-    expect(addressChangeSchema.safeParse({ ...baseAddress, addressDetail: 'Blok A', landmark: 'Dekat pos satpam' }).success).toBe(true);
+    expect(
+      addressChangeSchema.safeParse({ ...baseAddress, addressDetail: 'Blok A', landmark: 'Dekat pos satpam' }).success,
+    ).toBe(true);
   });
 
   it('accepts a filter campaign without sending customer IDs to the API', () => {
-    const result = campaignCreateSchema.safeParse({ name: 'All unverified', targetFilter: { locationStatus: 'UNVERIFIED' } });
+    const result = campaignCreateSchema.safeParse({
+      name: 'All unverified',
+      targetFilter: { locationStatus: 'UNVERIFIED' },
+    });
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.targetFilter?.locationStatus).toBe('UNVERIFIED');
   });
 
   it('requires exactly one campaign target source', () => {
     expect(campaignCreateSchema.safeParse({ name: 'Invalid' }).success).toBe(false);
-    expect(campaignCreateSchema.safeParse({ name: 'Invalid', customerIds: [], targetFilter: { locationStatus: 'UNVERIFIED' } }).success).toBe(false);
+    expect(
+      campaignCreateSchema.safeParse({
+        name: 'Invalid',
+        customerIds: [],
+        targetFilter: { locationStatus: 'UNVERIFIED' },
+      }).success,
+    ).toBe(false);
   });
 
   it('accepts one reminder time and lets the server schedule the remaining reminders', () => {

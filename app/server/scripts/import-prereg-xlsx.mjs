@@ -14,7 +14,15 @@ const batchSize = Number(process.env.IMPORT_BATCH_SIZE ?? 500);
 const headerAliases = {
   id: ['id', 'source_id', 'customer_id', 'customer_code'],
   full_name: ['full_name', 'fullname', 'name', 'nama', 'nama_lengkap'],
-  effective_phone_number: ['effective_phone_number', 'phone', 'phone_number', 'phone_e164', 'nomor_hp', 'no_hp', 'whatsapp'],
+  effective_phone_number: [
+    'effective_phone_number',
+    'phone',
+    'phone_number',
+    'phone_e164',
+    'nomor_hp',
+    'no_hp',
+    'whatsapp',
+  ],
   effective_address: ['effective_address', 'address', 'alamat', 'alamat_lengkap'],
   address_reference: ['address_reference', 'landmark', 'patokan', 'address_detail'],
   effective_longitude: ['effective_longitude', 'longitude', 'lon', 'lng', 'koordinat_longitude'],
@@ -30,13 +38,22 @@ const headerAliases = {
 };
 
 const requiredHeaders = ['id', 'full_name', 'effective_phone_number'];
-const canonicalHeader = (value) => text(value).replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+const canonicalHeader = (value) =>
+  text(value)
+    .replace(/^\uFEFF/, '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
 
 const buildHeaderMap = (headers, rowNumber = 1) => {
   const indexes = new Map(headers.map((header, index) => [canonicalHeader(header), index]));
   const resolved = {};
   for (const [field, aliases] of Object.entries(headerAliases)) {
-    const index = aliases.map(canonicalHeader).map((alias) => indexes.get(alias)).find((candidate) => candidate !== undefined);
+    const index = aliases
+      .map(canonicalHeader)
+      .map((alias) => indexes.get(alias))
+      .find((candidate) => candidate !== undefined);
     if (index !== undefined) resolved[field] = index;
   }
   const missing = requiredHeaders.filter((field) => resolved[field] === undefined);
@@ -44,9 +61,12 @@ const buildHeaderMap = (headers, rowNumber = 1) => {
   return resolved;
 };
 
-if (!sourcePath || !existsSync(sourcePath)) throw new Error('Usage: npm run import:prereg -- /absolute/path/to/file.xlsx-or-file.csv');
-if (!Number.isInteger(batchSize) || batchSize < 100 || batchSize > 1000) throw new Error('IMPORT_BATCH_SIZE must be between 100 and 1000');
-if (!['.xlsx', '.csv'].includes(sourcePath.slice(sourcePath.lastIndexOf('.')).toLowerCase())) throw new Error('Only .xlsx and .csv files are supported');
+if (!sourcePath || !existsSync(sourcePath))
+  throw new Error('Usage: npm run import:prereg -- /absolute/path/to/file.xlsx-or-file.csv');
+if (!Number.isInteger(batchSize) || batchSize < 100 || batchSize > 1000)
+  throw new Error('IMPORT_BATCH_SIZE must be between 100 and 1000');
+if (!['.xlsx', '.csv'].includes(sourcePath.slice(sourcePath.lastIndexOf('.')).toLowerCase()))
+  throw new Error('Only .xlsx and .csv files are supported');
 
 const text = (value) => {
   if (value == null) return '';
@@ -75,8 +95,10 @@ const parseCoordinate = (value, label, rowNumber) => {
   if (!text(value)) return null;
   const number = Number(text(value));
   if (!Number.isFinite(number)) throw new Error(`Row ${rowNumber}: ${label} is not numeric`);
-  if (label === 'longitude' && (number < -180 || number > 180)) throw new Error(`Row ${rowNumber}: longitude is out of range`);
-  if (label === 'latitude' && (number < -90 || number > 90)) throw new Error(`Row ${rowNumber}: latitude is out of range`);
+  if (label === 'longitude' && (number < -180 || number > 180))
+    throw new Error(`Row ${rowNumber}: longitude is out of range`);
+  if (label === 'latitude' && (number < -90 || number > 90))
+    throw new Error(`Row ${rowNumber}: latitude is out of range`);
   return number;
 };
 
@@ -85,21 +107,40 @@ const postalCodeFromAddress = (address) => address.match(/\b(\d{5})\b/)?.[1] ?? 
 // Plus Codes in the source export are sometimes concatenated with the next
 // address token (for example `M8VF+Q5FBulurejo`). Keep the raw address, but
 // recognize and remove the code when deriving structured street data.
-const plusCodePattern = /[23456789cfghjmpqrvwx]{4,8}\+(?:[23456789cfghjmpqrvwx]{3}\d|[23456789cfghjmpqrvwx]{4})(?=$|[\s,])|[23456789cfghjmpqrvwx]{4,8}\+[23456789cfghjmpqrvwx]{2,3}/i;
+const plusCodePattern =
+  /[23456789cfghjmpqrvwx]{4,8}\+(?:[23456789cfghjmpqrvwx]{3}\d|[23456789cfghjmpqrvwx]{4})(?=$|[\s,])|[23456789cfghjmpqrvwx]{4,8}\+[23456789cfghjmpqrvwx]{2,3}/i;
 const isPlusCode = (value) => Boolean(value?.trim() && plusCodePattern.test(value));
 const removePlusCode = (value) => value.replace(plusCodePattern, ' ').replace(/\s+/g, ' ').trim();
 
-const isAdministrativePart = (value) => /^(rt\.?|rw\.?|kec\.?|kecamatan|kel\.?|kelurahan|desa|kab\.?|kabupaten|kota|jawa|indonesia)\b/i.test(value.trim());
+const isAdministrativePart = (value) =>
+  /^(rt\.?|rw\.?|kec\.?|kecamatan|kel\.?|kelurahan|desa|kab\.?|kabupaten|kota|jawa|indonesia)\b/i.test(value.trim());
 const isStreetPrefixOnly = (value) => /^(jl\.?|jalan|jln\.?|gg\.?|gang|komplek|komp\.?)$/i.test(value.trim());
 
 const streetFromAddress = (address) => {
-  const parts = address.split(',').map((part) => removePlusCode(part)).filter(Boolean);
-  return (parts.find((part) => !isPlusCode(part) && !isStreetPrefixOnly(part) && /^(jl\.?|jalan|jln\.?|gg\.?|gang|komplek|komp\.?|kampung|kp\.?|dusun)\b/i.test(part))
-    ?? parts.find((part) => !isPlusCode(part) && !isStreetPrefixOnly(part) && !isAdministrativePart(part) && !/^rt\.?\s*\d|^rw\.?\s*\d/i.test(part))
-    ?? 'UNKNOWN').slice(0, 255);
+  const parts = address
+    .split(',')
+    .map((part) => removePlusCode(part))
+    .filter(Boolean);
+  return (
+    parts.find(
+      (part) =>
+        !isPlusCode(part) &&
+        !isStreetPrefixOnly(part) &&
+        /^(jl\.?|jalan|jln\.?|gg\.?|gang|komplek|komp\.?|kampung|kp\.?|dusun)\b/i.test(part),
+    ) ??
+    parts.find(
+      (part) =>
+        !isPlusCode(part) &&
+        !isStreetPrefixOnly(part) &&
+        !isAdministrativePart(part) &&
+        !/^rt\.?\s*\d|^rw\.?\s*\d/i.test(part),
+    ) ??
+    'UNKNOWN'
+  ).slice(0, 255);
 };
 
-const houseNumberFromAddress = (address) => address.match(/\b(?:no|nomor)\.?\s*([0-9]+[a-z]?(?:[/-][a-z0-9]+)*)/i)?.[1] ?? 'UNKNOWN';
+const houseNumberFromAddress = (address) =>
+  address.match(/\b(?:no|nomor)\.?\s*([0-9]+[a-z]?(?:[/-][a-z0-9]+)*)/i)?.[1] ?? 'UNKNOWN';
 
 const parseBoolean = (value) => ['1', 'true', 'yes', 'y'].includes(text(value).toLowerCase());
 
@@ -110,7 +151,10 @@ const repairWorkbookXml = async (buffer) => {
     const file = zip.file(name);
     if (!file) continue;
     let xml = await file.async('string');
-    xml = xml.replace(/^\uFEFF/, '').replace(/<(\/?)[a-zA-Z0-9_-]+:/g, '<$1').replace(/\s+xmlns:[a-zA-Z0-9_-]+="[^"]+"/g, '');
+    xml = xml
+      .replace(/^\uFEFF/, '')
+      .replace(/<(\/?)[a-zA-Z0-9_-]+:/g, '<$1')
+      .replace(/\s+xmlns:[a-zA-Z0-9_-]+="[^"]+"/g, '');
     if (name === 'xl/_rels/workbook.xml.rels') xml = xml.replace(/Target="\//g, 'Target="');
     zip.file(name, xml);
   }
@@ -166,16 +210,34 @@ const parseCsv = (source) => {
   return rows;
 };
 
-const createStats = () => ({ rows: 0, duplicatePhones: 0, missingPostalCodes: 0, missingCoordinates: 0, incompleteAddresses: 0, coverage: new Map(), coveredBts: 0 });
+const createStats = () => ({
+  rows: 0,
+  duplicatePhones: 0,
+  missingPostalCodes: 0,
+  missingCoordinates: 0,
+  incompleteAddresses: 0,
+  coverage: new Map(),
+  coveredBts: 0,
+});
 
-const parseDataRow = (headers, sourceValues, rowNumber, seenIds, seenPhones, stats, headerMap = buildHeaderMap(headers, rowNumber)) => {
+const parseDataRow = (
+  headers,
+  sourceValues,
+  rowNumber,
+  seenIds,
+  seenPhones,
+  stats,
+  headerMap = buildHeaderMap(headers, rowNumber),
+) => {
   const valueOf = (field) => text(headerMap[field] === undefined ? '' : sourceValues[headerMap[field]]);
   const values = Object.fromEntries(Object.keys(headerAliases).map((field) => [field, valueOf(field)]));
-  if (!values.id || !values.full_name || !values.effective_phone_number) throw new Error(`Row ${rowNumber}: id, full_name, dan effective_phone_number wajib diisi`);
+  if (!values.id || !values.full_name || !values.effective_phone_number)
+    throw new Error(`Row ${rowNumber}: id, full_name, dan effective_phone_number wajib diisi`);
   if (seenIds.has(values.id)) throw new Error(`Row ${rowNumber}: duplicate source id ${values.id}`);
   seenIds.add(values.id);
   const phoneE164 = normalizePhone(values.effective_phone_number);
-  if (!/^\+[1-9]\d{7,14}$/.test(phoneE164)) throw new Error(`Row ${rowNumber}: invalid phone ${values.effective_phone_number}`);
+  if (!/^\+[1-9]\d{7,14}$/.test(phoneE164))
+    throw new Error(`Row ${rowNumber}: invalid phone ${values.effective_phone_number}`);
   if (seenPhones.has(phoneE164)) stats.duplicatePhones += 1;
   seenPhones.add(phoneE164);
   const longitude = parseCoordinate(values.effective_longitude, 'longitude', rowNumber);
@@ -186,14 +248,46 @@ const parseDataRow = (headers, sourceValues, rowNumber, seenIds, seenPhones, sta
   const street = streetFromAddress(rawAddress);
   const houseNumber = houseNumberFromAddress(rawAddress);
   if (postalCode === '00000') stats.missingPostalCodes += 1;
-  if (postalCode === '00000' || street === 'UNKNOWN' || houseNumber === 'UNKNOWN' || !values.effective_province || !values.effective_kota || !values.effective_kecamatan || !values.effective_kelurahan || longitude == null || latitude == null) stats.incompleteAddresses += 1;
+  if (
+    postalCode === '00000' ||
+    street === 'UNKNOWN' ||
+    houseNumber === 'UNKNOWN' ||
+    !values.effective_province ||
+    !values.effective_kota ||
+    !values.effective_kecamatan ||
+    !values.effective_kelurahan ||
+    longitude == null ||
+    latitude == null
+  )
+    stats.incompleteAddresses += 1;
   const coverageStatus = values.coverage_status || 'UNKNOWN';
   stats.coverage.set(coverageStatus, (stats.coverage.get(coverageStatus) ?? 0) + 1);
   if (parseBoolean(values.is_cover_bts)) stats.coveredBts += 1;
   const sourceCreatedAt = values.created_at ? new Date(values.created_at) : null;
-  if (sourceCreatedAt && Number.isNaN(sourceCreatedAt.getTime())) throw new Error(`Row ${rowNumber}: invalid created_at`);
+  if (sourceCreatedAt && Number.isNaN(sourceCreatedAt.getTime()))
+    throw new Error(`Row ${rowNumber}: invalid created_at`);
   stats.rows += 1;
-  return { sourceId: values.id, externalId: `PREREG-NON-CUSTOMER-${values.id}`, fullName: values.full_name, phoneE164, rawAddress, landmark: values.address_reference || null, longitude, latitude, province: values.effective_province || 'UNKNOWN', city: values.effective_kota || 'UNKNOWN', district: values.effective_kecamatan || 'UNKNOWN', subdistrict: values.effective_kelurahan || 'UNKNOWN', postalCode, street, houseNumber, sourceCreatedAt, coverageStatus, isCoverBts: parseBoolean(values.is_cover_bts), btsName: values.bts_name || null };
+  return {
+    sourceId: values.id,
+    externalId: `PREREG-NON-CUSTOMER-${values.id}`,
+    fullName: values.full_name,
+    phoneE164,
+    rawAddress,
+    landmark: values.address_reference || null,
+    longitude,
+    latitude,
+    province: values.effective_province || 'UNKNOWN',
+    city: values.effective_kota || 'UNKNOWN',
+    district: values.effective_kecamatan || 'UNKNOWN',
+    subdistrict: values.effective_kelurahan || 'UNKNOWN',
+    postalCode,
+    street,
+    houseNumber,
+    sourceCreatedAt,
+    coverageStatus,
+    isCoverBts: parseBoolean(values.is_cover_bts),
+    btsName: values.bts_name || null,
+  };
 };
 
 const parseCsvLine = (line, delimiter) => {
@@ -202,10 +296,14 @@ const parseCsvLine = (line, delimiter) => {
   let quoted = false;
   for (let index = 0; index < line.length; index += 1) {
     const character = line[index];
-    if (quoted && character === '"' && line[index + 1] === '"') { field += '"'; index += 1; }
-    else if (character === '"') quoted = !quoted;
-    else if (!quoted && character === delimiter) { values.push(field); field = ''; }
-    else field += character;
+    if (quoted && character === '"' && line[index + 1] === '"') {
+      field += '"';
+      index += 1;
+    } else if (character === '"') quoted = !quoted;
+    else if (!quoted && character === delimiter) {
+      values.push(field);
+      field = '';
+    } else field += character;
   }
   if (quoted) throw new Error('CSV contains an unterminated quoted field');
   values.push(field);
@@ -224,14 +322,26 @@ const streamCsvRows = async function* (stats) {
     for await (const rawLine of lines) {
       rowNumber += 1;
       if (!rawLine.trim()) continue;
-      if (!headers) { delimiter = rawLine.includes(';') && !rawLine.includes(',') ? ';' : ','; headers = parseCsvLine(rawLine.replace(/^\uFEFF/, ''), delimiter).map((value) => text(value)); continue; }
+      if (!headers) {
+        delimiter = rawLine.includes(';') && !rawLine.includes(',') ? ';' : ',';
+        headers = parseCsvLine(rawLine.replace(/^\uFEFF/, ''), delimiter).map((value) => text(value));
+        continue;
+      }
       yield parseDataRow(headers, parseCsvLine(rawLine, delimiter), rowNumber, seenIds, seenPhones, stats);
     }
-  } finally { lines.close(); input.destroy(); }
+  } finally {
+    lines.close();
+    input.destroy();
+  }
 };
 
 const streamXlsxRows = async function* (stats) {
-  const workbook = new ExcelJS.stream.xlsx.WorkbookReader(sourcePath, { worksheets: 'emit', sharedStrings: 'cache', hyperlinks: 'ignore', styles: 'ignore' });
+  const workbook = new ExcelJS.stream.xlsx.WorkbookReader(sourcePath, {
+    worksheets: 'emit',
+    sharedStrings: 'cache',
+    hyperlinks: 'ignore',
+    styles: 'ignore',
+  });
   const seenIds = new Set();
   const seenPhones = new Set();
   for await (const worksheet of workbook) {
@@ -239,7 +349,10 @@ const streamXlsxRows = async function* (stats) {
     for await (const row of worksheet) {
       const values = Array.isArray(row.values) ? row.values.slice(1) : [];
       const rowNumber = row.number;
-      if (!headers) { headers = values.map((value) => text(value).replace(/^\uFEFF/, '')); continue; }
+      if (!headers) {
+        headers = values.map((value) => text(value).replace(/^\uFEFF/, ''));
+        continue;
+      }
       if (values.every((value) => text(value) === '')) continue;
       yield parseDataRow(headers, values, rowNumber, seenIds, seenPhones, stats);
     }
@@ -253,18 +366,23 @@ const parseRows = (matrix) => {
   const seenIds = new Set();
   const seenPhones = new Set();
   const rows = [];
-  for (let rowIndex = 1; rowIndex < matrix.length; rowIndex += 1) rows.push(parseDataRow(headers, matrix[rowIndex] ?? [], rowIndex + 1, seenIds, seenPhones, stats));
+  for (let rowIndex = 1; rowIndex < matrix.length; rowIndex += 1)
+    rows.push(parseDataRow(headers, matrix[rowIndex] ?? [], rowIndex + 1, seenIds, seenPhones, stats));
   return { rows, stats };
 };
 
 const readRepairedXlsxRows = async function* (stats, originalError) {
   const workbook = new ExcelJS.Workbook();
-  try { await workbook.xlsx.load(await repairWorkbookXml(await readFile(sourcePath))); }
-  catch (error) { throw originalError ?? error; }
+  try {
+    await workbook.xlsx.load(await repairWorkbookXml(await readFile(sourcePath)));
+  } catch (error) {
+    throw originalError ?? error;
+  }
   const worksheet = workbook.worksheets[0];
   if (!worksheet) throw new Error('Workbook has no worksheet');
   const matrix = [];
-  for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1) matrix.push(worksheet.getRow(rowNumber).values.slice(1));
+  for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1)
+    matrix.push(worksheet.getRow(rowNumber).values.slice(1));
   const repaired = parseRows(matrix);
   Object.assign(stats, repaired.stats);
   yield* repaired.rows;
@@ -296,16 +414,59 @@ const readRows = async () => {
   return { rows: streamXlsxRowsWithFallback(stats), stats };
 };
 
-const stageColumns = ['source_id', 'external_id', 'full_name', 'phone_e164', 'raw_address', 'landmark', 'longitude', 'latitude', 'province', 'city', 'district', 'subdistrict', 'postal_code', 'street', 'house_number', 'source_created_at', 'coverage_status', 'is_cover_bts', 'bts_name'];
+const stageColumns = [
+  'source_id',
+  'external_id',
+  'full_name',
+  'phone_e164',
+  'raw_address',
+  'landmark',
+  'longitude',
+  'latitude',
+  'province',
+  'city',
+  'district',
+  'subdistrict',
+  'postal_code',
+  'street',
+  'house_number',
+  'source_created_at',
+  'coverage_status',
+  'is_cover_bts',
+  'bts_name',
+];
 
 const insertStageBatch = async (client, rows) => {
   const values = [];
   const placeholders = rows.map((row, rowIndex) => {
     const offset = rowIndex * stageColumns.length;
-    values.push(row.sourceId, row.externalId, row.fullName, row.phoneE164, row.rawAddress, row.landmark, row.longitude, row.latitude, row.province, row.city, row.district, row.subdistrict, row.postalCode, row.street, row.houseNumber, row.sourceCreatedAt, row.coverageStatus, row.isCoverBts, row.btsName);
+    values.push(
+      row.sourceId,
+      row.externalId,
+      row.fullName,
+      row.phoneE164,
+      row.rawAddress,
+      row.landmark,
+      row.longitude,
+      row.latitude,
+      row.province,
+      row.city,
+      row.district,
+      row.subdistrict,
+      row.postalCode,
+      row.street,
+      row.houseNumber,
+      row.sourceCreatedAt,
+      row.coverageStatus,
+      row.isCoverBts,
+      row.btsName,
+    );
     return `(${stageColumns.map((_, columnIndex) => `$${offset + columnIndex + 1}`).join(', ')})`;
   });
-  await client.query(`INSERT INTO prereg_import_stage (${stageColumns.join(', ')}) VALUES ${placeholders.join(', ')}`, values);
+  await client.query(
+    `INSERT INTO prereg_import_stage (${stageColumns.join(', ')}) VALUES ${placeholders.join(', ')}`,
+    values,
+  );
 };
 
 const importRows = async ({ rows, stats }) => {
@@ -350,7 +511,8 @@ const importRows = async ({ rows, stats }) => {
     }
     if (stageBatch.length) await insertStageBatch(client, stageBatch);
 
-    const customerResult = await client.query(`
+    const customerResult = await client.query(
+      `
       INSERT INTO customers (external_id, name, phone_e164, status, source_record_id, source_created_at, is_cover_bts, bts_name, coverage_status, source_metadata, created_at, updated_at)
       SELECT external_id, full_name, phone_e164, 'PENDING_INSTALLATION',
         source_id, source_created_at, is_cover_bts, bts_name, coverage_status,
@@ -369,9 +531,12 @@ const importRows = async ({ rows, stats }) => {
         status = CASE WHEN customers.status = 'VERIFIED' THEN customers.status ELSE 'PENDING_INSTALLATION' END,
         updated_at = EXCLUDED.updated_at
       RETURNING id
-    `, [importedAt]);
+    `,
+      [importedAt],
+    );
 
-    const addressUpdate = await client.query(`
+    const addressUpdate = await client.query(
+      `
       UPDATE customer_addresses address
       SET raw_address = stage.raw_address,
           province = stage.province,
@@ -392,9 +557,12 @@ const importRows = async ({ rows, stats }) => {
       FROM prereg_import_stage stage
       INNER JOIN customers customer ON customer.external_id = stage.external_id
       WHERE address.customer_id = customer.id AND address.address_type = 'MASTER' AND address.is_active = true
-    `, [importedAt]);
+    `,
+      [importedAt],
+    );
 
-    const addressInsert = await client.query(`
+    const addressInsert = await client.query(
+      `
       INSERT INTO customer_addresses (
         customer_id, address_type, address_status, raw_address, province, city, district, subdistrict, postal_code,
         street, house_number, landmark, address_reference, reference_location, reference_source, reference_precision, reference_confidence,
@@ -413,10 +581,17 @@ const importRows = async ({ rows, stats }) => {
         WHERE existing.customer_id = customer.id AND existing.address_type = 'MASTER' AND existing.is_active = true
       )
       RETURNING id
-    `, [importedAt]);
+    `,
+      [importedAt],
+    );
 
     await client.query('COMMIT');
-    return { customersUpserted: customerResult.rowCount ?? 0, addressesUpdated: addressUpdate.rowCount ?? 0, addressesInserted: addressInsert.rowCount ?? 0, importedAt };
+    return {
+      customersUpserted: customerResult.rowCount ?? 0,
+      addressesUpdated: addressUpdate.rowCount ?? 0,
+      addressesInserted: addressInsert.rowCount ?? 0,
+      importedAt,
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -428,19 +603,25 @@ const importRows = async ({ rows, stats }) => {
 
 const { rows, stats } = await readRows();
 const result = await importRows({ rows, stats });
-console.info(JSON.stringify({
-  source: sourcePath,
-  rowsRead: stats.rows,
-  customersUpserted: result.customersUpserted,
-  addressesUpdated: result.addressesUpdated,
-  addressesInserted: result.addressesInserted,
-  duplicatePhoneRows: stats.duplicatePhones,
-  missingPostalCodeRowsStoredAs00000: stats.missingPostalCodes,
-  missingCoordinateRows: stats.missingCoordinates,
-  incompleteAddressRows: stats.incompleteAddresses,
-  coveredBtsRows: stats.coveredBts,
-  coverageStatusCounts: Object.fromEntries(stats.coverage),
-  whatsappOptIn: 'not set; explicit opt-in import is required before campaign blast',
-  referencePrecision: 'STREET',
-  importedAt: result.importedAt.toISOString(),
-}, null, 2));
+console.info(
+  JSON.stringify(
+    {
+      source: sourcePath,
+      rowsRead: stats.rows,
+      customersUpserted: result.customersUpserted,
+      addressesUpdated: result.addressesUpdated,
+      addressesInserted: result.addressesInserted,
+      duplicatePhoneRows: stats.duplicatePhones,
+      missingPostalCodeRowsStoredAs00000: stats.missingPostalCodes,
+      missingCoordinateRows: stats.missingCoordinates,
+      incompleteAddressRows: stats.incompleteAddresses,
+      coveredBtsRows: stats.coveredBts,
+      coverageStatusCounts: Object.fromEntries(stats.coverage),
+      whatsappOptIn: 'not set; explicit opt-in import is required before campaign blast',
+      referencePrecision: 'STREET',
+      importedAt: result.importedAt.toISOString(),
+    },
+    null,
+    2,
+  ),
+);

@@ -1,10 +1,35 @@
-import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Put,
+  Query,
+  Res,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { adminListQuerySchema, customerCreateSchema, customerListQuerySchema, customerUpdateSchema, reviewSchema, validationConfigSchema } from '../../common/contracts.js';
+import {
+  adminListQuerySchema,
+  adminUserCreateSchema,
+  adminUserPasswordSchema,
+  adminUserUpdateSchema,
+  customerCreateSchema,
+  customerListQuerySchema,
+  customerUpdateSchema,
+  reviewSchema,
+  validationConfigSchema,
+} from '../../common/contracts.js';
 import { CurrentAdmin, RequestAdmin } from '../../common/request-user.js';
 import { BetterAuthGuard } from '../../auth/auth.guard.js';
 import { RolesGuard } from '../../auth/roles.guard.js';
@@ -15,20 +40,82 @@ import { WhatsAppComplianceService } from '../../integrations/whatsapp/whatsapp-
 import { CustomerImportService } from '../imports/customer-import.service.js';
 import type { UploadedCustomerFile } from '../imports/customer-import.service.js';
 
+const CustomerFileInterceptor = FileInterceptor('file', {
+  storage: diskStorage({
+    destination: tmpdir(),
+    filename: (_request, file, callback) =>
+      callback(
+        null,
+        `ira_preregist-upload-${randomUUID()}${file.originalname.slice(file.originalname.lastIndexOf('.'))}`,
+      ),
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 },
+});
+
 const createVerificationSchema = z.object({ addressId: z.string().uuid() });
 
 @Controller('admin')
 @UseGuards(BetterAuthGuard, RolesGuard)
 export class AdminController {
-  constructor(private readonly admin: AdminService, private readonly whatsappCompliance: WhatsAppComplianceService, private readonly customerImport: CustomerImportService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly whatsappCompliance: WhatsAppComplianceService,
+    private readonly customerImport: CustomerImportService,
+  ) {}
 
   @Get('me')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  me(@CurrentAdmin() currentAdmin: RequestAdmin) { return this.admin.me(currentAdmin); }
+  me(@CurrentAdmin() currentAdmin: RequestAdmin) {
+    return this.admin.me(currentAdmin);
+  }
+
+  @Get('users')
+  @Roles('SUPER_ADMIN')
+  users(@Query('search') search?: string) {
+    return this.admin.listUsers({ search });
+  }
+
+  @Post('users')
+  @Roles('SUPER_ADMIN')
+  createUser(@CurrentAdmin() currentAdmin: RequestAdmin, @Body() body: unknown) {
+    const parsed = adminUserCreateSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.admin.createUser(currentAdmin, parsed.data);
+  }
+
+  @Put('users/:id')
+  @Roles('SUPER_ADMIN')
+  updateUser(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string, @Body() body: unknown) {
+    const parsed = adminUserUpdateSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.admin.updateUser(currentAdmin, id, parsed.data);
+  }
+
+  @Post('users/:id/password')
+  @Roles('SUPER_ADMIN')
+  resetUserPassword(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string, @Body() body: unknown) {
+    const parsed = adminUserPasswordSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.admin.resetUserPassword(currentAdmin, id, parsed.data);
+  }
+
+  @Post('users/:id/disable')
+  @Roles('SUPER_ADMIN')
+  disableUser(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) {
+    return this.admin.setUserDisabled(currentAdmin, id, true);
+  }
+
+  @Post('users/:id/enable')
+  @Roles('SUPER_ADMIN')
+  enableUser(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) {
+    return this.admin.setUserDisabled(currentAdmin, id, false);
+  }
 
   @Get('dashboard')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  dashboard() { return this.admin.dashboard(); }
+  dashboard() {
+    return this.admin.dashboard();
+  }
 
   @Get('customers')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
@@ -40,8 +127,12 @@ export class AdminController {
 
   @Post('customers/import')
   @Roles('SUPER_ADMIN', 'ADMIN')
-  @UseInterceptors(FileInterceptor('file', { storage: diskStorage({ destination: tmpdir(), filename: (_request, file, callback) => callback(null, `exact-location-upload-${randomUUID()}${file.originalname.slice(file.originalname.lastIndexOf('.'))}`) }), limits: { fileSize: 50 * 1024 * 1024 } }))
-  async importCustomers(@CurrentAdmin() currentAdmin: RequestAdmin, @UploadedFile() file: UploadedCustomerFile, @Res({ passthrough: true }) response: Response) {
+  @UseInterceptors(CustomerFileInterceptor)
+  async importCustomers(
+    @CurrentAdmin() currentAdmin: RequestAdmin,
+    @UploadedFile() file: UploadedCustomerFile,
+    @Res({ passthrough: true }) response: Response,
+  ) {
     if (!file) throw new BadRequestException('Pilih file .xlsx atau .csv terlebih dahulu.');
     const result = await this.customerImport.importLegacy(currentAdmin, file);
     response.status(result && 'jobId' in result ? 202 : 200);
@@ -57,7 +148,7 @@ export class AdminController {
   @Post('import-jobs')
   @HttpCode(202)
   @Roles('SUPER_ADMIN', 'ADMIN')
-  @UseInterceptors(FileInterceptor('file', { storage: diskStorage({ destination: tmpdir(), filename: (_request, file, callback) => callback(null, `exact-location-upload-${randomUUID()}${file.originalname.slice(file.originalname.lastIndexOf('.'))}`) }), limits: { fileSize: 50 * 1024 * 1024 } }))
+  @UseInterceptors(CustomerFileInterceptor)
   createImportJob(@CurrentAdmin() currentAdmin: RequestAdmin, @UploadedFile() file: UploadedCustomerFile) {
     if (!file) throw new BadRequestException('Pilih file .xlsx atau .csv terlebih dahulu.');
     return this.customerImport.import(currentAdmin, file);
@@ -73,7 +164,9 @@ export class AdminController {
 
   @Get('customers/:id')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  customer(@Param('id') id: string) { return this.admin.customer(id); }
+  customer(@Param('id') id: string) {
+    return this.admin.customer(id);
+  }
 
   @Put('customers/:id')
   @Roles('SUPER_ADMIN', 'ADMIN')
@@ -91,11 +184,17 @@ export class AdminController {
 
   @Post('customers/:id/whatsapp-opt-out')
   @Roles('SUPER_ADMIN', 'ADMIN')
-  optOut(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') customerId: string) { return this.whatsappCompliance.optOut(currentAdmin.id, customerId); }
+  optOut(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') customerId: string) {
+    return this.whatsappCompliance.optOut(currentAdmin.id, customerId);
+  }
 
   @Post('customers/:id/verifications')
   @Roles('SUPER_ADMIN', 'ADMIN')
-  async createVerification(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') customerId: string, @Body() body: unknown) {
+  async createVerification(
+    @CurrentAdmin() currentAdmin: RequestAdmin,
+    @Param('id') customerId: string,
+    @Body() body: unknown,
+  ) {
     const parsed = createVerificationSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
     return this.admin.createVerification(currentAdmin, customerId, parsed.data.addressId);
@@ -103,7 +202,11 @@ export class AdminController {
 
   @Post('customers/:id/verifications/simulation')
   @Roles('SUPER_ADMIN', 'ADMIN')
-  async createSimulationVerification(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') customerId: string, @Body() body: unknown) {
+  async createSimulationVerification(
+    @CurrentAdmin() currentAdmin: RequestAdmin,
+    @Param('id') customerId: string,
+    @Body() body: unknown,
+  ) {
     const parsed = createVerificationSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
     return this.admin.createSimulationVerification(currentAdmin, customerId, parsed.data.addressId);
@@ -119,7 +222,9 @@ export class AdminController {
 
   @Get('verifications/:id')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  verification(@Param('id') id: string) { return this.admin.verification(id); }
+  verification(@Param('id') id: string) {
+    return this.admin.verification(id);
+  }
 
   @Post('verifications/:id/address-from-gps')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER')
@@ -129,15 +234,21 @@ export class AdminController {
 
   @Post('verifications/:id/resend')
   @Roles('SUPER_ADMIN', 'ADMIN')
-  resend(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) { return this.admin.resend(currentAdmin, id); }
+  resend(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) {
+    return this.admin.resend(currentAdmin, id);
+  }
 
   @Post('verifications/:id/revoke')
   @Roles('SUPER_ADMIN', 'ADMIN')
-  revoke(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) { return this.admin.revoke(currentAdmin, id); }
+  revoke(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) {
+    return this.admin.revoke(currentAdmin, id);
+  }
 
   @Post('verifications/:id/reminders')
   @Roles('SUPER_ADMIN', 'ADMIN')
-  reminder(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) { return this.admin.sendManualReminder(currentAdmin, id); }
+  reminder(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) {
+    return this.admin.sendManualReminder(currentAdmin, id);
+  }
 
   @Post('verifications/:id/review')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER')
@@ -165,7 +276,9 @@ export class AdminController {
 
   @Get('settings/validation')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  settings() { return this.admin.settings(); }
+  settings() {
+    return this.admin.settings();
+  }
 
   @Put('settings/validation')
   @Roles('SUPER_ADMIN')
@@ -177,7 +290,9 @@ export class AdminController {
 
   @Get('integrations')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  integrations() { return this.admin.integrations(); }
+  integrations() {
+    return this.admin.integrations();
+  }
 
   @Get('outbox')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')

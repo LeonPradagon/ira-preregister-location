@@ -5,6 +5,7 @@ export const ROLES_KEY = 'roles';
 export const Roles = (...roles: AdminRole[]) => SetMetadata(ROLES_KEY, roles);
 
 export const CAPABILITIES = {
+  manageUsers: ['SUPER_ADMIN'],
   createVerification: ['SUPER_ADMIN', 'ADMIN'],
   sendVerification: ['SUPER_ADMIN', 'ADMIN'],
   manualReview: ['SUPER_ADMIN', 'ADMIN', 'REVIEWER'],

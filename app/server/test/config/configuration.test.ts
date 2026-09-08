@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { envSchema } from '../../src/config/configuration.js';
 
 const required = {
-  DATABASE_URL: 'postgresql://localhost/exact_location',
+  DATABASE_URL: 'postgresql://localhost/ira_preregist',
   REDIS_URL: 'redis://localhost:6379',
   BETTER_AUTH_SECRET: 'local-development-secret-change-me-at-least-32-chars',
   BETTER_AUTH_URL: 'http://localhost:3000',

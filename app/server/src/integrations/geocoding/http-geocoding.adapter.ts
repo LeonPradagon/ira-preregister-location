@@ -12,8 +12,14 @@ const resultSchema = z.object({
   confidence: z.number().finite().min(0).max(1),
   provider: z.string().min(1),
   providerPlaceId: z.string().optional(),
-  province: z.string(), city: z.string(), district: z.string(), subdistrict: z.string(),
-  street: z.string(), houseNumber: z.string().optional(), postalCode: z.string().optional(), formattedAddress: z.string(),
+  province: z.string(),
+  city: z.string(),
+  district: z.string(),
+  subdistrict: z.string(),
+  street: z.string(),
+  houseNumber: z.string().optional(),
+  postalCode: z.string().optional(),
+  formattedAddress: z.string(),
 });
 
 @Injectable()
@@ -30,7 +36,9 @@ export class HttpGeocodingAdapter extends GeocodingPort {
         const response = await providerHttpClient.get<unknown>(`${this.baseUrl}${path}`, {
           params: query,
           timeout: this.timeoutMs,
-          headers: process.env.GEOCODING_API_KEY ? { authorization: `Bearer ${process.env.GEOCODING_API_KEY}` } : undefined,
+          headers: process.env.GEOCODING_API_KEY
+            ? { authorization: `Bearer ${process.env.GEOCODING_API_KEY}` }
+            : undefined,
         });
         return resultSchema.parse(response.data);
       } catch (error) {
@@ -47,6 +55,11 @@ export class HttpGeocodingAdapter extends GeocodingPort {
   }
 
   forward(address: AddressLookupInput): Promise<GeocodingResult> {
-    return this.request('/forward', Object.fromEntries(Object.entries(address).filter((entry): entry is [string, string] => typeof entry[1] === 'string')));
+    return this.request(
+      '/forward',
+      Object.fromEntries(
+        Object.entries(address).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+      ),
+    );
   }
 }

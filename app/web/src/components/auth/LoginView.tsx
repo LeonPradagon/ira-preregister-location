@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Mail, Shield, ArrowRight } from 'lucide-react';
+import { Lock, Mail, ArrowRight } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../i18n';
 
@@ -33,18 +33,16 @@ export const LoginView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden border border-gray-200 dark:border-gray-800">
+    <div className="admin-theme min-h-screen bg-[#fff5f5] dark:bg-gray-950 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden border border-red-100 dark:border-gray-800">
         {/* Top Branding */}
-        <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-8 text-center border-b border-gray-100 dark:border-gray-800">
-          <div className="w-12 h-12 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-xs">
-            <Shield className="w-6 h-6" />
+        <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-8 text-center border-b border-red-100 dark:border-gray-800">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-red-200 bg-[#d71920] p-1 shadow-sm dark:border-red-900/60">
+            <img src="/ira-logo-hd.png?v=3" alt="IRA" className="h-full w-full rounded-xl object-contain" />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white">IRA Preregist Ops</h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            {t('auth.portalSubtitle')}
-          </p>
-          <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-full border border-gray-200 dark:border-gray-700 text-[11px] text-gray-600 dark:text-gray-300 font-medium">
+          <h1 className="text-xl font-semibold tracking-tight text-[#b8171d] dark:text-red-300">IRA Preregist Ops</h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('auth.portalSubtitle')}</p>
+          <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 bg-red-50 dark:bg-red-950/40 rounded-full border border-red-100 dark:border-red-900/60 text-[11px] text-[#b8171d] dark:text-red-300 font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             <span>{t('auth.sessionGuard')}</span>
           </div>
@@ -100,7 +98,7 @@ export const LoginView: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white active:scale-[0.99] text-white rounded-lg text-xs font-medium shadow-xs transition-all flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-[#d71920] hover:bg-[#b8171d] dark:bg-[#d71920] dark:hover:bg-[#b8171d] active:scale-[0.99] text-white rounded-lg text-xs font-medium shadow-xs transition-all flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <span>{t('auth.signingIn')}</span>
@@ -112,7 +110,6 @@ export const LoginView: React.FC = () => {
               )}
             </button>
           </form>
-
         </div>
 
         {/* Footer */}

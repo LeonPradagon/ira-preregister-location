@@ -1,5 +1,12 @@
 import { BadRequestException, Body, Controller, Get, Param, Post } from '@nestjs/common';
-import { addressChangeSchema, addressLookupSchema, addressStatusSchema, confirmationSchema, locationSamplesSchema, reminderSchema } from '../../common/contracts.js';
+import {
+  addressChangeSchema,
+  addressLookupSchema,
+  addressStatusSchema,
+  confirmationSchema,
+  locationSamplesSchema,
+  reminderSchema,
+} from '../../common/contracts.js';
 import { VerificationService } from './verification.service.js';
 
 @Controller('public/verifications')
@@ -39,7 +46,12 @@ export class PublicVerificationController {
   async waitForHome(@Param('token') token: string, @Body() body: unknown) {
     const parsed = reminderSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
-    return this.verification.waitForHome(token, parsed.data.reminderPreference, parsed.data.scheduledAt, parsed.data.reminderUntilAt);
+    return this.verification.waitForHome(
+      token,
+      parsed.data.reminderPreference,
+      parsed.data.scheduledAt,
+      parsed.data.reminderUntilAt,
+    );
   }
 
   @Post(':token/address-change')
@@ -67,6 +79,11 @@ export class PublicVerificationController {
   async reminder(@Param('token') token: string, @Body() body: unknown) {
     const parsed = reminderSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
-    return this.verification.waitForHome(token, parsed.data.reminderPreference, parsed.data.scheduledAt, parsed.data.reminderUntilAt);
+    return this.verification.waitForHome(
+      token,
+      parsed.data.reminderPreference,
+      parsed.data.scheduledAt,
+      parsed.data.reminderUntilAt,
+    );
   }
 }

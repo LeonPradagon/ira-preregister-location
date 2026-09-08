@@ -29,7 +29,9 @@ export class CampaignController {
 
   @Post(':id/start')
   @Roles('SUPER_ADMIN', 'ADMIN')
-  start(@CurrentAdmin() admin: RequestAdmin, @Param('id') id: string) { return this.campaigns.start(admin, id); }
+  start(@CurrentAdmin() admin: RequestAdmin, @Param('id') id: string) {
+    return this.campaigns.start(admin, id);
+  }
 
   @Get()
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
@@ -41,7 +43,9 @@ export class CampaignController {
 
   @Get(':id')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  detail(@Param('id') id: string) { return this.campaigns.detail(id); }
+  detail(@Param('id') id: string) {
+    return this.campaigns.detail(id);
+  }
 
   @Get(':id/items')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')

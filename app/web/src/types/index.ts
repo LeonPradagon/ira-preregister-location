@@ -257,7 +257,15 @@ export interface DashboardSummary {
 }
 
 export type CampaignStatus = 'DRAFT' | 'RUNNING' | 'PAUSED' | 'COMPLETED';
-export type CampaignItemStatus = 'PENDING' | 'PROCESSING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED' | 'PROVIDER_UNAVAILABLE' | 'OPTED_OUT';
+export type CampaignItemStatus =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'SENT'
+  | 'DELIVERED'
+  | 'READ'
+  | 'FAILED'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'OPTED_OUT';
 
 export interface VerificationCampaign {
   id: string;
@@ -270,6 +278,7 @@ export interface VerificationCampaign {
   failedCount: number;
   optedOutCount?: number;
   batchSize?: number;
+  dailySendLimit?: number;
   sendWindowDays?: number;
   materializedCount?: number;
   materializationComplete?: boolean;

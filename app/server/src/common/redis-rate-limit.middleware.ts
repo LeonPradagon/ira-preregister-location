@@ -18,11 +18,17 @@ export class RedisRateLimitMiddleware implements NestMiddleware, OnModuleDestroy
       : path.includes('/admin/')
         ? Number(process.env.RATE_LIMIT_ADMIN_MAX ?? 300)
         : Number(process.env.RATE_LIMIT_PUBLIC_MAX ?? 120);
-    const tokenPart = request.params?.token || path.match(/\/public\/verifications\/([^/]+)/)?.[1] || request.headers['x-idempotency-key'] || '';
+    const tokenPart =
+      request.params?.token ||
+      path.match(/\/public\/verifications\/([^/]+)/)?.[1] ||
+      request.headers['x-idempotency-key'] ||
+      '';
     const identity = `${request.ip}:${String(tokenPart)}`;
     const identityHash = createHash('sha256').update(identity).digest('hex');
     const bucket = Math.floor(Date.now() / (windowSeconds * 1000));
-    const routeGroup = path.includes('/public/verifications/') ? '/public/verifications' : path.split('/').slice(0, 3).join('/');
+    const routeGroup = path.includes('/public/verifications/')
+      ? '/public/verifications'
+      : path.split('/').slice(0, 3).join('/');
     const routeHash = createHash('sha256').update(routeGroup).digest('hex').slice(0, 16);
     const key = `rate-limit:${bucket}:${request.method}:${routeHash}:${identityHash}`;
     try {

@@ -3,7 +3,10 @@ import { AddressLookupInput } from '../../common/contracts.js';
 import { GeocodingPort, GeocodingResult } from './geocoding.port.js';
 
 export class FallbackGeocodingAdapter extends GeocodingPort {
-  constructor(private readonly primary: GeocodingPort, private readonly fallback: GeocodingPort) {
+  constructor(
+    private readonly primary: GeocodingPort,
+    private readonly fallback: GeocodingPort,
+  ) {
     super();
   }
 

@@ -1,15 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  Activity,
-  CheckCircle2,
-  Code,
-  Compass,
-  FileCode,
-  Radio,
-  RefreshCw,
-  Send,
-  Zap,
-} from 'lucide-react';
+import { Activity, Code, Radio, RefreshCw, Zap } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../i18n';
 import { api } from '../../lib/apiClient';
@@ -31,16 +21,32 @@ export const IntegrationsView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [cursors, setCursors] = useState<Record<number, string>>({});
   const load = async () => {
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     try {
-      const response = await api.outbox({ page, pageSize, search: searchTerm, status: statusFilter, cursor: page === 1 ? undefined : cursors[page] });
+      const response = await api.outbox({
+        page,
+        pageSize,
+        search: searchTerm,
+        status: statusFilter,
+        cursor: page === 1 ? undefined : cursors[page],
+      });
       if (response.nextCursor) setCursors((previous) => ({ ...previous, [page + 1]: response.nextCursor! }));
-      setOutboxEvents(response.items as unknown as IntegrationOutboxEvent[]); setTotal(response.total);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : t('integrations.loadError')); }
-    finally { setLoading(false); }
+      setOutboxEvents(response.items as unknown as IntegrationOutboxEvent[]);
+      setTotal(response.total);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('integrations.loadError'));
+    } finally {
+      setLoading(false);
+    }
   };
-  useEffect(() => { setPage(1); setCursors({}); }, [searchTerm, statusFilter]);
-  useEffect(() => { void load(); }, [page, pageSize, searchTerm, statusFilter]);
+  useEffect(() => {
+    setPage(1);
+    setCursors({});
+  }, [searchTerm, statusFilter]);
+  useEffect(() => {
+    void load();
+  }, [page, pageSize, searchTerm, statusFilter]);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -52,7 +58,8 @@ export const IntegrationsView: React.FC = () => {
             <span>{t('integrations.title')}</span>
           </h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            {t('integrations.description')} <code className="text-indigo-600 dark:text-indigo-400 font-mono font-medium">location.verified.v1</code>
+            {t('integrations.description')}{' '}
+            <code className="text-indigo-600 dark:text-indigo-400 font-mono font-medium">location.verified.v1</code>
           </p>
         </div>
 
@@ -87,7 +94,9 @@ export const IntegrationsView: React.FC = () => {
           <div className="bg-gray-50 dark:bg-gray-800/60 p-3 rounded-lg border border-gray-200 dark:border-gray-700 text-[11px] font-mono space-y-1">
             <div className="text-gray-400 dark:text-gray-500">// TypeScript Port Interface</div>
             <div className="text-indigo-700 dark:text-indigo-400 font-medium">interface IRACoveragePort &#123;</div>
-            <div className="text-gray-700 dark:text-gray-300 pl-3">checkCoverage(lat: number, lng: number): Promise&lt;CoverageResult&gt;;</div>
+            <div className="text-gray-700 dark:text-gray-300 pl-3">
+              checkCoverage(lat: number, lng: number): Promise&lt;CoverageResult&gt;;
+            </div>
             <div className="text-indigo-700 dark:text-indigo-400 font-medium">&#125;</div>
           </div>
         </div>
@@ -116,7 +125,9 @@ export const IntegrationsView: React.FC = () => {
           <div className="bg-gray-50 dark:bg-gray-800/60 p-3 rounded-lg border border-gray-200 dark:border-gray-700 text-[11px] font-mono space-y-1">
             <div className="text-gray-400 dark:text-gray-500">// Work Order Port Interface</div>
             <div className="text-emerald-700 dark:text-emerald-400 font-medium">interface TicketingPort &#123;</div>
-            <div className="text-gray-700 dark:text-gray-300 pl-3">createWorkOrder(event: LocationVerifiedEvent): Promise&lt;TicketId&gt;;</div>
+            <div className="text-gray-700 dark:text-gray-300 pl-3">
+              createWorkOrder(event: LocationVerifiedEvent): Promise&lt;TicketId&gt;;
+            </div>
             <div className="text-emerald-700 dark:text-emerald-400 font-medium">&#125;</div>
           </div>
         </div>
@@ -130,19 +141,53 @@ export const IntegrationsView: React.FC = () => {
               <Zap className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               <span>Riwayat Pembaruan Sistem</span>
             </h3>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-              {t('integrations.streamDescription')}
-            </p>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{t('integrations.streamDescription')}</p>
           </div>
-          <button type="button" onClick={() => void load()} disabled={loading} className="rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" aria-label={t('integrations.reload')} title={t('integrations.reload')}>{loading ? <AppLoader size={18} label={t('integrations.loading')} /> : <RefreshCw className="h-4 w-4" />}</button>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            aria-label={t('integrations.reload')}
+            title={t('integrations.reload')}
+          >
+            {loading ? <AppLoader size={18} label={t('integrations.loading')} /> : <RefreshCw className="h-4 w-4" />}
+          </button>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row"><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder={t('integrations.search')} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-900 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white sm:w-96" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs dark:bg-gray-800"><option value="ALL">{t('integrations.allStatuses')}</option><option value="PENDING">Menunggu diproses</option><option value="PUBLISHED">Sudah diteruskan</option><option value="FAILED">Gagal</option></select></div>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder={t('integrations.search')}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-900 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white sm:w-96"
+          />
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs dark:bg-gray-800"
+          >
+            <option value="ALL">{t('integrations.allStatuses')}</option>
+            <option value="PENDING">Menunggu diproses</option>
+            <option value="PUBLISHED">Sudah diteruskan</option>
+            <option value="FAILED">Gagal</option>
+          </select>
+        </div>
 
-        {loading ? <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-xs text-gray-500"><AppLoader size={64} label={t('integrations.loading')} /><span>{t('integrations.loading')}</span></div> : error ? <div className="p-8 text-center text-xs text-rose-600">{error}</div> : outboxEvents.length > 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-xs text-gray-500">
+            <AppLoader size={64} label={t('integrations.loading')} />
+            <span>{t('integrations.loading')}</span>
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-xs text-rose-600">{error}</div>
+        ) : outboxEvents.length > 0 ? (
           <div className="space-y-4">
             {outboxEvents.map((evt) => (
-              <div key={evt.id} className="bg-gray-50/70 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-xs space-y-3">
+              <div
+                key={evt.id}
+                className="bg-gray-50/70 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-xs space-y-3"
+              >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{evt.eventType}</span>
@@ -151,7 +196,7 @@ export const IntegrationsView: React.FC = () => {
                     </span>
                   </div>
                   <div className="font-mono text-[10px] text-gray-500 dark:text-gray-400">
-                     ID: {evt.id} • {new Date(evt.sentAt || evt.createdAt).toLocaleString('id-ID')}
+                    ID: {evt.id} • {new Date(evt.sentAt || evt.createdAt).toLocaleString('id-ID')}
                   </div>
                 </div>
 
@@ -183,7 +228,18 @@ export const IntegrationsView: React.FC = () => {
             {t('integrations.empty')}
           </div>
         )}
-        <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); setCursors({}); }} disabled={loading} />
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+            setCursors({});
+          }}
+          disabled={loading}
+        />
       </div>
     </div>
   );

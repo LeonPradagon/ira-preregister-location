@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
-import { ExternalLink, Home, Navigation, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { ExternalLink, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { Coordinate } from '../../types';
 import { buildGoogleMapsDeepLink } from '../../lib/validationEngine';
 
@@ -100,10 +100,7 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
 
     // 1. Reference Location Marker & Home Radius Circle
     if (referenceLocation) {
-      const refCoord: [number, number] = [
-        referenceLocation.latitude,
-        referenceLocation.longitude,
-      ];
+      const refCoord: [number, number] = [referenceLocation.latitude, referenceLocation.longitude];
 
       // Home Radius Circle (e.g. 50m)
       L.circle(refCoord, {
@@ -137,10 +134,7 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
 
     // 2. Captured GPS Marker & Device Accuracy Circle
     if (capturedLocation) {
-      const capCoord: [number, number] = [
-        capturedLocation.latitude,
-        capturedLocation.longitude,
-      ];
+      const capCoord: [number, number] = [capturedLocation.latitude, capturedLocation.longitude];
 
       // Accuracy circle
       L.circle(capCoord, {
@@ -188,10 +182,7 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
       const midLat = (referenceLocation.latitude + capturedLocation.latitude) / 2;
       const midLng = (referenceLocation.longitude + capturedLocation.longitude) / 2;
 
-      const distText =
-        distanceMeters != null
-          ? `${distanceMeters.toFixed(1)} m`
-          : 'Jarak Antar Titik';
+      const distText = distanceMeters != null ? `${distanceMeters.toFixed(1)} m` : 'Jarak Antar Titik';
 
       L.marker([midLat, midLng], {
         icon: L.divIcon({
@@ -235,15 +226,9 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
       ]);
       mapInstanceRef.current.fitBounds(bounds, { padding: [40, 40] });
     } else if (capturedLocation) {
-      mapInstanceRef.current.setView(
-        [capturedLocation.latitude, capturedLocation.longitude],
-        18
-      );
+      mapInstanceRef.current.setView([capturedLocation.latitude, capturedLocation.longitude], 18);
     } else if (referenceLocation) {
-      mapInstanceRef.current.setView(
-        [referenceLocation.latitude, referenceLocation.longitude],
-        18
-      );
+      mapInstanceRef.current.setView([referenceLocation.latitude, referenceLocation.longitude], 18);
     }
   };
 
@@ -288,30 +273,32 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
 
       {/* Map Legend Overlay */}
       <div className="absolute bottom-3 left-3 z-10 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xs px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-800 shadow-xs text-xs space-y-1.5 max-w-xs">
-        {referenceLocation && <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-gray-900 dark:bg-gray-100 flex-shrink-0" />
-          <span className="font-medium text-gray-800 dark:text-gray-200 truncate">
-            Marker A: Master Home ({referencePrecision})
-          </span>
-        </div>}
+        {referenceLocation && (
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-gray-900 dark:bg-gray-100 flex-shrink-0" />
+            <span className="font-medium text-gray-800 dark:text-gray-200 truncate">
+              Marker A: Master Home ({referencePrecision})
+            </span>
+          </div>
+        )}
         {capturedLocation && (
           <div className="flex items-center gap-2">
-            <span
-              className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                isMatch ? 'bg-emerald-600' : 'bg-rose-600'
-              }`}
-            />
+            <span className={`w-3 h-3 rounded-full flex-shrink-0 ${isMatch ? 'bg-emerald-600' : 'bg-rose-600'}`} />
             <span className="font-medium text-gray-800 dark:text-gray-200 truncate">
               Marker B: Lokasi pelanggan (±{capturedLocation.accuracyMeters}m)
             </span>
           </div>
         )}
-        {referenceLocation
-          ? <div className="flex items-center gap-2 pt-1 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-500 dark:text-gray-400">
-              <span className="w-2.5 h-2.5 border border-gray-400 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 rounded-full" />
-              <span>Toleransi Rumah: &le; {homeRadiusMeters}m</span>
-            </div>
-          : <div className="pt-1 border-t border-gray-100 dark:border-gray-800 text-[11px] text-amber-600 dark:text-amber-400">Titik referensi rumah belum tersedia; jarak tidak dapat dihitung.</div>}
+        {referenceLocation ? (
+          <div className="flex items-center gap-2 pt-1 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-500 dark:text-gray-400">
+            <span className="w-2.5 h-2.5 border border-gray-400 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 rounded-full" />
+            <span>Toleransi Rumah: &le; {homeRadiusMeters}m</span>
+          </div>
+        ) : (
+          <div className="pt-1 border-t border-gray-100 dark:border-gray-800 text-[11px] text-amber-600 dark:text-amber-400">
+            Titik referensi rumah belum tersedia; jarak tidak dapat dihitung.
+          </div>
+        )}
       </div>
 
       {/* External Map Action */}

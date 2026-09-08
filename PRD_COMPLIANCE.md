@@ -46,4 +46,4 @@ Audit ini membedakan capability backend yang sudah tersedia, demo compatibility,
 - Secret public token di-hash dengan bcrypt; `tokenId` hanya menjadi locator indeks dan bukan secret yang dapat membuka sesi.
 - Resend merotasi token dengan token baru; token lama menjadi invalid karena hash diganti.
 - Console WhatsApp hanya untuk development/test; production tanpa provider nyata ditolak dengan status provider unavailable.
-- `WHATSAPP_PROVIDER=mekari` tidak memakai payload generic secara diam-diam; pengiriman tetap disabled sampai adapter Mekari/Qontak dikonfigurasi.
+- `WHATSAPP_PROVIDER=mekari` menggunakan adapter Mekari/Qontak dengan HMAC; pengiriman tetap gagal aman sampai kredensial, template, dan channel integration dikonfigurasi.

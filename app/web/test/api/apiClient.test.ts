@@ -7,7 +7,9 @@ describe('API client', () => {
   });
 
   it('sends Better Auth email sign-in with cookies enabled', async () => {
-    const adapterMock = vi.fn().mockResolvedValue({ status: 200, statusText: 'OK', headers: {}, data: { user: { id: 'admin-1' } } });
+    const adapterMock = vi
+      .fn()
+      .mockResolvedValue({ status: 200, statusText: 'OK', headers: {}, data: { user: { id: 'admin-1' } } });
     apiClient.defaults.adapter = adapterMock;
 
     await api.signInEmail('admin@example.com', 'password');
@@ -21,7 +23,9 @@ describe('API client', () => {
   });
 
   it('calls the protected Admin verification endpoint with a correlation header', async () => {
-    const adapterMock = vi.fn().mockResolvedValue({ status: 200, statusText: 'OK', headers: {}, data: { status: 'SENT' } });
+    const adapterMock = vi
+      .fn()
+      .mockResolvedValue({ status: 200, statusText: 'OK', headers: {}, data: { status: 'SENT' } });
     apiClient.defaults.adapter = adapterMock;
 
     await api.resend('verification-1');
@@ -34,7 +38,12 @@ describe('API client', () => {
   });
 
   it('requests paginated unverified customer candidates for campaigns', async () => {
-    const adapterMock = vi.fn().mockResolvedValue({ status: 200, statusText: 'OK', headers: {}, data: { items: [], page: 2, pageSize: 100, total: 1000, totalPages: 10 } });
+    const adapterMock = vi.fn().mockResolvedValue({
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { items: [], page: 2, pageSize: 100, total: 1000, totalPages: 10 },
+    });
     apiClient.defaults.adapter = adapterMock;
 
     await api.customers({ page: 2, pageSize: 100, locationStatus: 'UNVERIFIED' });
@@ -47,10 +56,20 @@ describe('API client', () => {
   it('normalizes API errors without exposing the raw Axios error', async () => {
     const adapterMock = vi.fn().mockRejectedValue({
       isAxiosError: true,
-      response: { status: 401, headers: { 'x-correlation-id': 'server-correlation-id' }, data: { error: { code: 'UNAUTHORIZED', message: 'Sesi tidak valid' } } },
+      response: {
+        status: 401,
+        headers: { 'x-correlation-id': 'server-correlation-id' },
+        data: { error: { code: 'UNAUTHORIZED', message: 'Sesi tidak valid' } },
+      },
     });
     apiClient.defaults.adapter = adapterMock;
 
-    await expect(api.me()).rejects.toMatchObject({ name: 'ApiClientError', message: 'Sesi tidak valid', status: 401, code: 'UNAUTHORIZED', correlationId: 'server-correlation-id' });
+    await expect(api.me()).rejects.toMatchObject({
+      name: 'ApiClientError',
+      message: 'Sesi tidak valid',
+      status: 401,
+      code: 'UNAUTHORIZED',
+      correlationId: 'server-correlation-id',
+    });
   });
 });

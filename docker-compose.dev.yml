@@ -1,0 +1,60 @@
+name: ira_preregist_dev
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ira_preregist
+      POSTGRES_USER: ira_preregist
+      POSTGRES_PASSWORD: ira_preregist
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5433}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ira_preregist -d ira_preregist']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  worker:
+    build:
+      context: .
+      dockerfile: app/server/Dockerfile
+    env_file:
+      - path: ./app/server/.env
+        required: false
+    environment:
+      NODE_ENV: development
+      IMPORT_STORAGE_DIR: /workspace/app/server/var/imports
+      WORKER_ROLE: all
+      DATABASE_URL: postgresql://ira_preregist:ira_preregist@postgres:5432/ira_preregist
+      REDIS_URL: redis://redis:6379
+      ENABLE_IRA_COVERAGE: 'false'
+      ENABLE_TICKETING: 'false'
+    volumes:
+      # Keep host API uploads visible to the Docker worker during local development.
+      - ./app/server/var/imports:/workspace/app/server/var/imports
+    command: ['node', 'dist/worker.js']
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -11,7 +11,20 @@ describe('HTTP geocoding adapter', () => {
   it('maps the normalized reverse geocode provider contract', async () => {
     process.env.GEOCODING_BASE_URL = 'https://geocoder.test';
     const getMock = vi.spyOn(providerHttpClient, 'get').mockResolvedValue({
-      data: { latitude: -6.884, longitude: 107.613, precision: 'HOUSE', confidence: 0.98, provider: 'test', province: 'Jawa Barat', city: 'Bandung', district: 'Coblong', subdistrict: 'Dago', street: 'Jalan Ir H Juanda', houseNumber: '10', formattedAddress: 'Jalan Ir H Juanda No. 10' },
+      data: {
+        latitude: -6.884,
+        longitude: 107.613,
+        precision: 'HOUSE',
+        confidence: 0.98,
+        provider: 'test',
+        province: 'Jawa Barat',
+        city: 'Bandung',
+        district: 'Coblong',
+        subdistrict: 'Dago',
+        street: 'Jalan Ir H Juanda',
+        houseNumber: '10',
+        formattedAddress: 'Jalan Ir H Juanda No. 10',
+      },
     } as never);
     const result = await new HttpGeocodingAdapter().reverse(-6.884, 107.613);
     expect(result.precision).toBe('HOUSE');

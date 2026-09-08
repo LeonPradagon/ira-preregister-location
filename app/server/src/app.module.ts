@@ -12,7 +12,7 @@ import { OsmGeocodingAdapter } from './integrations/geocoding/osm-geocoding.adap
 import { FallbackGeocodingAdapter } from './integrations/geocoding/fallback-geocoding.adapter.js';
 import { WhatsAppPort } from './integrations/whatsapp/whatsapp.port.js';
 import { ConsoleWhatsAppAdapter } from './integrations/whatsapp/console-whatsapp.adapter.js';
-import { HttpWhatsAppAdapter } from './integrations/whatsapp/http-whatsapp.adapter.js';
+import { MekariWhatsAppAdapter } from './integrations/whatsapp/mekari-whatsapp.adapter.js';
 import { DisabledWhatsAppAdapter } from './integrations/whatsapp/disabled-whatsapp.adapter.js';
 import { RolesGuard } from './auth/roles.guard.js';
 import { ValidationConfigService } from './config/validation-config.service.js';
@@ -30,7 +30,14 @@ import { RedisRateLimitMiddleware } from './common/redis-rate-limit.middleware.j
 
 @Module({
   imports: [AuthModule],
-  controllers: [HealthController, PublicVerificationController, RegionsController, AdminController, CampaignController, WhatsAppWebhookController],
+  controllers: [
+    HealthController,
+    PublicVerificationController,
+    RegionsController,
+    AdminController,
+    CampaignController,
+    WhatsAppWebhookController,
+  ],
   providers: [
     VerificationService,
     AdminService,
@@ -44,22 +51,31 @@ import { RedisRateLimitMiddleware } from './common/redis-rate-limit.middleware.j
     RedisRateLimitMiddleware,
     ValidationConfigService,
     RolesGuard,
-    { provide: GeocodingPort, useFactory: () => {
-      const osmEnabled = process.env.OSM_NOMINATIM_ENABLED !== 'false';
-      if (!osmEnabled) return process.env.GEOCODING_BASE_URL ? new HttpGeocodingAdapter() : new DisabledGeocodingAdapter();
-      const osm = new OsmGeocodingAdapter();
-      return process.env.GEOCODING_BASE_URL ? new FallbackGeocodingAdapter(new HttpGeocodingAdapter(), osm) : osm;
-    } },
-    { provide: WhatsAppPort, useFactory: () => {
-      const provider = process.env.WHATSAPP_PROVIDER ?? (process.env.NODE_ENV === 'production' ? 'disabled' : 'generic');
-      if (provider === 'disabled' || provider === 'mekari') return new DisabledWhatsAppAdapter();
-      if (process.env.WHATSAPP_BASE_URL && (provider === 'meta' || provider === 'generic')) return new HttpWhatsAppAdapter();
-      return process.env.NODE_ENV === 'production' ? new DisabledWhatsAppAdapter() : new ConsoleWhatsAppAdapter();
-    } },
+    {
+      provide: GeocodingPort,
+      useFactory: () => {
+        const osmEnabled = process.env.OSM_NOMINATIM_ENABLED !== 'false';
+        if (!osmEnabled)
+          return process.env.GEOCODING_BASE_URL ? new HttpGeocodingAdapter() : new DisabledGeocodingAdapter();
+        const osm = new OsmGeocodingAdapter();
+        return process.env.GEOCODING_BASE_URL ? new FallbackGeocodingAdapter(new HttpGeocodingAdapter(), osm) : osm;
+      },
+    },
+    {
+      provide: WhatsAppPort,
+      useFactory: () => {
+        const provider = process.env.WHATSAPP_PROVIDER ?? 'disabled';
+        if (provider === 'disabled') return new DisabledWhatsAppAdapter();
+        if (provider === 'mekari') return new MekariWhatsAppAdapter();
+        return process.env.NODE_ENV === 'production' ? new DisabledWhatsAppAdapter() : new ConsoleWhatsAppAdapter();
+      },
+    },
   ],
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RequestMetricsMiddleware, RedisRateLimitMiddleware).forRoutes({ path: '*', method: RequestMethod.ALL });
+    consumer
+      .apply(RequestMetricsMiddleware, RedisRateLimitMiddleware)
+      .forRoutes({ path: '*', method: RequestMethod.ALL });
   }
 }

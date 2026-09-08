@@ -66,7 +66,8 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
         imported = await api.importJob(queued.jobId);
       }
       if (imported.status === 'FAILED') throw new Error(imported.errorSummary || 'Import gagal diproses.');
-      if (imported.status !== 'COMPLETED') throw new Error('Import masih diproses. Silakan cek status job dan coba lagi nanti.');
+      if (imported.status !== 'COMPLETED')
+        throw new Error('Import masih diproses. Silakan cek status job dan coba lagi nanti.');
       setResult(imported);
       await onImported();
       await showActionSuccess('Import berhasil', 'Data customer berhasil disimpan ke sistem.');
@@ -88,7 +89,13 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
               <p className="text-[10px] text-gray-500 dark:text-gray-400">Upload Excel atau CSV per batch</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} disabled={isUploading} className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 p-1 rounded-lg disabled:opacity-50" aria-label="Tutup">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isUploading}
+            className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 p-1 rounded-lg disabled:opacity-50"
+            aria-label="Tutup"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -96,14 +103,29 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
         <form onSubmit={handleUpload} className="p-5 space-y-4 text-xs">
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
             <p className="font-semibold">Format yang didukung</p>
-            <p className="mt-1 leading-relaxed">Gunakan header report yang sama seperti import sebelumnya. Maksimal 50 MB per file. Source ID yang sudah ada akan diperbarui secara idempotent, bukan dibuat sebagai duplikat.</p>
+            <p className="mt-1 leading-relaxed">
+              Gunakan header report yang sama seperti import sebelumnya. Maksimal 50 MB per file. Source ID yang sudah
+              ada akan diperbarui secara idempotent, bukan dibuat sebagai duplikat.
+            </p>
           </div>
 
-          <label htmlFor="customer-import-file" className="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:border-emerald-600">
+          <label
+            htmlFor="customer-import-file"
+            className="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:border-emerald-600"
+          >
             <Upload className="w-7 h-7 text-gray-400 dark:text-gray-500" />
-            <span className="mt-2 font-semibold text-gray-800 dark:text-gray-200">{file ? file.name : 'Pilih file Excel atau CSV'}</span>
+            <span className="mt-2 font-semibold text-gray-800 dark:text-gray-200">
+              {file ? file.name : 'Pilih file Excel atau CSV'}
+            </span>
             <span className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">.xlsx atau .csv • maksimal 50 MB</span>
-            <input id="customer-import-file" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" onChange={handleFileChange} disabled={isUploading} className="sr-only" />
+            <input
+              id="customer-import-file"
+              type="file"
+              accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+              onChange={handleFileChange}
+              disabled={isUploading}
+              className="sr-only"
+            />
           </label>
 
           {error && (
@@ -115,21 +137,51 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
 
           {result && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
-              <div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="h-4 w-4" /> Data berhasil dimasukkan</div>
+              <div className="flex items-center gap-2 font-semibold">
+                <CheckCircle2 className="h-4 w-4" /> Data berhasil dimasukkan
+              </div>
               <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
-                <span>Baris diproses: <strong>{formatNumber(result.rowsRead)}</strong></span>
-                <span>Customer: <strong>{formatNumber(result.customersUpserted)}</strong></span>
-                <span>Alamat baru: <strong>{formatNumber(result.addressesInserted)}</strong></span>
-                <span>Alamat diperbarui: <strong>{formatNumber(result.addressesUpdated)}</strong></span>
-                {result.incompleteAddressRows > 0 && <span className="col-span-2 text-amber-700 dark:text-amber-300">Alamat perlu dilengkapi dan diperiksa: <strong>{formatNumber(result.incompleteAddressRows)}</strong></span>}
+                <span>
+                  Baris diproses: <strong>{formatNumber(result.rowsRead)}</strong>
+                </span>
+                <span>
+                  Customer: <strong>{formatNumber(result.customersUpserted)}</strong>
+                </span>
+                <span>
+                  Alamat baru: <strong>{formatNumber(result.addressesInserted)}</strong>
+                </span>
+                <span>
+                  Alamat diperbarui: <strong>{formatNumber(result.addressesUpdated)}</strong>
+                </span>
+                {result.incompleteAddressRows > 0 && (
+                  <span className="col-span-2 text-amber-700 dark:text-amber-300">
+                    Alamat perlu dilengkapi dan diperiksa: <strong>{formatNumber(result.incompleteAddressRows)}</strong>
+                  </span>
+                )}
               </div>
               <p className="mt-2 text-[10px]">Pilihan menerima pesan WhatsApp tidak diubah oleh proses ini.</p>
             </div>
           )}
 
           <div className="flex items-center justify-end gap-2 border-t border-gray-200 pt-3 dark:border-gray-800">
-            <button type="button" onClick={onClose} disabled={isUploading} className="rounded-lg border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">{result ? 'Tutup' : 'Batal'}</button>
-            {!result && <button type="submit" disabled={!file || isUploading} className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 font-medium text-white shadow-xs hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white">{isUploading && <AppLoader size={20} label="Importing" />} {isUploading ? 'Mengimpor...' : 'Mulai Import'}</button>}
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isUploading}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+            >
+              {result ? 'Tutup' : 'Batal'}
+            </button>
+            {!result && (
+              <button
+                type="submit"
+                disabled={!file || isUploading}
+                className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 font-medium text-white shadow-xs hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+              >
+                {isUploading && <AppLoader size={20} label="Importing" />}{' '}
+                {isUploading ? 'Mengimpor...' : 'Mulai Import'}
+              </button>
+            )}
           </div>
         </form>
       </div>

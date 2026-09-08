@@ -2,13 +2,32 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { and, eq, gt, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
-import { customerAddresses, customers, integrationOutbox, locationCaptures, reminders, validationResults, verificationSessions, auditLogs } from '../../db/schema/index.js';
-import { AddressChangeInput, AddressLookupInput, GpsSample, PublicVerificationContext } from '../../common/contracts.js';
+import {
+  customerAddresses,
+  customers,
+  integrationOutbox,
+  locationCaptures,
+  reminders,
+  validationResults,
+  verificationSessions,
+  auditLogs,
+} from '../../db/schema/index.js';
+import {
+  AddressChangeInput,
+  AddressLookupInput,
+  GpsSample,
+  PublicVerificationContext,
+} from '../../common/contracts.js';
 import { DomainError, NotFoundError } from '../../common/errors.js';
 import { GeocodingPort, GeocodingResult } from '../../integrations/geocoding/geocoding.port.js';
 import { decideValidation, AddressEvidence, ReverseGeocodeEvidence } from '../validation/engine.js';
 import { assertTransition } from './state-machine.js';
-import { isReminderScheduledBeforeSessionExpiry, nextReminderNumber, ReminderPreference, scheduleReminderInTimezone } from '../reminders/reminder.policy.js';
+import {
+  isReminderScheduledBeforeSessionExpiry,
+  nextReminderNumber,
+  ReminderPreference,
+  scheduleReminderInTimezone,
+} from '../reminders/reminder.policy.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
 import { parseVerificationToken, verifyVerificationToken } from './verification-token.js';
 import { applyApprovalPolicy, getCoordinateMatchScore } from './approval-policy.js';
@@ -19,7 +38,13 @@ function maskPhone(value: string): string {
   return `${'*'.repeat(Math.max(0, value.length - 4))}${value.slice(-4)}`;
 }
 
-function maskAddress(address: { street: string; subdistrict: string; district: string; city: string; province: string }): string {
+function maskAddress(address: {
+  street: string;
+  subdistrict: string;
+  district: string;
+  city: string;
+  province: string;
+}): string {
   return `${address.street} **, ${address.subdistrict}, ${address.district}, ${address.city}, ${address.province}`;
 }
 
@@ -46,16 +71,19 @@ export class VerificationService {
       .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
       .innerJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
       .leftJoin(reminders, eq(reminders.tokenId, verificationSessions.tokenId))
-      .where(and(
-        eq(verificationSessions.tokenId, parsed.tokenId),
-        isNull(verificationSessions.revokedAt),
-        gt(verificationSessions.expiresAt, now()),
-        isNull(reminders.tokenInvalidatedAt),
-        or(isNull(reminders.tokenExpiresAt), gt(reminders.tokenExpiresAt, now())),
-      ))
+      .where(
+        and(
+          eq(verificationSessions.tokenId, parsed.tokenId),
+          isNull(verificationSessions.revokedAt),
+          gt(verificationSessions.expiresAt, now()),
+          isNull(reminders.tokenInvalidatedAt),
+          or(isNull(reminders.tokenExpiresAt), gt(reminders.tokenExpiresAt, now())),
+        ),
+      )
       .limit(1);
     if (!row) throw new NotFoundError('Verification link is invalid or expired');
-    if (!row.session.tokenHash || !(await verifyVerificationToken(token, row.session.tokenHash))) throw new NotFoundError('Verification link is invalid or expired');
+    if (!row.session.tokenHash || !(await verifyVerificationToken(token, row.session.tokenHash)))
+      throw new NotFoundError('Verification link is invalid or expired');
     return row;
   }
 
@@ -65,12 +93,50 @@ export class VerificationService {
       const timestamp = now();
       await db.transaction(async (tx) => {
         if (!row.session.openedAt) {
-          await tx.update(verificationSessions).set({ openedAt: timestamp, verificationStatus: 'LINK_OPENED', updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
-          await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'LINK_OPENED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, before: { status: row.session.verificationStatus }, after: { status: 'LINK_OPENED' }, timestamp });
+          await tx
+            .update(verificationSessions)
+            .set({ openedAt: timestamp, verificationStatus: 'LINK_OPENED', updatedAt: timestamp })
+            .where(eq(verificationSessions.id, row.session.id));
+          await tx.insert(auditLogs).values({
+            actorUserId: 'customer-token',
+            actorName: 'Customer',
+            action: 'LINK_OPENED',
+            entityType: 'VERIFICATION_SESSION',
+            entityId: row.session.id,
+            before: { status: row.session.verificationStatus },
+            after: { status: 'LINK_OPENED' },
+            timestamp,
+          });
         }
         if (row.reminder) {
-          await tx.update(reminders).set({ status: 'CANCELLED' }).where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
-          await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'REMINDER_LINK_OPENED', entityType: 'REMINDER', entityId: row.reminder.id, after: { reminderNumber: row.reminder.reminderNumber, futureRemindersCancelled: true }, timestamp });
+          await tx
+            .update(reminders)
+            .set({ status: 'CANCELLED' })
+            .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
+          await tx.insert(auditLogs).values({
+            actorUserId: 'customer-token',
+            actorName: 'Customer',
+            action: 'REMINDER_LINK_OPENED',
+            entityType: 'REMINDER',
+            entityId: row.reminder.id,
+            after: { reminderNumber: row.reminder.reminderNumber, futureRemindersCancelled: true },
+            timestamp,
+          });
+          if (row.session.attemptCount > 0) {
+            await tx
+              .update(verificationSessions)
+              .set({ attemptCount: 0, updatedAt: timestamp })
+              .where(eq(verificationSessions.id, row.session.id));
+            await tx.insert(auditLogs).values({
+              actorUserId: 'customer-token',
+              actorName: 'Customer',
+              action: 'GPS_ATTEMPT_WINDOW_RESET',
+              entityType: 'VERIFICATION_SESSION',
+              entityId: row.session.id,
+              after: { reminderNumber: row.reminder.reminderNumber, attemptCount: 0 },
+              timestamp,
+            });
+          }
         }
       });
     }
@@ -82,6 +148,7 @@ export class VerificationService {
         linkExpiresAt: row.reminder?.tokenExpiresAt?.toISOString() ?? row.session.expiresAt.toISOString(),
         customerConfirmationStatus: row.session.customerConfirmationStatus,
         reminderCount: row.session.reminderCount,
+        attemptCount: row.reminder ? 0 : row.session.attemptCount,
         isReminderLink: Boolean(row.reminder),
       },
       customer: { id: row.customer.id, name: row.customer.name, phoneE164: maskPhone(row.customer.phoneE164) },
@@ -106,19 +173,31 @@ export class VerificationService {
     const nextStatus = confirmed ? 'CONSENTED' : 'CUSTOMER_DATA_MISMATCH';
     assertTransition(row.session.verificationStatus, nextStatus);
     await db.transaction(async (tx) => {
-      await tx.update(verificationSessions).set({
-        customerConfirmationStatus: confirmed ? 'CONFIRMED' : 'MISMATCH',
-        verificationStatus: nextStatus,
-        customerConfirmedAt: timestamp,
-        updatedAt: timestamp,
-      }).where(eq(verificationSessions.id, row.session.id));
+      await tx
+        .update(verificationSessions)
+        .set({
+          customerConfirmationStatus: confirmed ? 'CONFIRMED' : 'MISMATCH',
+          verificationStatus: nextStatus,
+          customerConfirmedAt: timestamp,
+          updatedAt: timestamp,
+        })
+        .where(eq(verificationSessions.id, row.session.id));
       if (!confirmed) {
-        await tx.update(reminders).set({ status: 'CANCELLED' }).where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
+        await tx
+          .update(reminders)
+          .set({ status: 'CANCELLED' })
+          .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
       }
       await tx.insert(auditLogs).values({
-        actorUserId: 'customer-token', actorName: 'Customer', action: confirmed ? 'CUSTOMER_CONFIRMED' : 'CUSTOMER_DATA_MISMATCH',
-        entityType: 'VERIFICATION_SESSION', entityId: row.session.id, before: { status: row.session.verificationStatus }, after: { confirmed },
-        reason: confirmed ? 'Customer confirmed masked data' : 'Customer reported data mismatch', timestamp,
+        actorUserId: 'customer-token',
+        actorName: 'Customer',
+        action: confirmed ? 'CUSTOMER_CONFIRMED' : 'CUSTOMER_DATA_MISMATCH',
+        entityType: 'VERIFICATION_SESSION',
+        entityId: row.session.id,
+        before: { status: row.session.verificationStatus },
+        after: { confirmed },
+        reason: confirmed ? 'Customer confirmed masked data' : 'Customer reported data mismatch',
+        timestamp,
       });
     });
     return { status: confirmed ? 'CONSENTED' : 'CUSTOMER_DATA_MISMATCH' };
@@ -126,12 +205,25 @@ export class VerificationService {
 
   async consent(token: string) {
     const row = await this.findByToken(token);
-    if (row.session.customerConfirmationStatus !== 'CONFIRMED') throw new DomainError('Customer confirmation is required first');
+    if (row.session.customerConfirmationStatus !== 'CONFIRMED')
+      throw new DomainError('Customer confirmation is required first');
     assertTransition(row.session.verificationStatus, 'GPS_CAPTURING');
     const timestamp = now();
     await db.transaction(async (tx) => {
-      await tx.update(verificationSessions).set({ consentAt: timestamp, verificationStatus: 'GPS_CAPTURING', updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
-      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'CONSENT_GIVEN', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, before: { status: row.session.verificationStatus }, after: { status: 'GPS_CAPTURING' }, timestamp });
+      await tx
+        .update(verificationSessions)
+        .set({ consentAt: timestamp, verificationStatus: 'GPS_CAPTURING', updatedAt: timestamp })
+        .where(eq(verificationSessions.id, row.session.id));
+      await tx.insert(auditLogs).values({
+        actorUserId: 'customer-token',
+        actorName: 'Customer',
+        action: 'CONSENT_GIVEN',
+        entityType: 'VERIFICATION_SESSION',
+        entityId: row.session.id,
+        before: { status: row.session.verificationStatus },
+        after: { status: 'GPS_CAPTURING' },
+        timestamp,
+      });
     });
     return { status: 'GPS_CAPTURING' };
   }
@@ -139,8 +231,11 @@ export class VerificationService {
   async submitLocation(token: string, samples: GpsSample[]) {
     const row = await this.findByToken(token);
     const config = await this.validationConfig.get();
-    if (row.session.customerConfirmationStatus !== 'CONFIRMED' || !row.session.consentAt) throw new DomainError('Confirmation and consent are required before location capture');
-    if (row.session.attemptCount >= config.MAX_LOCATION_ATTEMPTS) throw new DomainError('Maximum GPS attempts reached', 409, 'ATTEMPT_LIMIT_REACHED');
+    if (row.session.customerConfirmationStatus !== 'CONFIRMED' || !row.session.consentAt)
+      throw new DomainError('Confirmation and consent are required before location capture');
+    const maxLocationAttempts = Math.min(3, config.MAX_LOCATION_ATTEMPTS);
+    if (row.session.attemptCount >= maxLocationAttempts)
+      throw new DomainError('Maximum GPS attempts reached. Please choose a reminder.', 409, 'ATTEMPT_LIMIT_REACHED');
     const bestSample = [...samples].sort((left, right) => left.accuracyMeters - right.accuracyMeters)[0];
     let geocode: ReverseGeocodeEvidence;
     let geocodingAvailable = true;
@@ -161,18 +256,30 @@ export class VerificationService {
         geocode = { province: '', city: '', district: '', subdistrict: '', street: '', formattedAddress: '' };
       }
     }
-    const decision = decideValidation(samples, {
-      id: row.address.id, province: row.address.province, city: row.address.city, district: row.address.district,
-      subdistrict: row.address.subdistrict, street: row.address.street, houseNumber: row.address.houseNumber, postalCode: row.address.postalCode,
-      referenceLatitude: row.referenceLatitude == null ? null : Number(row.referenceLatitude), referenceLongitude: row.referenceLongitude == null ? null : Number(row.referenceLongitude),
-      referencePrecision: row.address.referencePrecision as AddressEvidence['referencePrecision'],
-    }, geocode, {
-      gpsMaxAccuracyMeters: config.GPS_MAX_ACCURACY_METERS,
-      homeRadiusMeters: config.HOME_RADIUS_METERS,
-      streetMatchThreshold: config.STREET_MATCH_THRESHOLD,
-      streetSoftMatchThreshold: config.STREET_SOFT_MATCH_THRESHOLD,
-      addressScoreThreshold: config.ADDRESS_SCORE_THRESHOLD,
-    });
+    const decision = decideValidation(
+      samples,
+      {
+        id: row.address.id,
+        province: row.address.province,
+        city: row.address.city,
+        district: row.address.district,
+        subdistrict: row.address.subdistrict,
+        street: row.address.street,
+        houseNumber: row.address.houseNumber,
+        postalCode: row.address.postalCode,
+        referenceLatitude: row.referenceLatitude == null ? null : Number(row.referenceLatitude),
+        referenceLongitude: row.referenceLongitude == null ? null : Number(row.referenceLongitude),
+        referencePrecision: row.address.referencePrecision as AddressEvidence['referencePrecision'],
+      },
+      geocode,
+      {
+        gpsMaxAccuracyMeters: config.GPS_MAX_ACCURACY_METERS,
+        homeRadiusMeters: config.HOME_RADIUS_METERS,
+        streetMatchThreshold: config.STREET_MATCH_THRESHOLD,
+        streetSoftMatchThreshold: config.STREET_SOFT_MATCH_THRESHOLD,
+        addressScoreThreshold: config.ADDRESS_SCORE_THRESHOLD,
+      },
+    );
     const coordinateMatchScore = getCoordinateMatchScore({
       geocodingAvailable,
       referencePrecision: decision.referencePrecision,
@@ -186,7 +293,15 @@ export class VerificationService {
       decision.result = 'LOCATION_VALID';
       decision.addressScore = Math.max(decision.addressScore, coordinateMatchScore);
       decision.reasonCodes = ['COORDINATE_MATCHED', 'GEOCODING_UNAVAILABLE', 'LOCATION_VALID'];
-    } else if (!geocodingAvailable && decision.result !== 'WAITING_FOR_HOME' && !(decision.result === 'LOCATION_MISMATCH' && decision.distanceFromReferenceMeters != null && decision.distanceFromReferenceMeters > config.HOME_RADIUS_METERS)) {
+    } else if (
+      !geocodingAvailable &&
+      decision.result !== 'WAITING_FOR_HOME' &&
+      !(
+        decision.result === 'LOCATION_MISMATCH' &&
+        decision.distanceFromReferenceMeters != null &&
+        decision.distanceFromReferenceMeters > config.HOME_RADIUS_METERS
+      )
+    ) {
       decision.result = 'MANUAL_REVIEW';
       decision.reasonCodes = [...decision.reasonCodes, 'GEOCODING_UNAVAILABLE', 'MANUAL_REVIEW_REQUIRED'];
     } else if (!geocodingAvailable) {
@@ -208,72 +323,250 @@ export class VerificationService {
     const captureId = randomUUID();
     const resultId = randomUUID();
     const timestamp = now();
-    const nextStatus = decision.result === 'LOCATION_VALID' ? 'LOCATION_VALID' : decision.result;
+    const nextAttemptCount = row.session.attemptCount + 1;
+    const attemptLimitReached = nextAttemptCount >= maxLocationAttempts;
+    const forceReminder = attemptLimitReached && decision.result !== 'LOCATION_VALID';
+    if (forceReminder) decision.reasonCodes = [...decision.reasonCodes, 'GPS_ATTEMPT_LIMIT_REACHED'];
+    const nextStatus = forceReminder
+      ? 'REMINDER_REQUIRED'
+      : decision.result === 'LOCATION_VALID'
+        ? 'LOCATION_VALID'
+        : decision.result;
     assertTransition(row.session.verificationStatus, nextStatus);
     await db.transaction(async (tx) => {
       await tx.insert(locationCaptures).values({
         id: captureId,
         sessionId: row.session.id,
         location: { latitude: decision.bestSample.latitude, longitude: decision.bestSample.longitude },
-        latitude: decision.bestSample.latitude.toFixed(7), longitude: decision.bestSample.longitude.toFixed(7),
-        accuracyMeters: decision.bestSample.accuracyMeters.toFixed(2), sampleCount: samples.length,
-        bestAccuracyMeters: Math.min(...samples.map((sample) => sample.accuracyMeters)).toFixed(2), samples,
-        deviceTimestamp: new Date(decision.bestSample.capturedAt), serverTimestamp: timestamp, createdAt: timestamp,
+        latitude: decision.bestSample.latitude.toFixed(7),
+        longitude: decision.bestSample.longitude.toFixed(7),
+        accuracyMeters: decision.bestSample.accuracyMeters.toFixed(2),
+        sampleCount: samples.length,
+        bestAccuracyMeters: Math.min(...samples.map((sample) => sample.accuracyMeters)).toFixed(2),
+        samples,
+        deviceTimestamp: new Date(decision.bestSample.capturedAt),
+        serverTimestamp: timestamp,
+        createdAt: timestamp,
       });
       await tx.insert(validationResults).values({
-        id: resultId, sessionId: row.session.id, captureId, addressId: row.address.id,
-        provinceMatch: decision.provinceMatch, cityMatch: decision.cityMatch, districtMatch: decision.districtMatch,
-        subdistrictMatch: decision.subdistrictMatch, streetScore: decision.streetScore.toFixed(3),
-        houseNumberMatch: decision.houseNumberMatch, gpsAccuracyMeters: decision.bestSample.accuracyMeters.toFixed(2),
-        distanceToReferenceMeters: decision.distanceFromReferenceMeters == null ? null : decision.distanceFromReferenceMeters.toFixed(2), addressScore: decision.addressScore.toFixed(3),
-        result: decision.result, reasonCodes: decision.reasonCodes, reverseGeocode: decision.reverseGeocode,
-        referencePrecision: decision.referencePrecision, engineVersion: '1.1.0', configVersion: 'env',
-        capturedLatitude: decision.bestSample.latitude.toFixed(7), capturedLongitude: decision.bestSample.longitude.toFixed(7),
-        referenceLatitude: row.referenceLatitude == null ? null : Number(row.referenceLatitude).toFixed(7), referenceLongitude: row.referenceLongitude == null ? null : Number(row.referenceLongitude).toFixed(7), createdAt: timestamp,
+        id: resultId,
+        sessionId: row.session.id,
+        captureId,
+        addressId: row.address.id,
+        provinceMatch: decision.provinceMatch,
+        cityMatch: decision.cityMatch,
+        districtMatch: decision.districtMatch,
+        subdistrictMatch: decision.subdistrictMatch,
+        streetScore: decision.streetScore.toFixed(3),
+        houseNumberMatch: decision.houseNumberMatch,
+        gpsAccuracyMeters: decision.bestSample.accuracyMeters.toFixed(2),
+        distanceToReferenceMeters:
+          decision.distanceFromReferenceMeters == null ? null : decision.distanceFromReferenceMeters.toFixed(2),
+        addressScore: decision.addressScore.toFixed(3),
+        result: decision.result,
+        reasonCodes: decision.reasonCodes,
+        reverseGeocode: decision.reverseGeocode,
+        referencePrecision: decision.referencePrecision,
+        engineVersion: '1.1.0',
+        configVersion: 'env',
+        capturedLatitude: decision.bestSample.latitude.toFixed(7),
+        capturedLongitude: decision.bestSample.longitude.toFixed(7),
+        referenceLatitude: row.referenceLatitude == null ? null : Number(row.referenceLatitude).toFixed(7),
+        referenceLongitude: row.referenceLongitude == null ? null : Number(row.referenceLongitude).toFixed(7),
+        createdAt: timestamp,
       });
-      await tx.update(verificationSessions).set({
-        attemptCount: row.session.attemptCount + 1, verificationStatus: nextStatus,
-        locationVerifiedAt: decision.result === 'LOCATION_VALID' ? timestamp : null,
-        completedAt: decision.result === 'LOCATION_VALID' ? timestamp : null, updatedAt: timestamp,
-      }).where(eq(verificationSessions.id, row.session.id));
-      await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Validation Engine', action: 'LOCATION_VALIDATION_COMPLETED', entityType: 'VALIDATION', entityId: resultId, after: { result: decision.result, reasonCodes: decision.reasonCodes, accuracyMeters: decision.bestSample.accuracyMeters, distanceMeters: decision.distanceFromReferenceMeters, addressScore: decision.addressScore }, timestamp });
-      if (autoApprovalEligible) await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Validation Engine', action: 'LOCATION_AUTO_APPROVED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, after: { result: decision.result, addressScore: decision.addressScore, threshold: autoApprovalThreshold, customerConfirmationStatus: row.session.customerConfirmationStatus }, reason: 'Customer data confirmed and validation score met the automatic approval threshold', timestamp });
-      if (decision.result === 'WAITING_FOR_HOME' || decision.result === 'LOW_GPS_ACCURACY') await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Validation Engine', action: 'GPS_ACCURACY_REJECTED', entityType: 'VALIDATION', entityId: resultId, after: { accuracyMeters: decision.bestSample.accuracyMeters, threshold: config.GPS_MAX_ACCURACY_METERS, result: decision.result, reasonCodes: decision.reasonCodes }, timestamp });
-      if (decision.result === 'LOCATION_MISMATCH') await tx.insert(auditLogs).values({ actorUserId: 'system', actorName: 'Validation Engine', action: 'HOME_VALIDATION_FAILED', entityType: 'VALIDATION', entityId: resultId, after: { distanceMeters: decision.distanceFromReferenceMeters, radiusMeters: config.HOME_RADIUS_METERS, reasonCodes: decision.reasonCodes }, timestamp });
-      if (decision.result === 'LOCATION_VALID') {
-        await tx.update(customerAddresses).set({ addressStatus: 'SUPERSEDED', addressType: 'HISTORICAL', isActive: false, validTo: timestamp, updatedAt: timestamp }).where(and(eq(customerAddresses.customerId, row.customer.id), eq(customerAddresses.isActive, true), ne(customerAddresses.id, row.address.id)));
-        await tx.update(customerAddresses).set({
-          ...buildVerifiedAddressReference(decision.bestSample.latitude, decision.bestSample.longitude),
-          isVerified: true,
-          addressStatus: 'VERIFIED',
-          addressType: 'VERIFIED_INSTALLATION',
+      await tx
+        .update(verificationSessions)
+        .set({
+          attemptCount: nextAttemptCount,
+          verificationStatus: nextStatus,
+          locationVerifiedAt: decision.result === 'LOCATION_VALID' ? timestamp : null,
+          completedAt: decision.result === 'LOCATION_VALID' ? timestamp : null,
           updatedAt: timestamp,
-        }).where(eq(customerAddresses.id, row.address.id));
-        await tx.update(customers).set({ status: 'VERIFIED', updatedAt: timestamp }).where(eq(customers.id, row.customer.id));
-        await tx.update(reminders).set({ status: 'CANCELLED' }).where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
+        })
+        .where(eq(verificationSessions.id, row.session.id));
+      await tx.insert(auditLogs).values({
+        actorUserId: 'system',
+        actorName: 'Validation Engine',
+        action: 'LOCATION_VALIDATION_COMPLETED',
+        entityType: 'VALIDATION',
+        entityId: resultId,
+        after: {
+          result: decision.result,
+          reasonCodes: decision.reasonCodes,
+          accuracyMeters: decision.bestSample.accuracyMeters,
+          distanceMeters: decision.distanceFromReferenceMeters,
+          addressScore: decision.addressScore,
+        },
+        timestamp,
+      });
+      if (autoApprovalEligible)
+        await tx.insert(auditLogs).values({
+          actorUserId: 'system',
+          actorName: 'Validation Engine',
+          action: 'LOCATION_AUTO_APPROVED',
+          entityType: 'VERIFICATION_SESSION',
+          entityId: row.session.id,
+          after: {
+            result: decision.result,
+            addressScore: decision.addressScore,
+            threshold: autoApprovalThreshold,
+            customerConfirmationStatus: row.session.customerConfirmationStatus,
+          },
+          reason: 'Customer data confirmed and validation score met the automatic approval threshold',
+          timestamp,
+        });
+      if (decision.result === 'WAITING_FOR_HOME' || decision.result === 'LOW_GPS_ACCURACY')
+        await tx.insert(auditLogs).values({
+          actorUserId: 'system',
+          actorName: 'Validation Engine',
+          action: 'GPS_ACCURACY_REJECTED',
+          entityType: 'VALIDATION',
+          entityId: resultId,
+          after: {
+            accuracyMeters: decision.bestSample.accuracyMeters,
+            threshold: config.GPS_MAX_ACCURACY_METERS,
+            result: decision.result,
+            reasonCodes: decision.reasonCodes,
+          },
+          timestamp,
+        });
+      if (decision.result === 'LOCATION_MISMATCH')
+        await tx.insert(auditLogs).values({
+          actorUserId: 'system',
+          actorName: 'Validation Engine',
+          action: 'HOME_VALIDATION_FAILED',
+          entityType: 'VALIDATION',
+          entityId: resultId,
+          after: {
+            distanceMeters: decision.distanceFromReferenceMeters,
+            radiusMeters: config.HOME_RADIUS_METERS,
+            reasonCodes: decision.reasonCodes,
+          },
+          timestamp,
+        });
+      if (forceReminder)
+        await tx.insert(auditLogs).values({
+          actorUserId: 'system',
+          actorName: 'Validation Engine',
+          action: 'GPS_ATTEMPT_LIMIT_REACHED',
+          entityType: 'VERIFICATION_SESSION',
+          entityId: row.session.id,
+          after: { attemptCount: nextAttemptCount, maxAttempts: maxLocationAttempts, nextAction: 'SELECT_REMINDER' },
+          timestamp,
+        });
+      if (decision.result === 'LOCATION_VALID') {
+        await tx
+          .update(customerAddresses)
+          .set({
+            addressStatus: 'SUPERSEDED',
+            addressType: 'HISTORICAL',
+            isActive: false,
+            validTo: timestamp,
+            updatedAt: timestamp,
+          })
+          .where(
+            and(
+              eq(customerAddresses.customerId, row.customer.id),
+              eq(customerAddresses.isActive, true),
+              ne(customerAddresses.id, row.address.id),
+            ),
+          );
+        await tx
+          .update(customerAddresses)
+          .set({
+            ...buildVerifiedAddressReference(decision.bestSample.latitude, decision.bestSample.longitude),
+            isVerified: true,
+            addressStatus: 'VERIFIED',
+            addressType: 'VERIFIED_INSTALLATION',
+            updatedAt: timestamp,
+          })
+          .where(eq(customerAddresses.id, row.address.id));
+        await tx
+          .update(customers)
+          .set({ status: 'VERIFIED', updatedAt: timestamp })
+          .where(eq(customers.id, row.customer.id));
+        await tx
+          .update(reminders)
+          .set({ status: 'CANCELLED' })
+          .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
         const eventId = randomUUID();
-        await tx.insert(integrationOutbox).values({
-          id: randomUUID(), eventId, eventType: 'location.verified.v1', aggregateType: 'VERIFICATION_SESSION', aggregateId: row.session.id,
-          correlationId: row.session.id, idempotencyKey: `location-verified:${row.session.id}`,
-          payload: { eventId, eventType: 'location.verified.v1', occurredAt: timestamp.toISOString(), correlationId: row.session.id, idempotencyKey: `location-verified:${row.session.id}`, customer: { externalId: row.customer.externalId, name: row.customer.name }, verifiedAddress: { addressId: row.address.id, fullAddress: row.address.rawAddress }, verifiedLocation: { latitude: decision.bestSample.latitude, longitude: decision.bestSample.longitude, accuracyMeters: decision.bestSample.accuracyMeters, verifiedAt: timestamp.toISOString() } },
-          status: 'PENDING', attemptCount: 0, createdAt: timestamp, updatedAt: timestamp,
-        }).onConflictDoNothing({ target: integrationOutbox.idempotencyKey });
+        await tx
+          .insert(integrationOutbox)
+          .values({
+            id: randomUUID(),
+            eventId,
+            eventType: 'location.verified.v1',
+            aggregateType: 'VERIFICATION_SESSION',
+            aggregateId: row.session.id,
+            correlationId: row.session.id,
+            idempotencyKey: `location-verified:${row.session.id}`,
+            payload: {
+              eventId,
+              eventType: 'location.verified.v1',
+              occurredAt: timestamp.toISOString(),
+              correlationId: row.session.id,
+              idempotencyKey: `location-verified:${row.session.id}`,
+              customer: { externalId: row.customer.externalId, name: row.customer.name },
+              verifiedAddress: { addressId: row.address.id, fullAddress: row.address.rawAddress },
+              verifiedLocation: {
+                latitude: decision.bestSample.latitude,
+                longitude: decision.bestSample.longitude,
+                accuracyMeters: decision.bestSample.accuracyMeters,
+                verifiedAt: timestamp.toISOString(),
+              },
+            },
+            status: 'PENDING',
+            attemptCount: 0,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          })
+          .onConflictDoNothing({ target: integrationOutbox.idempotencyKey });
       }
     });
-    return { id: resultId, ...decision, capturedLocation: { ...decision.bestSample, coordinateText: `${decision.bestSample.latitude.toFixed(6)}, ${decision.bestSample.longitude.toFixed(6)}`, googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${decision.bestSample.latitude},${decision.bestSample.longitude}` } };
+    return {
+      id: resultId,
+      status: nextStatus,
+      attemptCount: nextAttemptCount,
+      maxAttempts: maxLocationAttempts,
+      ...decision,
+      capturedLocation: {
+        ...decision.bestSample,
+        coordinateText: `${decision.bestSample.latitude.toFixed(6)}, ${decision.bestSample.longitude.toFixed(6)}`,
+        googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${decision.bestSample.latitude},${decision.bestSample.longitude}`,
+      },
+    };
   }
 
-  async waitForHome(token: string, preference?: ReminderPreference, scheduledAtInput?: string, _reminderUntilAtInput?: string) {
+  async waitForHome(
+    token: string,
+    preference?: ReminderPreference,
+    scheduledAtInput?: string,
+    _reminderUntilAtInput?: string,
+  ) {
     const row = await this.findByToken(token);
     const config = await this.validationConfig.get();
     const max = config.MAX_REMINDERS_PER_SESSION;
-    if (!config.ENABLE_REMINDERS || row.session.reminderCount >= max) throw new DomainError('Reminder limit reached', 409, 'REMINDER_LIMIT_REACHED');
+    if (!config.ENABLE_REMINDERS || row.session.reminderCount >= max)
+      throw new DomainError('Reminder limit reached', 409, 'REMINDER_LIMIT_REACHED');
     const reminderNumber = nextReminderNumber(row.session.reminderCount, max);
     if (!reminderNumber) throw new DomainError('Reminder limit reached', 409, 'REMINDER_LIMIT_REACHED');
     const currentTime = now();
-    const scheduledAt = scheduledAtInput ? new Date(scheduledAtInput) : scheduleReminderInTimezone(preference ?? 'DEFAULT', currentTime, process.env.REMINDER_TIMEZONE ?? 'Asia/Jakarta');
-    if (Number.isNaN(scheduledAt.getTime()) || scheduledAt <= currentTime) throw new DomainError('Reminder time must be in the future', 422, 'REMINDER_TIME_INVALID');
-    if (!isReminderScheduledBeforeSessionExpiry(scheduledAt, row.session.expiresAt)) throw new DomainError('Reminder time must be before the verification session expires', 422, 'REMINDER_TIME_EXCEEDS_SESSION');
+    const scheduledAt = scheduledAtInput
+      ? new Date(scheduledAtInput)
+      : scheduleReminderInTimezone(
+          preference ?? 'DEFAULT',
+          currentTime,
+          process.env.REMINDER_TIMEZONE ?? 'Asia/Jakarta',
+        );
+    if (Number.isNaN(scheduledAt.getTime()) || scheduledAt <= currentTime)
+      throw new DomainError('Reminder time must be in the future', 422, 'REMINDER_TIME_INVALID');
+    if (!isReminderScheduledBeforeSessionExpiry(scheduledAt, row.session.expiresAt))
+      throw new DomainError(
+        'Reminder time must be before the verification session expires',
+        422,
+        'REMINDER_TIME_EXCEEDS_SESSION',
+      );
     // A customer action schedules exactly one next reminder. If the reminder
     // link is not opened, the worker creates the next one automatically.
     const reminderTimes = [scheduledAt];
@@ -283,34 +576,103 @@ export class VerificationService {
     assertTransition(row.session.verificationStatus, nextStatus);
     await db.transaction(async (tx) => {
       const timestamp = now();
-      await tx.insert(reminders).values(reminderTimes.map((time, index) => {
-        const reminderNumber = row.session.reminderCount + index + 1;
-        return { id: randomUUID(), sessionId: row.session.id, reminderNumber, channel: 'WHATSAPP', scheduledAt: time, status: 'SCHEDULED', messageText: `Halo ${row.customer.name}, pengingat ${reminderNumber} dari ${max}. Tautan baru berlaku maksimal ${config.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`, retryCount: 0, createdAt: timestamp };
-      }));
-      await tx.update(verificationSessions).set({ reminderCount: finalReminderNumber, verificationStatus: nextStatus, updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
-      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'WAITING_FOR_HOME_SELECTED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, after: { preference: preference ?? 'CUSTOM', reminderCount: finalReminderNumber, scheduledAt: scheduledAt.toISOString(), reminderUntilAt: effectiveReminderUntilAt.toISOString(), automaticSchedule: false }, timestamp });
-      await tx.insert(auditLogs).values(reminderTimes.map((time, index) => ({ actorUserId: 'system', actorName: 'Reminder Scheduler', action: 'REMINDER_SCHEDULED', entityType: 'REMINDER', entityId: row.session.id, after: { reminderNumber: row.session.reminderCount + index + 1, scheduledAt: time.toISOString(), reminderUntilAt: effectiveReminderUntilAt.toISOString(), automaticSchedule: false }, timestamp })));
+      await tx.insert(reminders).values(
+        reminderTimes.map((time, index) => {
+          const reminderNumber = row.session.reminderCount + index + 1;
+          return {
+            id: randomUUID(),
+            sessionId: row.session.id,
+            reminderNumber,
+            channel: 'WHATSAPP',
+            scheduledAt: time,
+            status: 'SCHEDULED',
+            messageText: `Halo ${row.customer.name}, pengingat ${reminderNumber} dari ${max}. Tautan baru berlaku maksimal ${config.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`,
+            retryCount: 0,
+            createdAt: timestamp,
+          };
+        }),
+      );
+      await tx
+        .update(verificationSessions)
+        .set({ reminderCount: finalReminderNumber, verificationStatus: nextStatus, updatedAt: timestamp })
+        .where(eq(verificationSessions.id, row.session.id));
+      await tx.insert(auditLogs).values({
+        actorUserId: 'customer-token',
+        actorName: 'Customer',
+        action: 'WAITING_FOR_HOME_SELECTED',
+        entityType: 'VERIFICATION_SESSION',
+        entityId: row.session.id,
+        after: {
+          preference: preference ?? 'CUSTOM',
+          reminderCount: finalReminderNumber,
+          scheduledAt: scheduledAt.toISOString(),
+          reminderUntilAt: effectiveReminderUntilAt.toISOString(),
+          automaticSchedule: false,
+        },
+        timestamp,
+      });
+      await tx.insert(auditLogs).values(
+        reminderTimes.map((time, index) => ({
+          actorUserId: 'system',
+          actorName: 'Reminder Scheduler',
+          action: 'REMINDER_SCHEDULED',
+          entityType: 'REMINDER',
+          entityId: row.session.id,
+          after: {
+            reminderNumber: row.session.reminderCount + index + 1,
+            scheduledAt: time.toISOString(),
+            reminderUntilAt: effectiveReminderUntilAt.toISOString(),
+            automaticSchedule: false,
+          },
+          timestamp,
+        })),
+      );
     });
-    return { status: nextStatus, reminderNumber: finalReminderNumber, reminderCount: finalReminderNumber, scheduledAt: scheduledAt.toISOString(), reminderUntilAt: effectiveReminderUntilAt.toISOString() };
+    return {
+      status: nextStatus,
+      reminderNumber: finalReminderNumber,
+      reminderCount: finalReminderNumber,
+      scheduledAt: scheduledAt.toISOString(),
+      reminderUntilAt: effectiveReminderUntilAt.toISOString(),
+    };
   }
 
   async addressStatus(token: string, sameAddress: boolean) {
     const row = await this.findByToken(token);
+    const config = await this.validationConfig.get();
+    if (sameAddress && row.session.attemptCount >= Math.min(3, config.MAX_LOCATION_ATTEMPTS) && !row.reminder)
+      throw new DomainError('Please choose a reminder before trying GPS again.', 409, 'REMINDER_REQUIRED');
     if (!sameAddress && row.address.addressType === 'PROPOSED') {
-      throw new DomainError('The address can only be changed once. Please contact IRA Customer Service for further changes.', 409, 'ADDRESS_CHANGE_LIMIT_REACHED');
+      throw new DomainError(
+        'The address can only be changed once. Please contact IRA Customer Service for further changes.',
+        409,
+        'ADDRESS_CHANGE_LIMIT_REACHED',
+      );
     }
     const nextStatus = sameAddress ? 'GPS_CAPTURING' : 'ADDRESS_EDITING';
-    if (!row.session.consentAt) throw new DomainError('Location consent is required before confirming the address', 409, 'CONSENT_REQUIRED');
+    if (!row.session.consentAt)
+      throw new DomainError('Location consent is required before confirming the address', 409, 'CONSENT_REQUIRED');
     assertTransition(row.session.verificationStatus, nextStatus);
     const timestamp = now();
     await db.transaction(async (tx) => {
-      await tx.update(verificationSessions).set({ verificationStatus: nextStatus, updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
-      if (!sameAddress) await tx.update(reminders).set({ status: 'CANCELLED' }).where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
+      await tx
+        .update(verificationSessions)
+        .set({ verificationStatus: nextStatus, updatedAt: timestamp })
+        .where(eq(verificationSessions.id, row.session.id));
+      if (!sameAddress)
+        await tx
+          .update(reminders)
+          .set({ status: 'CANCELLED' })
+          .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
       await tx.insert(auditLogs).values({
-        actorUserId: 'customer-token', actorName: 'Customer', action: sameAddress ? 'ADDRESS_CONFIRMED_CURRENT' : 'ADDRESS_CHANGE_STARTED',
-        entityType: 'VERIFICATION_SESSION', entityId: row.session.id,
+        actorUserId: 'customer-token',
+        actorName: 'Customer',
+        action: sameAddress ? 'ADDRESS_CONFIRMED_CURRENT' : 'ADDRESS_CHANGE_STARTED',
+        entityType: 'VERIFICATION_SESSION',
+        entityId: row.session.id,
         before: { status: row.session.verificationStatus, addressId: row.address.id },
-        after: { status: nextStatus, sameAddress }, timestamp,
+        after: { status: nextStatus, sameAddress },
+        timestamp,
       });
     });
     return { status: nextStatus, sameAddress };
@@ -321,9 +683,14 @@ export class VerificationService {
     const config = await this.validationConfig.get();
     if (!config.ENABLE_ADDRESS_EDIT) throw new DomainError('Address edit is disabled', 409);
     if (row.address.addressType === 'PROPOSED') {
-      throw new DomainError('The address can only be changed once. Please contact IRA Customer Service for further changes.', 409, 'ADDRESS_CHANGE_LIMIT_REACHED');
+      throw new DomainError(
+        'The address can only be changed once. Please contact IRA Customer Service for further changes.',
+        409,
+        'ADDRESS_CHANGE_LIMIT_REACHED',
+      );
     }
-    if (row.session.verificationStatus !== 'ADDRESS_EDITING') assertTransition(row.session.verificationStatus, 'ADDRESS_EDITING');
+    if (row.session.verificationStatus !== 'ADDRESS_EDITING')
+      assertTransition(row.session.verificationStatus, 'ADDRESS_EDITING');
     assertTransition('ADDRESS_EDITING', 'ADDRESS_PROPOSED');
     const houseNumber = input.houseNumber.trim();
     let geocode: GeocodingResult | null = null;
@@ -335,11 +702,73 @@ export class VerificationService {
     const timestamp = now();
     const addressId = randomUUID();
     await db.transaction(async (tx) => {
-      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'ADDRESS_CHANGE_STARTED', entityType: 'VERIFICATION_SESSION', entityId: row.session.id, before: { addressId: row.address.id, status: row.session.verificationStatus }, after: { status: 'ADDRESS_EDITING' }, timestamp });
-      await tx.update(customerAddresses).set({ addressStatus: 'SUPERSEDED', isActive: false, validTo: timestamp, updatedAt: timestamp }).where(and(eq(customerAddresses.customerId, row.customer.id), eq(customerAddresses.addressType, 'PROPOSED'), eq(customerAddresses.isActive, true)));
-      await tx.insert(customerAddresses).values({ ...input, houseNumber, id: addressId, customerId: row.customer.id, addressType: 'PROPOSED', addressStatus: 'PROPOSED', rawAddress: [input.street, `No. ${houseNumber}`, input.block && `Blok ${input.block}`, input.addressDetail, input.landmark && `Patokan: ${input.landmark}`, input.subdistrict, input.district, input.city, input.province, input.postalCode].filter(Boolean).join(', '), referenceLocation: geocode ? { latitude: geocode.latitude, longitude: geocode.longitude } : null, referenceSource: geocode ? 'GEOCODED' : 'CUSTOMER_PROPOSED', referencePrecision: geocode?.precision ?? 'UNKNOWN', referenceConfidence: geocode?.confidence.toFixed(3) ?? '0.000', geocodingProvider: geocode?.provider ?? null, providerPlaceId: geocode?.providerPlaceId ?? null, geocodedAt: geocode ? timestamp : null, isActive: true, isVerified: false, validFrom: timestamp, createdAt: timestamp, updatedAt: timestamp });
-      await tx.update(verificationSessions).set({ currentAddressId: addressId, verificationStatus: 'ADDRESS_PROPOSED', updatedAt: timestamp }).where(eq(verificationSessions.id, row.session.id));
-      await tx.insert(auditLogs).values({ actorUserId: 'customer-token', actorName: 'Customer', action: 'ADDRESS_PROPOSED', entityType: 'ADDRESS', entityId: addressId, after: { sessionId: row.session.id, status: 'PROPOSED' }, timestamp });
+      await tx.insert(auditLogs).values({
+        actorUserId: 'customer-token',
+        actorName: 'Customer',
+        action: 'ADDRESS_CHANGE_STARTED',
+        entityType: 'VERIFICATION_SESSION',
+        entityId: row.session.id,
+        before: { addressId: row.address.id, status: row.session.verificationStatus },
+        after: { status: 'ADDRESS_EDITING' },
+        timestamp,
+      });
+      await tx
+        .update(customerAddresses)
+        .set({ addressStatus: 'SUPERSEDED', isActive: false, validTo: timestamp, updatedAt: timestamp })
+        .where(
+          and(
+            eq(customerAddresses.customerId, row.customer.id),
+            eq(customerAddresses.addressType, 'PROPOSED'),
+            eq(customerAddresses.isActive, true),
+          ),
+        );
+      await tx.insert(customerAddresses).values({
+        ...input,
+        houseNumber,
+        id: addressId,
+        customerId: row.customer.id,
+        addressType: 'PROPOSED',
+        addressStatus: 'PROPOSED',
+        rawAddress: [
+          input.street,
+          `No. ${houseNumber}`,
+          input.block && `Blok ${input.block}`,
+          input.addressDetail,
+          input.landmark && `Patokan: ${input.landmark}`,
+          input.subdistrict,
+          input.district,
+          input.city,
+          input.province,
+          input.postalCode,
+        ]
+          .filter(Boolean)
+          .join(', '),
+        referenceLocation: geocode ? { latitude: geocode.latitude, longitude: geocode.longitude } : null,
+        referenceSource: geocode ? 'GEOCODED' : 'CUSTOMER_PROPOSED',
+        referencePrecision: geocode?.precision ?? 'UNKNOWN',
+        referenceConfidence: geocode?.confidence.toFixed(3) ?? '0.000',
+        geocodingProvider: geocode?.provider ?? null,
+        providerPlaceId: geocode?.providerPlaceId ?? null,
+        geocodedAt: geocode ? timestamp : null,
+        isActive: true,
+        isVerified: false,
+        validFrom: timestamp,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      await tx
+        .update(verificationSessions)
+        .set({ currentAddressId: addressId, verificationStatus: 'ADDRESS_PROPOSED', updatedAt: timestamp })
+        .where(eq(verificationSessions.id, row.session.id));
+      await tx.insert(auditLogs).values({
+        actorUserId: 'customer-token',
+        actorName: 'Customer',
+        action: 'ADDRESS_PROPOSED',
+        entityType: 'ADDRESS',
+        entityId: addressId,
+        after: { sessionId: row.session.id, status: 'PROPOSED' },
+        timestamp,
+      });
     });
     return { id: addressId, status: 'PROPOSED' };
   }

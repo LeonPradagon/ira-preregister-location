@@ -17,10 +17,13 @@ type NominatimResult = {
   address?: Record<string, string | undefined>;
 };
 
-const first = (...values: Array<string | undefined>): string => values.find((value) => Boolean(value?.trim()))?.trim() ?? '';
+const first = (...values: Array<string | undefined>): string =>
+  values.find((value) => Boolean(value?.trim()))?.trim() ?? '';
 
-const jakartaMunicipalityPattern = /^(?:kota administrasi\s+)?jakarta\s+(barat|pusat|selatan|timur|utara|kepulauan seribu)$/i;
-const isJakartaMunicipality = (value?: string): boolean => Boolean(value?.trim() && jakartaMunicipalityPattern.test(value.trim()));
+const jakartaMunicipalityPattern =
+  /^(?:kota administrasi\s+)?jakarta\s+(barat|pusat|selatan|timur|utara|kepulauan seribu)$/i;
+const isJakartaMunicipality = (value?: string): boolean =>
+  Boolean(value?.trim() && jakartaMunicipalityPattern.test(value.trim()));
 
 function precisionFor(result: NominatimResult): GeocodingResult['precision'] {
   const type = first(result.addresstype, result.type).toLowerCase();
@@ -34,7 +37,8 @@ function precisionFor(result: NominatimResult): GeocodingResult['precision'] {
 function mapResult(result: NominatimResult): GeocodingResult {
   const latitude = Number(result.lat);
   const longitude = Number(result.lon);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !result.display_name) throw new ServiceUnavailableException('OSM Nominatim returned an invalid result');
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !result.display_name)
+    throw new ServiceUnavailableException('OSM Nominatim returned an invalid result');
   const address = result.address ?? {};
   const precision = precisionFor(result);
   const importance = Number(result.importance);
@@ -44,8 +48,9 @@ function mapResult(result: NominatimResult): GeocodingResult {
   // In Jakarta Nominatim commonly returns the province in `city` and the
   // actual city/administrative municipality in `state_district`, `district`,
   // or `city_district`, depending on the mapped area.
-  const jakartaMunicipality = [address.state_district, address.district, address.city_district]
-    .find((value) => isJakartaMunicipality(value));
+  const jakartaMunicipality = [address.state_district, address.district, address.city_district].find((value) =>
+    isJakartaMunicipality(value),
+  );
   const province = first(address.state, address.province, jakartaAdministrativeCity ? city : undefined);
   const resolvedCity = first(jakartaAdministrativeCity ? jakartaMunicipality : undefined, city, address.state_district);
   const district = first(
@@ -76,17 +81,26 @@ function mapResult(result: NominatimResult): GeocodingResult {
 
 @Injectable()
 export class OsmGeocodingAdapter extends GeocodingPort implements OnModuleDestroy {
-  private readonly baseUrl = (process.env.OSM_NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org').replace(/\/$/, '');
+  private readonly baseUrl = (process.env.OSM_NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org').replace(
+    /\/$/,
+    '',
+  );
   private readonly userAgent = process.env.OSM_NOMINATIM_USER_AGENT || 'IRAPreregist/1.0';
   private readonly cacheTtlMs = Number(process.env.OSM_NOMINATIM_CACHE_TTL_MS ?? 300_000);
   private readonly cache = new Map<string, { expiresAt: number; value: GeocodingResult }>();
-  private readonly redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { lazyConnect: true, maxRetriesPerRequest: 1, enableOfflineQueue: false }).on('error', () => undefined);
+  private readonly redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+  }).on('error', () => undefined);
   private readonly distributedRateLimit = Number(process.env.GEOCODING_RATE_LIMIT_PER_SECOND ?? 1);
   private requestQueue = Promise.resolve();
   private nextRequestAt = 0;
 
   private normalizeCacheKey(path: string, params: Record<string, string>) {
-    const normalized = Object.fromEntries(Object.entries(params).map(([key, value]) => [key, value.trim().replace(/\s+/g, ' ').toLowerCase()]));
+    const normalized = Object.fromEntries(
+      Object.entries(params).map(([key, value]) => [key, value.trim().replace(/\s+/g, ' ').toLowerCase()]),
+    );
     return `${path}?${new URLSearchParams(normalized).toString()}`;
   }
 
@@ -94,12 +108,18 @@ export class OsmGeocodingAdapter extends GeocodingPort implements OnModuleDestro
     try {
       if (this.redis.status === 'wait') await this.redis.connect();
       const value = await this.redis.get(`geocode:${key}`);
-      return value ? JSON.parse(value) as GeocodingResult : null;
-    } catch { return null; }
+      return value ? (JSON.parse(value) as GeocodingResult) : null;
+    } catch {
+      return null;
+    }
   }
 
   private async sharedCacheSet(key: string, value: GeocodingResult) {
-    try { await this.redis.set(`geocode:${key}`, JSON.stringify(value), 'PX', this.cacheTtlMs); } catch { /* local cache remains available */ }
+    try {
+      await this.redis.set(`geocode:${key}`, JSON.stringify(value), 'PX', this.cacheTtlMs);
+    } catch {
+      /* local cache remains available */
+    }
   }
 
   private async acquireDistributedPermit() {
@@ -112,7 +132,9 @@ export class OsmGeocodingAdapter extends GeocodingPort implements OnModuleDestro
         if (count === 1) await this.redis.expire(key, 2);
         if (count <= this.distributedRateLimit) return;
         await new Promise((resolve) => setTimeout(resolve, 1000));
-      } catch { return; }
+      } catch {
+        return;
+      }
     }
   }
 
@@ -140,15 +162,20 @@ export class OsmGeocodingAdapter extends GeocodingPort implements OnModuleDestro
             ...(process.env.WEB_ORIGIN ? { Referer: process.env.WEB_ORIGIN } : {}),
           },
         });
-        if (!response.data || (Array.isArray(response.data) && response.data.length === 0)) throw new Error('OSM Nominatim returned no result');
+        if (!response.data || (Array.isArray(response.data) && response.data.length === 0))
+          throw new Error('OSM Nominatim returned no result');
         return response.data as NominatimResult | NominatimResult[];
       } catch (error) {
         if (error instanceof ServiceUnavailableException) throw error;
-        if (axios.isAxiosError(error) && error.response?.status === 429) throw new ServiceUnavailableException('OSM Nominatim rate limit reached');
+        if (axios.isAxiosError(error) && error.response?.status === 429)
+          throw new ServiceUnavailableException('OSM Nominatim rate limit reached');
         throw new ServiceUnavailableException(`OSM Nominatim unavailable: ${providerErrorMessage(error)}`);
       }
     });
-    this.requestQueue = task.then(() => undefined, () => undefined);
+    this.requestQueue = task.then(
+      () => undefined,
+      () => undefined,
+    );
     const result = await task;
     const mapped = Array.isArray(result) ? result[0] : result;
     const value = mapResult(mapped);
@@ -157,7 +184,9 @@ export class OsmGeocodingAdapter extends GeocodingPort implements OnModuleDestro
     return value;
   }
 
-  async onModuleDestroy() { await this.redis.quit().catch(() => undefined); }
+  async onModuleDestroy() {
+    await this.redis.quit().catch(() => undefined);
+  }
 
   async reverse(latitude: number, longitude: number): Promise<GeocodingResult> {
     return this.request('/reverse', {
@@ -180,7 +209,9 @@ export class OsmGeocodingAdapter extends GeocodingPort implements OnModuleDestro
       address.province,
       address.postalCode,
       'Indonesia',
-    ].filter(Boolean).join(', ');
+    ]
+      .filter(Boolean)
+      .join(', ');
     return this.request('/search', {
       q: query,
       format: 'jsonv2',

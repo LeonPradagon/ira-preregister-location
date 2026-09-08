@@ -1,231 +1,123 @@
 # IRA Preregist
 
-Monorepo untuk platform verifikasi lokasi customer berdasarkan PRD v0.6. Aplikasi ini mengirim link unik melalui WhatsApp Business, menerima bukti lokasi GPS dari customer, lalu memperbarui status verifikasi alamat berdasarkan hasil validasi backend.
+Monorepo verifikasi alamat dan lokasi customer. Admin mengimpor data, mengirim link WhatsApp lewat campaign, lalu customer mengonfirmasi alamat dan mengirim sampel GPS. Backend menyimpan hasil validasi, reminder, audit, dan pekerjaan asynchronous.
 
-Struktur utama:
-
-- `app/web`: React/Vite UI API-only untuk Admin dan customer `/v/:token`.
-- `app/server`: NestJS API, Better Auth, Drizzle/PostgreSQL/PostGIS, state machine, validation engine, outbox, dan worker BullMQ.
-- `packages`: reserved untuk shared contracts/adapters lintas aplikasi.
-
-## Tech stack dan arsitektur
-
-- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, Leaflet, dan Lucide React. UI bersifat API-only; halaman customer tersedia di `/v/:token`.
-- **Backend:** Node.js 22, NestJS 11, Zod, Better Auth, RBAC, serta correlation ID.
-- **Database:** PostgreSQL 16 + PostGIS melalui Drizzle ORM untuk customer, alamat, koordinat, sesi, reminder, campaign, audit, dan outbox.
-- **Asynchronous processing:** Redis 7 + BullMQ untuk campaign blast, reminder, rate limit, retry, idempotency, dan worker terpisah.
-- **Security:** bcrypt untuk password dan secret token, opaque token `tokenId.secret`, secure cookie, CORS, serta sanitasi session/log.
-- **Integrasi:** adapter HTTP WhatsApp Business dan geocoding. Adapter disabled digunakan bila provider production belum dikonfigurasi.
-- **Deployment:** Docker Compose untuk backend/worker/database/Redis dan Nginx untuk static frontend.
-
-Alur teknis singkat:
+Struktur aplikasi tetap:
 
 ```text
-Browser Admin/Customer -> NestJS API (/v) -> PostgreSQL/PostGIS
-                                      \-> Redis/BullMQ -> Worker -> WhatsApp Business
-                                      \-> Geocoding provider dan integration outbox
+app/
+  web/       React, Vite, Tailwind CSS, Leaflet
+  server/    NestJS, Better Auth, Drizzle, PostgreSQL/PostGIS, BullMQ
+packages/    Ruang untuk shared package jika diperlukan
+scripts/     Utilitas development dan laporan
+deploy/     Konfigurasi Nginx dan opsi deployment terpisah
 ```
 
-## Cara kerja aplikasi
+## Deploy dengan Docker Compose
 
-1. Admin mengimpor customer dan alamat master melalui Excel/CSV atau menambahkan satu customer melalui UI.
-2. Menu **Campaign Blast** mengambil kandidat secara server-side dengan filter alamat `UNVERIFIED`. Admin dapat memilih sebagian customer atau **Pilih semua eligible** tanpa mengirim jutaan ID ke browser/API.
-3. Campaign menyimpan filter dan materialisasi target dilakukan asynchronous oleh worker per batch (`CAMPAIGN_MATERIALIZATION_BATCH_SIZE`). Window default 7 hari tetap tunduk pada daily quota dan rate limit provider.
-4. Worker mengirim approved WhatsApp template dengan link unik. Raw token hanya dibuat saat link dikirim dan database hanya menyimpan token ID/hash.
-5. Customer membuka link, melihat konteks alamat yang dimasking, mengonfirmasi konteks data/alamat, memberi izin lokasi browser, lalu mengirim 3–5 sampel GPS.
-6. Backend memilih sampel dengan akurasi terbaik dan membandingkannya dengan koordinat/alamat referensi menggunakan aturan validasi. Jika valid, alamat diberi `isVerified=true` dan customer menjadi `VERIFIED`.
-7. Jika customer belum berada di rumah, customer memilih reminder. Jika alamat berubah, alamat baru disimpan sebagai `PROPOSED` dan wajib lolos verifikasi GPS sebelum alamat lama menjadi historis.
+Prasyarat: Docker Engine/Desktop dengan Linux containers dan Docker Compose 2.24 atau lebih baru. Node.js di host tidak diperlukan untuk deployment.
 
-Konfirmasi data/alamat dan izin GPS tetap diperlukan untuk validasi lokasi. Yang tidak lagi diminta oleh aplikasi adalah konfirmasi opt-in WhatsApp tambahan; customer tanpa `whatsappOptInAt` tetap eligible sesuai kebijakan bisnis, sedangkan opt-out aktif selalu memblokir pengiriman.
+1. Salin konfigurasi dari root repository:
 
-## Menjalankan
+   ```powershell
+   Copy-Item .env.example .env
+   ```
 
-Docker hanya menjalankan dependency dan worker. Frontend/API tetap dijalankan langsung dari host:
+   Linux/macOS: `cp .env.example .env`.
+
+2. Edit `.env`: isi `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET` (minimal 32 karakter acak), `SEED_ADMIN_EMAIL`, dan `SEED_ADMIN_PASSWORD`. Untuk password database gunakan karakter yang aman dalam URL, misalnya string hex acak, karena Compose menyusun `DATABASE_URL` dari nilai tersebut.
+
+   Untuk uji di komputer sendiri, URL contoh sudah memakai `http://localhost:8080`. Untuk server publik, ubah **keduanya**, `WEB_ORIGIN` dan `BETTER_AUTH_URL`, menjadi domain HTTPS aplikasi, misalnya `https://preregist.example.com`. Arahkan reverse proxy HTTPS ke `WEB_PORT` (default `8080`). Pertahankan `VITE_API_URL=/v1` agar browser memakai domain yang sama. GPS browser memerlukan HTTPS atau localhost.
+
+3. Jalankan seluruh stack:
+
+   ```bash
+   docker compose up --build -d
+   docker compose ps -a
+   ```
+
+Buka `http://localhost:8080` atau domain yang dikonfigurasi, lalu login dengan akun `SEED_ADMIN_*`. Tidak perlu menjalankan migration atau seed manual untuk instalasi baru.
+
+Compose menjalankan PostgreSQL/PostGIS, Redis, migration, bootstrap admin, API, API gateway, empat worker, dan web Nginx. API/worker menunggu migration dan bootstrap berhasil; `migrate` dan `seed` berstatus **Exited (0)** setelah selesai. Bootstrap hanya membuat admin yang belum ada, sehingga deploy ulang tidak mengganti password atau role akun yang sudah ada.
+
+| Akses | Default |
+| --- | --- |
+| Web dan API melalui satu origin | `http://localhost:8080`, `http://localhost:8080/v1/health` |
+| API gateway langsung, jika diperlukan | `http://localhost:3000/v1/health` |
+| PostgreSQL dan Redis | Hanya network internal Docker |
+
+Database, Redis, dan file import disimpan dalam named volume. `.env` tidak disalin ke image. `DATABASE_URL`, `DATABASE_SSL=false`, `REDIS_URL`, dan lokasi penyimpanan import diatur otomatis untuk service internal. Provider WhatsApp default `disabled`; aktifkan Mekari setelah credential, channel, dan template siap.
 
 ```bash
-npm install
+# Status, diagnosis, dan update aplikasi
+docker compose ps -a
+docker compose logs --tail=100 migrate seed api
+docker compose logs -f messaging-worker import-worker
+docker compose up --build -d
+
+# Berhenti tanpa menghapus data
+docker compose down
+```
+
+Jangan memakai `down -v` pada data yang masih diperlukan. Panduan backup, upgrade dari deployment lama, dan deployment frontend/backend terpisah ada di [deploy/README.md](deploy/README.md).
+
+## Development lokal
+
+Gunakan Node.js 22 dan npm dari **root repository**. Satu `package-lock.json` menjadi sumber versi dependency untuk web, server, dan Docker.
+
+```powershell
+npm ci
+Copy-Item app/server/.env.example app/server/.env
+Copy-Item app/web/.env.example app/web/.env
 npm run infra:up
 npm run db:migrate
 npm run db:seed
-npm run infra:worker
-```
-
-`npm run db:migrate` menjalankan migration SQL bernomor secara berurutan dan mencatatnya di tabel `app_migrations`. Migration `0001_wilayah_regions.sql` mengisi 91.599 kode wilayah dari [cahyadsn/wilayah](https://github.com/cahyadsn/wilayah), sedangkan `0002_wilayah_postal_codes.sql` mengisi 83.762 mapping kode pos dari [cahyadsn/wilayah_kodepos](https://github.com/cahyadsn/wilayah_kodepos). Data di-upsert berdasarkan kode sehingga aman untuk deploy ulang.
-
-Development Compose memakai PostgreSQL host port `5433` agar tidak bentrok dengan instalasi PostgreSQL Windows yang umum memakai `5432`. Ubah `$env:POSTGRES_PORT` dan `DATABASE_URL` di `app/server/.env` bersama-sama bila ingin memakai port lain.
-
-Perintah backend akan membuat `app/server/.env` dari `.env.example` jika file tersebut belum ada. Untuk mode production, isi secret dan endpoint provider sendiri; jangan memakai nilai lokal.
-
-Import batch preregistrasi XLSX dijalankan eksplisit setelah migration:
-
-```bash
-npm --workspace app/server run import:prereg -- /absolute/path/to/prereg_non_customer_part_001.xlsx
-```
-
-Importer memproses batch secara transaksional/idempoten dan streaming per baris, menormalisasi nomor ke E.164, menyimpan customer sebagai `PENDING_INSTALLATION`, tidak mengisi WhatsApp opt-in, dan menyimpan field BTS/coverage tambahan pada `source_metadata`. Upload web ditulis ke file sementara, bukan ditahan sebagai buffer API. Kode pos yang tidak ada di sumber memakai sentinel `00000`; koordinat sumber diberi precision konservatif `STREET` sampai ada metadata precision/provider.
-
-Import customer juga tersedia dari UI melalui menu **Pelanggan & Alamat → Import Excel / CSV**. Upload mendukung `.xlsx` dan `.csv` dengan header report yang sama (`id`, `full_name`, `effective_phone_number`, `effective_address`, `address_reference`, koordinat, wilayah, `created_at`, dan field BTS/coverage), maksimal 50 MB per file. Gunakan beberapa file batch untuk data besar; source ID yang sudah ada akan diperbarui secara idempotent. Import tidak mengubah WhatsApp opt-in.
-
-Akun seed lokal default: `admin@example.com` / `AdminLocalPassword123!`. Ganti dengan `SEED_ADMIN_EMAIL` dan `SEED_ADMIN_PASSWORD` sebelum menjalankan seed jika diperlukan. Seed hanya menyiapkan user login; customer/alamat demo tidak dibuat sehingga data asli dapat diimport terpisah.
-
-Terminal terpisah untuk aplikasi:
-
-```powershell
-# terminal backend
 npm run dev:server
-
-# terminal frontend
-npm run dev
 ```
 
-Worker dijalankan di Docker pada alur hybrid di atas. `npm run dev:worker` tetap tersedia jika ingin menjalankan worker langsung dari host untuk debugging.
+Jalankan `npm run dev` dan `npm run dev:worker` pada terminal terpisah. Frontend tersedia di `http://localhost:5173`, API di `http://localhost:3000`, PostgreSQL di `localhost:5433`, dan Redis di `localhost:6379`. Dengan `app/server/.env.example`, akun development default adalah `admin@surge.com` / `admin123`; ganti nilai `SEED_ADMIN_*` sebelum dipakai di lingkungan bersama.
 
-Untuk deployment, Compose dipisah agar lifecycle web dan backend dapat dirilis independen. Lihat [deploy/README.md](deploy/README.md), [docker-compose.backend.yml](deploy/docker-compose.backend.yml), dan [docker-compose.frontend.yml](deploy/docker-compose.frontend.yml).
+`docker-compose.dev.yml` menjalankan dependency lokal. `npm run infra:worker` tersedia jika worker ingin dijalankan di Docker; untuk upload asynchronous gunakan API dan worker dengan direktori `IMPORT_STORAGE_DIR` yang sama. Cara paling sederhana untuk debugging import lokal adalah menjalankan keduanya di host. Perintah backend membuat `.env` lokal dari contoh bila belum tersedia. Jangan menimpa `.env` yang sudah berisi konfigurasi Anda.
 
-Setelah backend hidup, smoke check PowerShell berikut memvalidasi database, migration, seed, worker, dan `/v1/health` (tidak menghapus volume database):
+Smoke check health dan login lokal: `./scripts/local-smoke.ps1`. Skrip menjalankan migration/seed lokal, sehingga gunakan hanya pada database development; skrip tidak mengirim undangan ke customer.
 
-```powershell
-./scripts/local-smoke.ps1
-```
-
-Jalankan `./scripts/local-smoke.ps1 -SkipApiCheck` bila hanya ingin memvalidasi database, migration, seed, dan worker sebelum API host dinyalakan.
-
-API tersedia di `http://localhost:3000`, web di `http://localhost:5173`, PostgreSQL di `localhost:5433`, dan Redis di `localhost:6379`.
-
-Link verifikasi menggunakan format opaque `tokenId.secret`. Database hanya menyimpan `tokenId` dan bcrypt hash dari secret; secret mentah hanya hidup saat link dibuat/dikirim. Atur `VERIFICATION_TOKEN_BCRYPT_ROUNDS` (default `12`) sesuai kapasitas worker.
-
-Login UI selalu menggunakan Better Auth melalui API. Gunakan akun seed `admin@example.com` dengan password `AdminLocalPassword123!` atau nilai `SEED_ADMIN_*` yang Anda tentukan sendiri.
-
-## Campaign blast
-
-Admin dapat membuat campaign dari customer belum terverifikasi melalui pilihan per halaman atau filter seluruh eligible. API tidak membuat satu transaksi besar: worker melakukan materialisasi target per `batchSize`, membuat token hanya saat item akan dikirim, lalu mengatur jadwal sepanjang `sendWindowDays`. Status item mencakup `PENDING`, `PROCESSING`, `SENT`, `DELIVERED`, `READ`, `FAILED`, `PROVIDER_UNAVAILABLE`, dan `OPTED_OUT`.
-
-Link reminder meminta customer mengonfirmasi apakah masih tinggal di alamat yang sama. Jika alamat berubah, alamat baru berstatus `PROPOSED` sampai lolos validasi GPS. Customer memilih satu tanggal dan jam; backend hanya menjadwalkan reminder berikutnya. Jika link tersebut tidak dibuka, worker menjadwalkan reminder berikutnya 2 hari kemudian pada jam yang sama sampai maksimal 3 kali. Jika link dibuka, reminder lanjutan dibatalkan dan customer dapat mencoba verifikasi atau memilih jadwal berikutnya bila masih belum berada di rumah. Pilihan cepat tetap tersedia sebagai 1 jam lagi, malam ini, atau besok pagi dan dijadwalkan backend memakai `REMINDER_TIMEZONE`. Setiap reminder yang berhasil dikirim membuat link baru; link sebelumnya langsung tidak berlaku. Link reminder berlaku maksimal `REMINDER_LINK_TTL_HOURS` (default 24 jam) atau sampai sesi berakhir, mana yang lebih dulu. Waktu reminder wajib dipilih sebelum sesi berakhir.
-
-## WhatsApp anti-spam guardrails
-
-Mode operasional saat ini menganggap customer hasil import eligible untuk campaign/reminder selama tidak memiliki opt-out aktif, sesuai keputusan bisnis bahwa dasar persetujuan sudah tersedia di luar aplikasi. Customer dapat berhenti melalui keyword `STOP`, `UNSUBSCRIBE`, `BERHENTI`, atau opt-out Admin; setelah itu seluruh campaign/reminder diblokir. Blast dan reminder dikirim sebagai approved template melalui adapter provider, bukan free-form text. Status `whatsappOptInAt` tetap disimpan bila tersedia sebagai metadata historis, tetapi bukan lagi syarat pengiriman.
-
-Default pacing dibuat konservatif: maksimal 2 pesan/detik, cooldown 60 menit per nomor, quota global 10.000 pesan per UTC day, dan circuit breaker membuka jeda 15 menit bila error provider mencapai 30% setelah minimal 50 percobaan. Nilai tersebut adalah guardrail internal, bukan jaminan bebas ban; sebelum produksi tetap perlu memastikan dasar hukum/persetujuan bisnis, template approval Meta, pilot bertahap, webhook delivery/quality monitoring, dan runbook pause. Provider `mekari` sengaja masuk mode disabled sampai adapter, endpoint, credential, template, dan kontrak webhook Qontak dikonfirmasi.
-
-## Deployment production langkah demi langkah
-
-Deployment production menggunakan dua Compose project agar frontend dan backend dapat dirilis terpisah.
-
-### 1. Siapkan server dan secret
-
-Prasyarat production:
-
-- Docker Engine dan Docker Compose.
-- Domain publik untuk frontend dan API.
-- HTTPS/TLS pada reverse proxy atau load balancer.
-- PostgreSQL/PostGIS dan Redis dengan backup, monitoring, dan network private.
-
-Salin konfigurasi deployment dan ganti semua nilai contoh:
-
-```powershell
-Copy-Item deploy/.env.example deploy/.env
-```
-
-Variabel paling penting:
-
-| Variabel | Kegunaan |
-| --- | --- |
-| `POSTGRES_*` | Database production dan password |
-| `BETTER_AUTH_SECRET` | Secret session admin, minimal 32 karakter random |
-| `BETTER_AUTH_URL` | URL API/backend yang digunakan Better Auth |
-| `WEB_ORIGIN` | Origin frontend yang diizinkan CORS dan cookie |
-| `VITE_API_URL` | URL API publik yang ditanam saat build frontend |
-| `WHATSAPP_*` | Provider, endpoint, API key, template, webhook, quota, pacing, dan circuit breaker WhatsApp Business |
-| `CAMPAIGN_*` | Ukuran materialisasi, batas batch, queue scan, dan window blast |
-| `GEOCODING_*` | Endpoint, API key, timeout, dan retry geocoding |
-
-Jangan gunakan password seed lokal di production dan jangan commit `deploy/.env`.
-
-### 2. Jalankan backend
-
-```powershell
-docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yml up --build -d
-docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yml ps
-```
-
-Service `migrate` harus selesai sukses sebelum API dan worker berjalan. Jalankan seed secara eksplisit setelah memeriksa credential:
-
-```powershell
-docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yml run --rm api node dist/db/seed.js
-```
-
-Uji health endpoint:
+## Maintenance kode
 
 ```bash
-curl https://api.example.com/v1/health
+npm run format        # Rapikan format kode
+npm run format:check  # Periksa format tanpa mengubah file
+npm run lint          # TypeScript, termasuk import/variabel tidak terpakai
+npm test              # Test frontend dan backend
+npm run build         # Build kedua aplikasi
 ```
 
-### 3. Jalankan frontend
+Kode UI berada di `app/web/src/components`, state/API di `context` dan `lib`. Backend memisahkan controller/service per modul di `app/server/src/modules`, provider di `integrations`, konfigurasi di `config`, dan database di `db`. Nama antrean BullMQ disatukan di `app/server/src/common/queue-names.ts` agar producer dan worker konsisten.
 
-`VITE_API_URL` harus berupa URL yang dapat diakses browser, bukan nama service Docker internal.
+Migration SQL bernomor dijalankan berurutan dan dicatat di `app_migrations`. Baseline aplikasi adalah `0000_core.sql`; metadata Drizzle tetap dipertahankan untuk `npm run db:generate`. Setelah generate, periksa SQL dan urutan nomor sebelum deploy. Jangan mengedit migration yang sudah diterapkan. Migration wilayah dan kode pos sudah dibundel sehingga instalasi tidak perlu mengunduh data wilayah.
 
-```powershell
-docker compose --env-file deploy/.env -f deploy/docker-compose.frontend.yml up --build -d
-```
+## Alur bisnis dan konfigurasi
 
-Frontend disajikan Nginx pada `WEB_PORT` (default `8080`). Gunakan reverse proxy untuk domain, HTTPS, security header, dan forwarding ke port tersebut. Pastikan `WEB_ORIGIN` identik dengan origin frontend publik.
+- **Customer dan alamat:** import `.xlsx`/`.csv` dari menu pelanggan, maksimal 50 MB/file. Import menormalisasi nomor ke E.164, meng-upsert source ID, dan menyimpan metadata BTS/coverage. Pekerjaan besar diproses import worker.
+- **Campaign:** pilih customer eligible atau filter seluruh customer; worker mematerialisasi target per batch dan mengirim sesuai jadwal. Batas UI 1–1.000 pesan per pengiriman, dengan kuota global provider tetap berlaku.
+- **Verifikasi:** link `/v/:token` berisi opaque token. Customer mengonfirmasi data, memberi izin lokasi, dan mengirim sampel GPS. Server menjalankan validation engine dan menentukan status; alamat baru berstatus `PROPOSED` sampai validasi selesai.
+- **Reminder:** customer memilih tanggal/jam. Worker mengikuti `REMINDER_TIMEZONE`, batas percobaan, dan masa berlaku link; link baru menggantikan link sebelumnya.
+- **Akses:** Better Auth dan role `SUPER_ADMIN`, `ADMIN`, `REVIEWER`, `VIEWER`. Pengelolaan pengguna tersedia bagi super admin.
 
-### 4. Checklist setelah deploy
+Aturan lokasi tersedia di Validation Settings dan environment: `GPS_MAX_ACCURACY_METERS`, `HOME_RADIUS_METERS`, `STREET_MATCH_THRESHOLD`, `ADDRESS_SCORE_THRESHOLD`, dan `ENABLE_AUTO_APPROVAL`. Persetujuan otomatis memerlukan konfirmasi data dan skor alamat minimal 90%; hasil yang belum memenuhi syarat ditahan untuk pemeriksaan.
 
-- `GET /v1/health` mengembalikan status sehat.
-- API dapat terhubung ke PostgreSQL/PostGIS dan Redis.
-- Worker terlihat aktif dan queue tidak menumpuk.
-- Login admin berhasil dengan akun production.
-- Import satu file kecil berhasil dan idempotent.
-- Geocoding dan WhatsApp provider sudah memiliki credential, template, quota, dan webhook yang benar.
-- Campaign kecil/pilot sudah diuji sebelum menaikkan volume.
-- PostgreSQL backup dan alert provider sudah aktif.
+Untuk Mekari/Qontak, isi `WHATSAPP_PROVIDER=mekari`, `WHATSAPP_BASE_URL`, credential HMAC, channel integration ID, dan template ID undangan/reminder. Nama serta parameter template harus sesuai konfigurasi Qontak yang sudah disetujui. Webhook delivery: `POST /v1/webhooks/whatsapp/status` dengan secret webhook. Opt-out aktif selalu memblokir pengiriman. Metadata opt-in yang tersedia tetap disimpan; aplikasi tidak meminta konfirmasi opt-in WhatsApp tambahan.
 
-Detail file deployment tersedia di [deploy/README.md](deploy/README.md). Jangan expose port database/Redis ke internet tanpa firewall dan private network.
+Geocoding memakai provider HTTP atau fallback Nominatim sesuai `GEOCODING_*` dan `OSM_NOMINATIM_*`. Atur user agent dengan kontak operator. Provider production yang belum dikonfigurasi tidak menghasilkan pengiriman atau koordinat palsu.
 
-## Konfigurasi alur dan provider
+## Endpoint dan referensi
 
-Nilai validasi lokasi dapat diubah dari **Validation Settings** atau environment/backend config, termasuk `GPS_MAX_ACCURACY_METERS`, `HOME_RADIUS_METERS`, `STREET_MATCH_THRESHOLD`, `ADDRESS_SCORE_THRESHOLD`, `AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD`, `ENABLE_AUTO_APPROVAL`, `MAX_LOCATION_ATTEMPTS`, dan `MAX_REMINDERS_PER_SESSION`. Saat `ENABLE_AUTO_APPROVAL=true`, hasil hanya disetujui otomatis jika customer sudah mengonfirmasi datanya dan skor alamat minimal 90%; jika tidak memenuhi syarat, hasil ditahan untuk pemeriksaan tim sebagai pengaman. `ENABLE_MANUAL_REVIEW` tetap dipertahankan untuk kompatibilitas konfigurasi lama.
+Semua endpoint menggunakan prefix `/v1`:
 
-WhatsApp menggunakan template, bukan free-form message. Provider default `disabled`. Untuk adapter HTTP generic/Meta, isi `WHATSAPP_PROVIDER`, `WHATSAPP_BASE_URL`, `WHATSAPP_API_KEY`, `WHATSAPP_TEMPLATE_NAME`, dan `WHATSAPP_TEMPLATE_LANGUAGE`. `WHATSAPP_PROVIDER=mekari` belum mengaktifkan pengiriman sebelum kontrak API Mekari/Qontak tersedia. Tanpa konfigurasi provider valid di production, adapter disabled mengembalikan kegagalan aman dan item campaign menjadi `PROVIDER_UNAVAILABLE`, bukan sukses. Status delivery diterima melalui `POST /v1/webhooks/whatsapp/status` dengan secret webhook.
+- Health: `/health`, `/health/live`, `/health/ready`.
+- Auth: `/api/auth/*`.
+- Admin: `/admin/customers`, `/admin/import-jobs`, `/admin/campaigns`, `/admin/verifications`, `/admin/reminders`, `/admin/users`, `/admin/audit-logs`.
+- Customer: `/public/verifications/:token`, beserta `/customer-confirmation`, `/consent`, `/location`, `/address-status`, `/address-change`, `/wait-for-home`.
 
-Geocoding menggunakan `GEOCODING_BASE_URL` dan optional `GEOCODING_API_KEY`, dengan timeout/retry yang dapat diatur. Tanpa provider nyata, proses yang membutuhkan geocoding mengembalikan error provider secara eksplisit; sistem tidak memalsukan koordinat.
+Importer CLI: `npm --workspace app/server run import:prereg -- /path/to/file.xlsx`.
 
-## Endpoint utama
-
-Semua endpoint menggunakan prefix `/v1`.
-
-Public customer:
-
-- `GET /public/verifications/:token` — membuka link dan mengambil konteks masked.
-- `POST /public/verifications/:token/customer-confirmation` — konfirmasi konteks data/alamat.
-- `POST /public/verifications/:token/consent` — izin lokasi browser.
-- `POST /public/verifications/:token/location` — mengirim sampel GPS.
-- `POST /public/verifications/:token/address-status` — status alamat sama/berubah.
-- `POST /public/verifications/:token/address-change` — menyimpan alamat proposed.
-- `POST /public/verifications/:token/wait-for-home` — menjadwalkan reminder.
-
-Admin:
-
-- `GET /admin/dashboard` dan `GET /admin/customers`.
-- `POST /admin/customers/import` dan `GET /admin/customers/:id`.
-- `GET/POST /admin/campaigns` dan `POST /admin/campaigns/:id/start`; POST dapat memakai `customerIds` atau `targetFilter` (`locationStatus`, `status`, `search`).
-- `GET /admin/campaigns/:id` serta `/items` dengan pagination.
-- `GET /admin/verifications`, `/reminders`, `/audit-logs`, dan `/outbox`.
-- `POST /admin/verifications/:id/resend`, `/revoke`, `/reminders`, dan `/review`.
-
-Endpoint customer mendukung pagination, pencarian, status customer, `locationStatus=UNVERIFIED|VERIFIED`, dan cursor UUID untuk pembacaan keyset. Campaign memakai keyset saat materialisasi sehingga browser tidak memuat seluruh data sekaligus.
-
-Perintah verifikasi seluruh workspace:
-
-```bash
-npm run lint
-npm test
-npm run build
-```
-
-Frontend tidak memiliki simulator, mock business data, fallback password, atau business state di `localStorage`; `localStorage` hanya digunakan untuk preferensi tema. Backend tidak memalsukan provider eksternal: geocoding mengembalikan `503` sampai adapter nyata dikonfigurasi, sedangkan WhatsApp console hanya tersedia untuk development/test dan provider yang belum dikonfigurasi gagal aman di production.
-
-Lihat [PRD_COMPLIANCE.md](PRD_COMPLIANCE.md) untuk matriks requirement dan gap yang tersisa.
-Lihat [IMPLEMENTATION_TASKS.md](IMPLEMENTATION_TASKS.md) untuk task tracker P0/P1/P2 dan progress implementasi.
+Lihat [PRD](PRD_IRA_Preregist_v0.6.md), [PRD_COMPLIANCE.md](PRD_COMPLIANCE.md), dan [IMPLEMENTATION_TASKS.md](IMPLEMENTATION_TASKS.md) untuk requirement dan pekerjaan lanjutan. Dokumen PRD adalah referensi rancangan; perintah deployment aktif mengikuti README ini.

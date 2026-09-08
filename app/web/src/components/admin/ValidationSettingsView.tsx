@@ -87,7 +87,11 @@ export const ValidationSettingsView: React.FC = () => {
           className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors ${enabled ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400'}`}
         >
           <span>{enabled ? t('settings.enabled') : t('settings.disabled')}</span>
-          {enabled ? <ToggleRight className="h-8 w-8 text-indigo-600 dark:text-indigo-400" /> : <ToggleLeft className="h-8 w-8 text-gray-400 dark:text-gray-600" />}
+          {enabled ? (
+            <ToggleRight className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+          ) : (
+            <ToggleLeft className="h-8 w-8 text-gray-400 dark:text-gray-600" />
+          )}
         </button>
       </div>
     );
@@ -126,15 +130,15 @@ export const ValidationSettingsView: React.FC = () => {
             <Settings className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             <span>{t('settings.title')}</span>
           </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            {t('settings.pageIntro')}
-          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.pageIntro')}</p>
         </div>
 
         {!canEditSettings && (
           <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 rounded-lg text-xs font-medium">
             <Lock className="w-3.5 h-3.5" />
-            <span>{t('settings.readOnly')} ({currentAdmin?.role})</span>
+            <span>
+              {t('settings.readOnly')} ({currentAdmin?.role})
+            </span>
           </div>
         )}
       </div>
@@ -145,14 +149,61 @@ export const ValidationSettingsView: React.FC = () => {
           <span>{t('settings.saved')}</span>
         </div>
       )}
-      {saveError && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-medium text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300">{saveError}</div>}
+      {saveError && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-medium text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300">
+          {saveError}
+        </div>
+      )}
 
       <section className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/20">
-        <div className="flex items-start gap-2 text-indigo-950 dark:text-indigo-100"><Info className="mt-0.5 h-4 w-4 shrink-0" /><div><h2 className="text-sm font-semibold">{t('settings.quickSummaryTitle')}</h2><p className="mt-1 text-xs leading-relaxed text-indigo-800 dark:text-indigo-200">{t('settings.quickSummaryText')}</p></div></div>
+        <div className="flex items-start gap-2 text-indigo-950 dark:text-indigo-100">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <h2 className="text-sm font-semibold">{t('settings.quickSummaryTitle')}</h2>
+            <p className="mt-1 text-xs leading-relaxed text-indigo-800 dark:text-indigo-200">
+              {t('settings.quickSummaryText')}
+            </p>
+          </div>
+        </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/80 dark:bg-gray-900/50"><div className="flex items-center gap-2 text-xs font-semibold text-indigo-800 dark:text-indigo-200"><CheckCircle2 className="h-4 w-4" />{t('settings.autoApprovalSummary')}</div><p className="mt-1 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">{t('settings.autoApprovalSummaryText')}</p><span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${formData.ENABLE_AUTO_APPROVAL ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}>{formData.ENABLE_AUTO_APPROVAL ? t('settings.enabled') : t('settings.disabled')}</span></div>
-          <div className="rounded-xl border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/80 dark:bg-gray-900/50"><div className="flex items-center gap-2 text-xs font-semibold text-indigo-800 dark:text-indigo-200"><Shield className="h-4 w-4" />{t('settings.teamReviewSummary')}</div><p className="mt-1 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">{t('settings.teamReviewSummaryText')}</p><span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">{t('settings.enabled')}</span></div>
-          <div className="rounded-xl border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/80 dark:bg-gray-900/50"><div className="flex items-center gap-2 text-xs font-semibold text-indigo-800 dark:text-indigo-200"><Bell className="h-4 w-4" />{t('settings.reminderSummary')}</div><p className="mt-1 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">{t('settings.reminderSummaryText', { count: formData.MAX_REMINDERS_PER_SESSION })}</p><span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">{formData.MAX_REMINDERS_PER_SESSION} {t('settings.maxReminders')}</span></div>
+          <div className="rounded-xl border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/80 dark:bg-gray-900/50">
+            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-800 dark:text-indigo-200">
+              <CheckCircle2 className="h-4 w-4" />
+              {t('settings.autoApprovalSummary')}
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">
+              {t('settings.autoApprovalSummaryText')}
+            </p>
+            <span
+              className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${formData.ENABLE_AUTO_APPROVAL ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}`}
+            >
+              {formData.ENABLE_AUTO_APPROVAL ? t('settings.enabled') : t('settings.disabled')}
+            </span>
+          </div>
+          <div className="rounded-xl border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/80 dark:bg-gray-900/50">
+            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-800 dark:text-indigo-200">
+              <Shield className="h-4 w-4" />
+              {t('settings.teamReviewSummary')}
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">
+              {t('settings.teamReviewSummaryText')}
+            </p>
+            <span className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+              {t('settings.enabled')}
+            </span>
+          </div>
+          <div className="rounded-xl border border-indigo-100 bg-white/80 p-3 dark:border-indigo-900/80 dark:bg-gray-900/50">
+            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-800 dark:text-indigo-200">
+              <Bell className="h-4 w-4" />
+              {t('settings.reminderSummary')}
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">
+              {t('settings.reminderSummaryText', { count: formData.MAX_REMINDERS_PER_SESSION })}
+            </p>
+            <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              {formData.MAX_REMINDERS_PER_SESSION} {t('settings.maxReminders')}
+            </span>
+          </div>
         </div>
       </section>
 
@@ -182,9 +233,7 @@ export const ValidationSettingsView: React.FC = () => {
                 />
                 <span className="text-gray-500 dark:text-gray-400">meter</span>
               </div>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
-                {t('settings.gpsAccuracyHelp')}
-              </p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.gpsAccuracyHelp')}</p>
             </div>
 
             <div>
@@ -203,9 +252,7 @@ export const ValidationSettingsView: React.FC = () => {
                 />
                 <span className="text-gray-500 dark:text-gray-400">meter</span>
               </div>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
-                {t('settings.homeRadiusHelp')}
-              </p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.homeRadiusHelp')}</p>
             </div>
 
             <div>
@@ -225,9 +272,7 @@ export const ValidationSettingsView: React.FC = () => {
                 />
                 <span className="text-gray-500 dark:text-gray-400">ratio (0.0 - 1.0)</span>
               </div>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
-                {t('settings.streetMatchHelp')}
-              </p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.streetMatchHelp')}</p>
             </div>
 
             <div>
@@ -247,9 +292,7 @@ export const ValidationSettingsView: React.FC = () => {
                 />
                 <span className="text-gray-500 dark:text-gray-400">ratio (0.0 - 1.0)</span>
               </div>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
-                {t('settings.addressScoreHelp')}
-              </p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.addressScoreHelp')}</p>
             </div>
 
             <div>
@@ -264,14 +307,14 @@ export const ValidationSettingsView: React.FC = () => {
                   max="1.0"
                   disabled={!canEditSettings}
                   value={formData.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD}
-                  onChange={(e) => handleChangeNumber('AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD', parseFloat(e.target.value) || 0.9)}
+                  onChange={(e) =>
+                    handleChangeNumber('AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD', parseFloat(e.target.value) || 0.9)
+                  }
                   className="w-32 p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
                 />
                 <span className="text-gray-500 dark:text-gray-400">ratio (min. 0.90)</span>
               </div>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
-                {t('settings.autoApprovalScoreHelp')}
-              </p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.autoApprovalScoreHelp')}</p>
             </div>
           </div>
         </div>
@@ -346,7 +389,9 @@ export const ValidationSettingsView: React.FC = () => {
                 onChange={(e) => handleChangeNumber('REMINDER_LINK_TTL_HOURS', parseInt(e.target.value) || 24)}
                 className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
               />
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.reminderLinkLifetimeHelp')}</p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                {t('settings.reminderLinkLifetimeHelp')}
+              </p>
             </div>
           </div>
         </div>
@@ -362,8 +407,12 @@ export const ValidationSettingsView: React.FC = () => {
           <div className="space-y-4 pt-1">
             <div className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/60 p-3.5 dark:border-indigo-900 dark:bg-indigo-950/20">
               <div>
-                <h3 className="text-xs font-semibold text-indigo-950 dark:text-indigo-100">{t('settings.approvalRulesTitle')}</h3>
-                <p className="mt-1 break-words text-[11px] leading-relaxed text-indigo-800 dark:text-indigo-200">{t('settings.approvalRulesDescription')}</p>
+                <h3 className="text-xs font-semibold text-indigo-950 dark:text-indigo-100">
+                  {t('settings.approvalRulesTitle')}
+                </h3>
+                <p className="mt-1 break-words text-[11px] leading-relaxed text-indigo-800 dark:text-indigo-200">
+                  {t('settings.approvalRulesDescription')}
+                </p>
               </div>
               <div className="space-y-2">{renderToggle(approvalToggleItem, handleAutomaticApprovalToggle)}</div>
               <div className="space-y-1 rounded-lg bg-white/80 p-3 text-[11px] leading-relaxed text-indigo-900 dark:bg-gray-900/40 dark:text-indigo-100">

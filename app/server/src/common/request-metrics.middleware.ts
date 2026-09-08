@@ -2,7 +2,8 @@ import { Injectable, type NestMiddleware } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 import { MetricsService } from './metrics.service.js';
 
-const normalizePath = (path: string) => path.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':id').replace(/\/\d+(?=\/|$)/g, '/:id');
+const normalizePath = (path: string) =>
+  path.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':id').replace(/\/\d+(?=\/|$)/g, '/:id');
 
 @Injectable()
 export class RequestMetricsMiddleware implements NestMiddleware {

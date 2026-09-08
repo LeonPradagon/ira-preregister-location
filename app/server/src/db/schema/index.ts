@@ -34,6 +34,7 @@ export const authUsers = pgTable('user', {
   image: text('image'),
   role: varchar('role', { length: 32 }).default('VIEWER').notNull(),
   department: text('department'),
+  disabledAt: timestamp('disabled_at', { withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -46,7 +47,9 @@ export const authSessions = pgTable('session', {
   updatedAt: updatedAt(),
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
-  userId: text('user_id').notNull().references(() => authUsers.id, { onDelete: 'cascade' }),
+  userId: text('user_id')
+    .notNull()
+    .references(() => authUsers.id, { onDelete: 'cascade' }),
 });
 
 export const authAccounts = pgTable('account', {
@@ -54,7 +57,9 @@ export const authAccounts = pgTable('account', {
   accountId: text('account_id').notNull(),
   providerId: text('provider_id').notNull(),
   issuer: text('issuer').notNull().default('local:credential'),
-  userId: text('user_id').notNull().references(() => authUsers.id, { onDelete: 'cascade' }),
+  userId: text('user_id')
+    .notNull()
+    .references(() => authUsers.id, { onDelete: 'cascade' }),
   accessToken: text('access_token'),
   refreshToken: text('refresh_token'),
   idToken: text('id_token'),
@@ -108,7 +113,9 @@ export const regionPostalCodes = pgTable('region_postal_codes', {
 
 export const customerAddresses = pgTable('customer_addresses', {
   id: id(),
-  customerId: uuid('customer_id').notNull().references(() => customers.id),
+  customerId: uuid('customer_id')
+    .notNull()
+    .references(() => customers.id),
   addressType: varchar('address_type', { length: 32 }).notNull(),
   addressStatus: varchar('address_status', { length: 32 }).notNull(),
   rawAddress: text('raw_address').notNull(),
@@ -154,11 +161,14 @@ export const verificationCampaigns = pgTable('verification_campaigns', {
   optedOutCount: integer('opted_out_count').notNull().default(0),
   targetFilter: jsonb('target_filter'),
   batchSize: integer('batch_size').notNull().default(1000),
+  dailySendLimit: integer('daily_send_limit').notNull().default(500),
   sendWindowDays: integer('send_window_days').notNull().default(7),
   materializationCursor: text('materialization_cursor'),
   materializationComplete: boolean('materialization_complete').notNull().default(true),
   materializedCount: integer('materialized_count').notNull().default(0),
-  createdBy: text('created_by').notNull().references(() => authUsers.id),
+  createdBy: text('created_by')
+    .notNull()
+    .references(() => authUsers.id),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -166,8 +176,12 @@ export const verificationCampaigns = pgTable('verification_campaigns', {
 export const verificationSessions = pgTable('verification_sessions', {
   id: id(),
   campaignId: uuid('campaign_id').references(() => verificationCampaigns.id),
-  customerId: uuid('customer_id').notNull().references(() => customers.id),
-  currentAddressId: uuid('current_address_id').notNull().references(() => customerAddresses.id),
+  customerId: uuid('customer_id')
+    .notNull()
+    .references(() => customers.id),
+  currentAddressId: uuid('current_address_id')
+    .notNull()
+    .references(() => customerAddresses.id),
   tokenId: varchar('token_id', { length: 64 }).unique(),
   tokenHash: varchar('token_hash', { length: 128 }).unique(),
   verificationMode: varchar('verification_mode', { length: 16 }).notNull().default('LIVE'),
@@ -189,7 +203,9 @@ export const verificationSessions = pgTable('verification_sessions', {
 
 export const locationCaptures = pgTable('location_captures', {
   id: id(),
-  sessionId: uuid('session_id').notNull().references(() => verificationSessions.id),
+  sessionId: uuid('session_id')
+    .notNull()
+    .references(() => verificationSessions.id),
   location: geographyPoint('location').notNull(),
   latitude: numeric('latitude', { precision: 10, scale: 7 }).notNull(),
   longitude: numeric('longitude', { precision: 10, scale: 7 }).notNull(),
@@ -205,9 +221,15 @@ export const locationCaptures = pgTable('location_captures', {
 
 export const validationResults = pgTable('validation_results', {
   id: id(),
-  sessionId: uuid('session_id').notNull().references(() => verificationSessions.id),
-  captureId: uuid('capture_id').notNull().references(() => locationCaptures.id),
-  addressId: uuid('address_id').notNull().references(() => customerAddresses.id),
+  sessionId: uuid('session_id')
+    .notNull()
+    .references(() => verificationSessions.id),
+  captureId: uuid('capture_id')
+    .notNull()
+    .references(() => locationCaptures.id),
+  addressId: uuid('address_id')
+    .notNull()
+    .references(() => customerAddresses.id),
   provinceMatch: boolean('province_match').notNull(),
   cityMatch: boolean('city_match').notNull(),
   districtMatch: boolean('district_match').notNull(),
@@ -232,8 +254,12 @@ export const validationResults = pgTable('validation_results', {
 
 export const verificationReviews = pgTable('verification_reviews', {
   id: id(),
-  sessionId: uuid('session_id').notNull().references(() => verificationSessions.id),
-  reviewerUserId: text('reviewer_user_id').notNull().references(() => authUsers.id),
+  sessionId: uuid('session_id')
+    .notNull()
+    .references(() => verificationSessions.id),
+  reviewerUserId: text('reviewer_user_id')
+    .notNull()
+    .references(() => authUsers.id),
   decision: varchar('decision', { length: 48 }).notNull(),
   reasonCode: varchar('reason_code', { length: 128 }).notNull(),
   reviewNote: text('review_note').notNull(),
@@ -246,7 +272,9 @@ export const verificationReviews = pgTable('verification_reviews', {
 
 export const reminders = pgTable('reminders', {
   id: id(),
-  sessionId: uuid('session_id').notNull().references(() => verificationSessions.id),
+  sessionId: uuid('session_id')
+    .notNull()
+    .references(() => verificationSessions.id),
   reminderNumber: integer('reminder_number').notNull(),
   channel: varchar('channel', { length: 32 }).notNull().default('WHATSAPP'),
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
@@ -264,10 +292,18 @@ export const reminders = pgTable('reminders', {
 
 export const verificationCampaignItems = pgTable('verification_campaign_items', {
   id: id(),
-  campaignId: uuid('campaign_id').notNull().references(() => verificationCampaigns.id, { onDelete: 'cascade' }),
-  customerId: uuid('customer_id').notNull().references(() => customers.id),
-  addressId: uuid('address_id').notNull().references(() => customerAddresses.id),
-  sessionId: uuid('session_id').notNull().references(() => verificationSessions.id),
+  campaignId: uuid('campaign_id')
+    .notNull()
+    .references(() => verificationCampaigns.id, { onDelete: 'cascade' }),
+  customerId: uuid('customer_id')
+    .notNull()
+    .references(() => customers.id),
+  addressId: uuid('address_id')
+    .notNull()
+    .references(() => customerAddresses.id),
+  sessionId: uuid('session_id')
+    .notNull()
+    .references(() => verificationSessions.id),
   status: varchar('status', { length: 32 }).notNull().default('PENDING'),
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
   sentAt: timestamp('sent_at', { withTimezone: true }),
@@ -360,7 +396,9 @@ export const importJobs = pgTable('import_jobs', {
   addressesInserted: integer('addresses_inserted').notNull().default(0),
   addressesUpdated: integer('addresses_updated').notNull().default(0),
   errorSummary: text('error_summary'),
-  createdBy: text('created_by').notNull().references(() => authUsers.id),
+  createdBy: text('created_by')
+    .notNull()
+    .references(() => authUsers.id),
   startedAt: timestamp('started_at', { withTimezone: true }),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   createdAt: createdAt(),
@@ -379,9 +417,15 @@ export const addressRelations = relations(customerAddresses, ({ one, many }) => 
 }));
 
 export const verificationRelations = relations(verificationSessions, ({ one, many }) => ({
-  campaign: one(verificationCampaigns, { fields: [verificationSessions.campaignId], references: [verificationCampaigns.id] }),
+  campaign: one(verificationCampaigns, {
+    fields: [verificationSessions.campaignId],
+    references: [verificationCampaigns.id],
+  }),
   customer: one(customers, { fields: [verificationSessions.customerId], references: [customers.id] }),
-  address: one(customerAddresses, { fields: [verificationSessions.currentAddressId], references: [customerAddresses.id] }),
+  address: one(customerAddresses, {
+    fields: [verificationSessions.currentAddressId],
+    references: [customerAddresses.id],
+  }),
   captures: many(locationCaptures),
   results: many(validationResults),
   reviews: many(verificationReviews),
@@ -395,10 +439,19 @@ export const campaignRelations = relations(verificationCampaigns, ({ one, many }
 }));
 
 export const campaignItemRelations = relations(verificationCampaignItems, ({ one }) => ({
-  campaign: one(verificationCampaigns, { fields: [verificationCampaignItems.campaignId], references: [verificationCampaigns.id] }),
+  campaign: one(verificationCampaigns, {
+    fields: [verificationCampaignItems.campaignId],
+    references: [verificationCampaigns.id],
+  }),
   customer: one(customers, { fields: [verificationCampaignItems.customerId], references: [customers.id] }),
-  address: one(customerAddresses, { fields: [verificationCampaignItems.addressId], references: [customerAddresses.id] }),
-  session: one(verificationSessions, { fields: [verificationCampaignItems.sessionId], references: [verificationSessions.id] }),
+  address: one(customerAddresses, {
+    fields: [verificationCampaignItems.addressId],
+    references: [customerAddresses.id],
+  }),
+  session: one(verificationSessions, {
+    fields: [verificationCampaignItems.sessionId],
+    references: [verificationSessions.id],
+  }),
 }));
 
 export const authUserRelations = relations(authUsers, ({ many }) => ({

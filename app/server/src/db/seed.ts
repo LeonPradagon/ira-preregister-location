@@ -4,10 +4,15 @@ import { auth } from '../auth/auth.js';
 import { db, pool } from './client.js';
 import { authUsers } from './schema/index.js';
 
+const onlyIfMissing = process.argv.includes('--if-missing');
+if (process.env.NODE_ENV === 'production' && (!process.env.SEED_ADMIN_EMAIL || !process.env.SEED_ADMIN_PASSWORD)) {
+  throw new Error('SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are required in production');
+}
+
 const admins = [
   {
-    email: process.env.SEED_ADMIN_EMAIL ?? 'admin@example.com',
-    password: process.env.SEED_ADMIN_PASSWORD ?? 'AdminLocalPassword123!',
+    email: process.env.SEED_ADMIN_EMAIL ?? 'admin@surge.com',
+    password: process.env.SEED_ADMIN_PASSWORD ?? 'admin123',
     name: process.env.SEED_ADMIN_NAME ?? 'Local Super Admin',
   },
   {
@@ -29,17 +34,24 @@ const main = async () => {
 
   for (const adminConfig of admins) {
     let [admin] = await db.select().from(authUsers).where(eq(authUsers.email, adminConfig.email)).limit(1);
+    // Automatic deployment bootstrap must preserve existing roles and passwords.
+    if (admin && onlyIfMissing) continue;
     if (!admin) {
-      const result = await auth.api.signUpEmail({ body: {
-        name: adminConfig.name,
-        email: adminConfig.email,
-        password: adminConfig.password,
-      } });
+      const result = await auth.api.signUpEmail({
+        body: {
+          name: adminConfig.name,
+          email: adminConfig.email,
+          password: adminConfig.password,
+        },
+      });
       if (!result.user) throw new Error(`Better Auth did not return the seeded user for ${adminConfig.email}`);
       [admin] = await db.select().from(authUsers).where(eq(authUsers.id, result.user.id)).limit(1);
     }
     if (!admin) throw new Error(`Unable to load seeded admin ${adminConfig.email}`);
-    await db.update(authUsers).set({ role: 'SUPER_ADMIN', department: 'Operations', updatedAt: new Date() }).where(eq(authUsers.id, admin.id));
+    await db
+      .update(authUsers)
+      .set({ role: 'SUPER_ADMIN', department: 'Operations', updatedAt: new Date() })
+      .where(eq(authUsers.id, admin.id));
 
     // A failed/interrupted seed can leave the Better Auth user row without
     // its credential account. Repair it so the seed remains idempotent.
@@ -62,7 +74,9 @@ const main = async () => {
   console.info(JSON.stringify({ adminEmails: seededEmails, status: 'login-users-ready' }, null, 2));
 };
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-}).finally(() => pool.end());
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(() => pool.end());

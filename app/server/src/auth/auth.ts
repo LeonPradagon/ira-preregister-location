@@ -20,7 +20,10 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: [
     process.env.WEB_ORIGIN ?? 'http://localhost:5173',
-    ...(process.env.CORS_ORIGINS ?? '').split(',').map((origin) => origin.trim()).filter(Boolean),
+    ...(process.env.CORS_ORIGINS ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
   ],
   emailAndPassword: { enabled: true },
   session: {

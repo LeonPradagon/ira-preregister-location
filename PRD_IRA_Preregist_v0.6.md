@@ -1406,7 +1406,7 @@ Future modules tetap memakai ports/adapters, bukan masuk ke core validation.
 # 25. Suggested Monorepo Structure
 
 ```text
-exact-location/
+ira_preregist/
 │
 ├── apps/
 │   ├── web/
@@ -3074,7 +3074,7 @@ Dockerfile dibuat **per aplikasi**, sedangkan orchestration Docker Compose berad
 Struktur yang direkomendasikan:
 
 ```text
-exact-location/
+ira_preregist/
 │
 ├── app/
 │   ├── web/                         # Frontend
@@ -3275,7 +3275,7 @@ COPY . .
 ARG VITE_API_URL=http://localhost:3000
 ENV VITE_API_URL=${VITE_API_URL}
 
-RUN pnpm --filter @exact-location/web build
+RUN pnpm --filter @ira_preregist/web build
 
 FROM nginx:alpine AS runtime
 
@@ -3309,7 +3309,7 @@ RUN pnpm install --no-frozen-lockfile
 
 COPY . .
 
-RUN pnpm --filter @exact-location/server build
+RUN pnpm --filter @ira_preregist/server build
 
 FROM node:22-alpine AS runtime
 
@@ -3358,16 +3358,16 @@ Coverage IRA dan Ticketing **tidak dibuat sebagai service sekarang** karena kedu
 Recommended compose:
 
 ```yaml
-name: exact-location
+name: ira_preregist
 
 services:
   postgres:
     image: postgis/postgis:16-3.4
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-exact_location}
-      POSTGRES_USER: ${POSTGRES_USER:-exact_location}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-exact_location}
+      POSTGRES_DB: ${POSTGRES_DB:-ira_preregist}
+      POSTGRES_USER: ${POSTGRES_USER:-ira_preregist}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ira_preregist}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -3376,13 +3376,13 @@ services:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-exact_location} -d ${POSTGRES_DB:-exact_location}"
+          "pg_isready -U ${POSTGRES_USER:-ira_preregist} -d ${POSTGRES_DB:-ira_preregist}"
         ]
       interval: 5s
       timeout: 5s
       retries: 10
     networks:
-      - exact_location
+      - ira_preregist
 
   redis:
     image: redis:7-alpine
@@ -3398,7 +3398,7 @@ services:
       timeout: 3s
       retries: 10
     networks:
-      - exact_location
+      - ira_preregist
 
   server:
     build:
@@ -3408,7 +3408,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-exact_location}:${POSTGRES_PASSWORD:-exact_location}@postgres:5432/${POSTGRES_DB:-exact_location}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ira_preregist}:${POSTGRES_PASSWORD:-ira_preregist}@postgres:5432/${POSTGRES_DB:-ira_preregist}
       REDIS_URL: redis://redis:6379
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
@@ -3439,7 +3439,7 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - exact_location
+      - ira_preregist
 
   worker:
     build:
@@ -3449,7 +3449,7 @@ services:
     command: ["node", "dist/worker.js"]
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-exact_location}:${POSTGRES_PASSWORD:-exact_location}@postgres:5432/${POSTGRES_DB:-exact_location}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ira_preregist}:${POSTGRES_PASSWORD:-ira_preregist}@postgres:5432/${POSTGRES_DB:-ira_preregist}
       REDIS_URL: redis://redis:6379
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
 
@@ -3463,7 +3463,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - exact_location
+      - ira_preregist
 
   web:
     build:
@@ -3478,14 +3478,14 @@ services:
       server:
         condition: service_healthy
     networks:
-      - exact_location
+      - ira_preregist
 
 volumes:
   postgres_data:
   redis_data:
 
 networks:
-  exact_location:
+  ira_preregist:
     driver: bridge
 ```
 
@@ -3507,9 +3507,9 @@ BETTER_AUTH_URL=http://localhost:3000
 BETTER_AUTH_SECRET=replace-with-a-long-random-secret
 
 # PostgreSQL + PostGIS
-POSTGRES_DB=exact_location
-POSTGRES_USER=exact_location
-POSTGRES_PASSWORD=exact_location
+POSTGRES_DB=ira_preregist
+POSTGRES_USER=ira_preregist
+POSTGRES_PASSWORD=ira_preregist
 POSTGRES_PORT=5432
 
 # Redis
@@ -3545,7 +3545,7 @@ Contoh root script:
 
 ```json
 {
-  "name": "exact-location",
+  "name": "ira_preregist",
   "private": true,
   "scripts": {
     "dev": "turbo dev",
@@ -3555,8 +3555,8 @@ Contoh root script:
     "docker:up": "docker compose up --build -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
-    "db:generate": "pnpm --filter @exact-location/server db:generate",
-    "db:migrate": "pnpm --filter @exact-location/server db:migrate"
+    "db:generate": "pnpm --filter @ira_preregist/server db:generate",
+    "db:migrate": "pnpm --filter @ira_preregist/server db:migrate"
   }
 }
 ```

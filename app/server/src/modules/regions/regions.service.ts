@@ -19,16 +19,28 @@ export class RegionsService {
 
   private async listLocal(level: number, parentCode?: string): Promise<RegionOption[] | null> {
     try {
-      const regions = await db.select({ code: administrativeRegions.code, name: administrativeRegions.name })
+      const regions = await db
+        .select({ code: administrativeRegions.code, name: administrativeRegions.name })
         .from(administrativeRegions)
-        .where(parentCode ? and(eq(administrativeRegions.level, level), eq(administrativeRegions.parentCode, parentCode)) : and(eq(administrativeRegions.level, level), isNull(administrativeRegions.parentCode)))
+        .where(
+          parentCode
+            ? and(eq(administrativeRegions.level, level), eq(administrativeRegions.parentCode, parentCode))
+            : and(eq(administrativeRegions.level, level), isNull(administrativeRegions.parentCode)),
+        )
         .orderBy(administrativeRegions.name);
       if (!regions.length) return [];
-      const normalizedRegions = level === 1
-        ? regions.map((region) => ({ ...region, name: displayProvinceName(region.name) }))
-        : regions;
+      const normalizedRegions =
+        level === 1 ? regions.map((region) => ({ ...region, name: displayProvinceName(region.name) })) : regions;
       if (level !== 4) return normalizedRegions;
-      const postalRows = await db.select().from(regionPostalCodes).where(inArray(regionPostalCodes.regionCode, regions.map((region) => region.code)));
+      const postalRows = await db
+        .select()
+        .from(regionPostalCodes)
+        .where(
+          inArray(
+            regionPostalCodes.regionCode,
+            regions.map((region) => region.code),
+          ),
+        );
       const postalByCode = new Map(postalRows.map((row) => [row.regionCode, row.postalCode]));
       return normalizedRegions.map((region) => ({ ...region, postalCode: postalByCode.get(region.code) ?? null }));
     } catch {
@@ -47,11 +59,14 @@ export class RegionsService {
     try {
       const response = await fetch(`${this.baseUrl}/${path}?limit=1000`, { signal: AbortSignal.timeout(10000) });
       if (!response.ok) throw new Error(`Region provider returned ${response.status}`);
-      const payload = await response.json() as RegionPayload;
+      const payload = (await response.json()) as RegionPayload;
       const data = Array.isArray(payload.data)
         ? payload.data
-          .filter((item) => typeof item.code === 'string' && typeof item.name === 'string')
-          .map((item) => ({ code: item.code as string, name: level === 1 ? displayProvinceName(item.name as string) : item.name as string }))
+            .filter((item) => typeof item.code === 'string' && typeof item.name === 'string')
+            .map((item) => ({
+              code: item.code as string,
+              name: level === 1 ? displayProvinceName(item.name as string) : (item.name as string),
+            }))
         : [];
       this.cache.set(path, { expiresAt: Date.now() + 24 * 60 * 60 * 1000, data });
       return data;
@@ -60,8 +75,16 @@ export class RegionsService {
     }
   }
 
-  provinces() { return this.list('provinces', 1); }
-  regencies(provinceCode: string) { return this.list(`regencies/${encodeURIComponent(provinceCode)}`, 2, provinceCode); }
-  districts(regencyCode: string) { return this.list(`districts/${encodeURIComponent(regencyCode)}`, 3, regencyCode); }
-  villages(districtCode: string) { return this.list(`villages/${encodeURIComponent(districtCode)}`, 4, districtCode); }
+  provinces() {
+    return this.list('provinces', 1);
+  }
+  regencies(provinceCode: string) {
+    return this.list(`regencies/${encodeURIComponent(provinceCode)}`, 2, provinceCode);
+  }
+  districts(regencyCode: string) {
+    return this.list(`districts/${encodeURIComponent(regencyCode)}`, 3, regencyCode);
+  }
+  villages(districtCode: string) {
+    return this.list(`villages/${encodeURIComponent(districtCode)}`, 4, districtCode);
+  }
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildGoogleMapsDeepLink, calculateGeodesicDistanceMeters, evaluateBestGpsSample, formatAddressForDisplay, isValidCoordinate } from '../../src/lib/validationEngine';
+import {
+  buildGoogleMapsDeepLink,
+  calculateGeodesicDistanceMeters,
+  evaluateBestGpsSample,
+  formatAddressForDisplay,
+  isValidCoordinate,
+} from '../../src/lib/validationEngine';
 
 const samples = [
   { latitude: -6.233812, longitude: 106.809599, accuracyMeters: 12, capturedAt: '2026-08-29T04:25:00Z' },
@@ -27,7 +33,9 @@ describe('GPS evidence helpers', () => {
   });
 
   it('removes standalone and concatenated Plus Codes from displayed addresses', () => {
-    expect(formatAddressForDisplay('MJ42+JJP, Jl. Kp. Kandang, Mekarwangi, Kec. Cisauk')).toBe('Jl. Kp. Kandang, Mekarwangi, Kec. Cisauk');
+    expect(formatAddressForDisplay('MJ42+JJP, Jl. Kp. Kandang, Mekarwangi, Kec. Cisauk')).toBe(
+      'Jl. Kp. Kandang, Mekarwangi, Kec. Cisauk',
+    );
     expect(formatAddressForDisplay('WC35+H22Jl. Delik Sari, Pudakpayung')).toBe('Jl. Delik Sari, Pudakpayung');
   });
 });

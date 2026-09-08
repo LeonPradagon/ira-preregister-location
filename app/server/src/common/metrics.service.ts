@@ -24,11 +24,24 @@ export class MetricsService {
   snapshot() {
     return {
       counters: Object.fromEntries(this.counters),
-      observations: Object.fromEntries(Array.from(this.observations.entries()).map(([name, metric]) => {
-        const sorted = [...metric.samples].sort((a, b) => a - b);
-        const percentile = (rank: number) => sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * rank))] : 0;
-        return [name, { count: metric.count, sum: metric.sum, max: metric.max, p50: percentile(0.5), p95: percentile(0.95), p99: percentile(0.99) }];
-      })),
+      observations: Object.fromEntries(
+        Array.from(this.observations.entries()).map(([name, metric]) => {
+          const sorted = [...metric.samples].sort((a, b) => a - b);
+          const percentile = (rank: number) =>
+            sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * rank))] : 0;
+          return [
+            name,
+            {
+              count: metric.count,
+              sum: metric.sum,
+              max: metric.max,
+              p50: percentile(0.5),
+              p95: percentile(0.95),
+              p99: percentile(0.99),
+            },
+          ];
+        }),
+      ),
       generatedAt: new Date().toISOString(),
     };
   }

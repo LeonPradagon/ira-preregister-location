@@ -16,12 +16,14 @@ const main = async () => {
     .filter((fileName) => fileName === '0000_core.sql' || !fileName.startsWith('0000_'))
     .sort();
 
-  await db.execute(sql.raw(`
+  await db.execute(
+    sql.raw(`
     CREATE TABLE IF NOT EXISTS "app_migrations" (
       "filename" varchar(255) PRIMARY KEY NOT NULL,
       "applied_at" timestamptz NOT NULL DEFAULT now()
     )
-  `));
+  `),
+  );
 
   const appliedRows = await db.execute(sql.raw('SELECT "filename" FROM "app_migrations"'));
   const applied = new Set(appliedRows.rows.map((row) => String(row.filename)));
@@ -29,7 +31,10 @@ const main = async () => {
   for (const fileName of migrationFiles) {
     if (applied.has(fileName)) continue;
     const migration = await readFile(resolve(migrationsDir, fileName), 'utf8');
-    const statements = migration.split('-- statement-breakpoint').map((item) => item.trim()).filter(Boolean);
+    const statements = migration
+      .split('-- statement-breakpoint')
+      .map((item) => item.trim())
+      .filter(Boolean);
     if (migration.includes(noTransactionMarker)) {
       for (const statement of statements) await db.execute(sql.raw(statement));
       await db.execute(sql`INSERT INTO "app_migrations" ("filename") VALUES (${fileName})`);

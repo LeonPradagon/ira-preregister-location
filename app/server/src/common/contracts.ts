@@ -13,14 +13,16 @@ export const locationSamplesSchema = z.object({
 
 export const confirmationSchema = z.object({ confirmed: z.boolean() });
 
-export const reminderSchema = z.object({
-  reminderPreference: z.enum(['IN_1_HOUR', 'TONIGHT', 'TOMORROW_MORNING', 'DEFAULT']).optional(),
-  scheduledAt: z.string().datetime().optional(),
-  reminderUntilAt: z.string().datetime().optional(),
-}).refine((input) => Boolean(input.reminderPreference) !== Boolean(input.scheduledAt), {
-  message: 'Provide either reminderPreference or scheduledAt',
-  path: ['scheduledAt'],
-});
+export const reminderSchema = z
+  .object({
+    reminderPreference: z.enum(['IN_1_HOUR', 'TONIGHT', 'TOMORROW_MORNING', 'DEFAULT']).optional(),
+    scheduledAt: z.string().datetime().optional(),
+    reminderUntilAt: z.string().datetime().optional(),
+  })
+  .refine((input) => Boolean(input.reminderPreference) !== Boolean(input.scheduledAt), {
+    message: 'Provide either reminderPreference or scheduledAt',
+    path: ['scheduledAt'],
+  });
 
 export const addressStatusSchema = z.object({ sameAddress: z.boolean() });
 
@@ -30,27 +32,47 @@ export const campaignTargetFilterSchema = z.object({
   search: z.string().trim().max(128).default(''),
 });
 
-export const campaignCreateSchema = z.object({
-  name: z.string().trim().min(1).max(255),
-  customerIds: z.array(z.string().uuid()).min(1).max(10000).transform((ids) => [...new Set(ids)]).optional(),
-  targetFilter: campaignTargetFilterSchema.optional(),
-  batchSize: z.coerce.number().int().min(100).max(10000).optional(),
-  sendWindowDays: z.coerce.number().int().min(1).max(30).optional(),
-  scheduledAt: z.string().datetime().optional(),
-  timezone: z.string().trim().min(1).max(64).default('Asia/Jakarta'),
-}).refine((input) => Boolean(input.customerIds?.length) !== Boolean(input.targetFilter), {
-  message: 'Provide either customerIds or targetFilter',
-  path: ['customerIds'],
-});
+export const campaignCreateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(255),
+    customerIds: z
+      .array(z.string().uuid())
+      .min(1)
+      .max(10000)
+      .transform((ids) => [...new Set(ids)])
+      .optional(),
+    targetFilter: campaignTargetFilterSchema.optional(),
+    batchSize: z.coerce.number().int().min(1).max(1000).optional(),
+    dailySendLimit: z.coerce.number().int().min(1).max(1000).optional(),
+    sendWindowDays: z.coerce.number().int().min(0).max(30).optional(),
+    scheduledAt: z.string().datetime().optional(),
+    timezone: z.string().trim().min(1).max(64).default('Asia/Jakarta'),
+  })
+  .refine((input) => Boolean(input.customerIds?.length) !== Boolean(input.targetFilter), {
+    message: 'Provide either customerIds or targetFilter',
+    path: ['customerIds'],
+  });
 
 export const addressChangeSchema = z.object({
   province: z.string().trim().min(1).max(128),
   city: z.string().trim().min(1).max(128),
   district: z.string().trim().min(1).max(128),
   subdistrict: z.string().trim().min(1).max(128),
-  postalCode: z.string().trim().regex(/^\d{5}$/, 'Kode pos harus terdiri dari 5 digit'),
+  postalCode: z
+    .string()
+    .trim()
+    .regex(/^\d{5}$/, 'Kode pos harus terdiri dari 5 digit'),
   street: z.string().trim().min(1).max(255),
-  houseNumber: z.string().trim().min(1).max(64).refine((value) => !['unknown', 'tidak diketahui', 'tanpa nomor', 'n/a', 'na', '-', '00000'].includes(value.toLowerCase()), 'Nomor rumah wajib diisi dengan nomor yang valid'),
+  houseNumber: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .refine(
+      (value) =>
+        !['unknown', 'tidak diketahui', 'tanpa nomor', 'n/a', 'na', '-', '00000'].includes(value.toLowerCase()),
+      'Nomor rumah wajib diisi dengan nomor yang valid',
+    ),
   rt: z.string().trim().max(8).optional(),
   rw: z.string().trim().max(8).optional(),
   building: z.string().trim().max(255).optional(),
@@ -73,44 +95,63 @@ export const customerCreateSchema = z.object({
   whatsappOptInAt: z.string().datetime().optional(),
   whatsappOptInSource: z.string().trim().min(1).max(128).optional(),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).default('ACTIVE'),
-  address: addressChangeSchema.extend({
-    referenceLocation: z.object({
-      latitude: z.number().finite().min(-90).max(90),
-      longitude: z.number().finite().min(-180).max(180),
-    }).optional(),
-    referenceSource: z.enum(['MASTER_COORDINATE', 'GEOCODED', 'CUSTOMER_PROPOSED']).optional(),
-    referencePrecision: z.enum(['EXACT_MASTER', 'ROOFTOP', 'HOUSE', 'STREET', 'AREA', 'DISTRICT', 'CITY', 'UNKNOWN']).optional(),
-    referenceConfidence: z.number().finite().min(0).max(1).optional(),
-  }).superRefine((input, context) => {
-    // Coordinates are optional, but a partially filled pair is ambiguous and
-    // must not silently be stored as a valid reference.
-    if (input.referenceLocation && (input.referenceLocation.latitude == null || input.referenceLocation.longitude == null)) {
-      context.addIssue({ code: 'custom', path: ['referenceLocation'], message: 'Latitude dan longitude harus diisi bersamaan' });
-    }
-  }).transform((input) => ({
-    ...input,
-    referenceSource: input.referenceSource ?? (input.referenceLocation ? 'MASTER_COORDINATE' : 'CUSTOMER_PROPOSED'),
-    referencePrecision: input.referencePrecision ?? (input.referenceLocation ? 'EXACT_MASTER' : 'UNKNOWN'),
-    referenceConfidence: input.referenceConfidence ?? (input.referenceLocation ? 1 : 0),
-  })),
+  address: addressChangeSchema
+    .extend({
+      referenceLocation: z
+        .object({
+          latitude: z.number().finite().min(-90).max(90),
+          longitude: z.number().finite().min(-180).max(180),
+        })
+        .optional(),
+      referenceSource: z.enum(['MASTER_COORDINATE', 'GEOCODED', 'CUSTOMER_PROPOSED']).optional(),
+      referencePrecision: z
+        .enum(['EXACT_MASTER', 'ROOFTOP', 'HOUSE', 'STREET', 'AREA', 'DISTRICT', 'CITY', 'UNKNOWN'])
+        .optional(),
+      referenceConfidence: z.number().finite().min(0).max(1).optional(),
+    })
+    .superRefine((input, context) => {
+      // Coordinates are optional, but a partially filled pair is ambiguous and
+      // must not silently be stored as a valid reference.
+      if (
+        input.referenceLocation &&
+        (input.referenceLocation.latitude == null || input.referenceLocation.longitude == null)
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['referenceLocation'],
+          message: 'Latitude dan longitude harus diisi bersamaan',
+        });
+      }
+    })
+    .transform((input) => ({
+      ...input,
+      referenceSource: input.referenceSource ?? (input.referenceLocation ? 'MASTER_COORDINATE' : 'CUSTOMER_PROPOSED'),
+      referencePrecision: input.referencePrecision ?? (input.referenceLocation ? 'EXACT_MASTER' : 'UNKNOWN'),
+      referenceConfidence: input.referenceConfidence ?? (input.referenceLocation ? 1 : 0),
+    })),
 });
 
-export const whatsappPreviewSchema = z.object({
-  customerName: z.string().trim().min(1).max(255),
-  phoneE164: z.string().regex(/^\+[1-9]\d{7,14}$/),
-  address: z.string().trim().max(1000).optional(),
-  referenceLatitude: z.number().finite().min(-90).max(90).optional(),
-  referenceLongitude: z.number().finite().min(-180).max(180).optional(),
-  referencePrecision: z.enum(['EXACT_MASTER', 'ROOFTOP', 'HOUSE', 'STREET', 'AREA', 'DISTRICT', 'CITY']).optional(),
-}).refine((input) => (input.referenceLatitude == null) === (input.referenceLongitude == null), {
-  message: 'referenceLatitude and referenceLongitude must be provided together',
-  path: ['referenceLatitude'],
-});
+export const whatsappPreviewSchema = z
+  .object({
+    customerName: z.string().trim().min(1).max(255),
+    phoneE164: z.string().regex(/^\+[1-9]\d{7,14}$/),
+    address: z.string().trim().max(1000).optional(),
+    referenceLatitude: z.number().finite().min(-90).max(90).optional(),
+    referenceLongitude: z.number().finite().min(-180).max(180).optional(),
+    referencePrecision: z.enum(['EXACT_MASTER', 'ROOFTOP', 'HOUSE', 'STREET', 'AREA', 'DISTRICT', 'CITY']).optional(),
+  })
+  .refine((input) => (input.referenceLatitude == null) === (input.referenceLongitude == null), {
+    message: 'referenceLatitude and referenceLongitude must be provided together',
+    path: ['referenceLatitude'],
+  });
 
 export const customerUpdateSchema = z.object({
   externalId: z.string().trim().min(1).max(128).optional(),
   name: z.string().trim().min(2).max(255).optional(),
-  phoneE164: z.string().regex(/^\+[1-9]\d{7,14}$/, 'phoneE164 must use E.164 format').optional(),
+  phoneE164: z
+    .string()
+    .regex(/^\+[1-9]\d{7,14}$/, 'phoneE164 must use E.164 format')
+    .optional(),
   whatsappOptInAt: z.string().datetime().nullable().optional(),
   whatsappOptInSource: z.string().trim().min(1).max(128).nullable().optional(),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
@@ -155,7 +196,7 @@ export const validationConfigSchema = z.object({
   STREET_SOFT_MATCH_THRESHOLD: z.number().min(0).max(1).optional(),
   ADDRESS_SCORE_THRESHOLD: z.number().min(0).max(1).optional(),
   AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: z.number().min(0.9).max(1).optional(),
-  MAX_LOCATION_ATTEMPTS: z.number().int().positive().optional(),
+  MAX_LOCATION_ATTEMPTS: z.number().int().min(1).max(3).optional(),
   MAX_REMINDERS_PER_SESSION: z.number().int().min(1).max(3).optional(),
   COORDINATE_DISPLAY_DECIMALS: z.number().int().min(0).max(8).optional(),
   VERIFICATION_TOKEN_TTL_DAYS: z.number().int().positive().optional(),
@@ -172,6 +213,29 @@ export const validationConfigSchema = z.object({
   ENABLE_REMINDERS: z.boolean().optional(),
 });
 
+export const adminUserCreateSchema = z.object({
+  name: z.string().trim().min(2).max(255),
+  email: z
+    .string()
+    .trim()
+    .email()
+    .max(255)
+    .transform((value) => value.toLowerCase()),
+  password: z.string().min(8).max(128),
+  role: z.enum(['SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER']).default('VIEWER'),
+  department: z.string().trim().max(128).optional(),
+});
+
+export const adminUserUpdateSchema = z.object({
+  name: z.string().trim().min(2).max(255).optional(),
+  role: z.enum(['SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER']).optional(),
+  department: z.string().trim().max(128).nullable().optional(),
+});
+
+export const adminUserPasswordSchema = z.object({
+  password: z.string().min(8).max(128),
+});
+
 export type GpsSample = z.infer<typeof coordinateSchema>;
 export type AddressChangeInput = z.infer<typeof addressChangeSchema>;
 export type AddressLookupInput = z.infer<typeof addressLookupSchema>;
@@ -186,6 +250,9 @@ export type CampaignCreateInput = z.infer<typeof campaignCreateSchema>;
 export type CampaignTargetFilterInput = z.infer<typeof campaignTargetFilterSchema>;
 export type WhatsAppPreviewInput = z.infer<typeof whatsappPreviewSchema>;
 export type WhatsAppDeliveryStatusInput = z.infer<typeof whatsappDeliveryStatusSchema>;
+export type AdminUserCreateInput = z.infer<typeof adminUserCreateSchema>;
+export type AdminUserUpdateInput = z.infer<typeof adminUserUpdateSchema>;
+export type AdminUserPasswordInput = z.infer<typeof adminUserPasswordSchema>;
 
 export interface PublicVerificationContext {
   session: {
@@ -195,6 +262,7 @@ export interface PublicVerificationContext {
     linkExpiresAt: string;
     customerConfirmationStatus: string;
     reminderCount: number;
+    attemptCount: number;
     isReminderLink: boolean;
   };
   customer: { id: string; name: string; phoneE164: string };

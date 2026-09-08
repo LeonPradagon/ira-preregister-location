@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { automaticReminderTimes, isReminderScheduledBeforeSessionExpiry, nextAutomaticReminderAt, nextReminderNumber, reminderLinkExpiresAt, scheduleReminder, scheduleReminderInTimezone, spreadReminderTimes } from '../../../src/modules/reminders/reminder.policy.js';
+import {
+  automaticReminderTimes,
+  isReminderScheduledBeforeSessionExpiry,
+  nextAutomaticReminderAt,
+  nextReminderNumber,
+  reminderLinkExpiresAt,
+  scheduleReminder,
+  scheduleReminderInTimezone,
+  spreadReminderTimes,
+} from '../../../src/modules/reminders/reminder.policy.js';
 
 describe('reminder policy', () => {
   it('caps reminders at three per session', () => {
@@ -20,13 +29,19 @@ describe('reminder policy', () => {
 
   it('schedules tomorrow morning using the configured timezone', () => {
     const from = new Date('2026-01-01T08:00:00.000Z');
-    expect(scheduleReminderInTimezone('TOMORROW_MORNING', from, 'Asia/Jakarta').toISOString()).toBe('2026-01-02T02:00:00.000Z');
+    expect(scheduleReminderInTimezone('TOMORROW_MORNING', from, 'Asia/Jakarta').toISOString()).toBe(
+      '2026-01-02T02:00:00.000Z',
+    );
   });
 
   it('expires a reminder link at the first of its TTL or session expiry', () => {
     const sentAt = new Date('2026-01-01T10:00:00.000Z');
-    expect(reminderLinkExpiresAt(sentAt, new Date('2026-01-03T00:00:00.000Z'), 24).toISOString()).toBe('2026-01-02T10:00:00.000Z');
-    expect(reminderLinkExpiresAt(sentAt, new Date('2026-01-01T18:00:00.000Z'), 24).toISOString()).toBe('2026-01-01T18:00:00.000Z');
+    expect(reminderLinkExpiresAt(sentAt, new Date('2026-01-03T00:00:00.000Z'), 24).toISOString()).toBe(
+      '2026-01-02T10:00:00.000Z',
+    );
+    expect(reminderLinkExpiresAt(sentAt, new Date('2026-01-01T18:00:00.000Z'), 24).toISOString()).toBe(
+      '2026-01-01T18:00:00.000Z',
+    );
   });
 
   it('does not allow scheduling after the verification session expires', () => {

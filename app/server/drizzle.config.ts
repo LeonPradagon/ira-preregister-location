@@ -6,6 +6,6 @@ export default defineConfig({
   out: './src/db/migrations',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? 'postgresql://exact_location:exact_location@localhost:5432/exact_location',
+    url: process.env.DATABASE_URL ?? 'postgresql://ira_preregist:ira_preregist@localhost:5433/ira_preregist',
   },
 });

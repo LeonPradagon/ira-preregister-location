@@ -1,20 +1,32 @@
 {
-  "name": "exact-location-customer-validation",
+  "name": "ira_preregist",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["app/*"],
+  "workspaces": [
+    "app/*"
+  ],
   "scripts": {
     "dev": "npm --workspace app/web run dev",
     "dev:server": "npm --workspace app/server run dev",
     "dev:worker": "npm --workspace app/server run worker",
-    "infra:up": "docker compose up -d postgres redis",
-    "infra:worker": "docker compose up --build -d worker",
-    "infra:ps": "docker compose ps",
+    "infra:up": "docker compose -p ira_preregist_dev -f docker-compose.dev.yml up -d postgres redis",
+    "infra:worker": "docker compose -p ira_preregist_dev -f docker-compose.dev.yml up --build -d worker",
+    "infra:ps": "docker compose -p ira_preregist_dev -f docker-compose.dev.yml ps",
     "build": "npm --workspace app/web run build && npm --workspace app/server run build",
     "lint": "npm --workspace app/web run lint && npm --workspace app/server run lint",
     "test": "npm --workspace app/web run test && npm --workspace app/server run test",
     "db:generate": "npm --workspace app/server run db:generate",
     "db:migrate": "npm --workspace app/server run db:migrate",
-    "db:seed": "npm --workspace app/server run db:seed"
+    "db:seed": "npm --workspace app/server run db:seed",
+    "deploy": "docker compose up --build -d",
+    "deploy:logs": "docker compose logs -f",
+    "format": "prettier --write \"app/**/*.{ts,tsx,mjs,css,html}\" \"scripts/*.{mjs,cjs}\" \"*.json\" \"*.yml\" \"deploy/*.yml\"",
+    "format:check": "prettier --check \"app/**/*.{ts,tsx,mjs,css,html}\" \"scripts/*.{mjs,cjs}\" \"*.json\" \"*.yml\" \"deploy/*.yml\""
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "prettier": "3.6.2"
   }
 }

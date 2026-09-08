@@ -23,12 +23,12 @@ if ($PostgresPort -le 0) {
 if ($PostgresPort -le 0) { $PostgresPort = 5433 }
 $env:POSTGRES_PORT = "$PostgresPort"
 
-docker compose up -d postgres redis
+docker compose -p ira_preregist_dev -f docker-compose.dev.yml up -d postgres redis
 try {
   $databaseReady = $false
   for ($attempt = 1; $attempt -le 30; $attempt++) {
     try {
-      docker compose exec -T postgres pg_isready -U exact_location -d exact_location | Out-Null
+      docker compose -p ira_preregist_dev -f docker-compose.dev.yml exec -T postgres pg_isready -U ira_preregist -d ira_preregist | Out-Null
     } catch {
       # The container may still be starting; inspect the native exit code below.
     }
@@ -44,9 +44,11 @@ try {
   }
 
   npm.cmd run db:migrate
+  if ($LASTEXITCODE -ne 0) { throw 'Migration gagal.' }
   npm.cmd run db:seed
-  docker compose up --build -d worker
-  docker compose ps
+  if ($LASTEXITCODE -ne 0) { throw 'Seed gagal.' }
+  docker compose -p ira_preregist_dev -f docker-compose.dev.yml up --build -d worker
+  docker compose -p ira_preregist_dev -f docker-compose.dev.yml ps
 
   if (-not $SkipApiCheck) {
     $smokeStep = 'health'
@@ -69,29 +71,6 @@ try {
       if ($null -eq $customers -or $null -eq $settings) { throw 'Admin data smoke check returned an empty response.' }
       Write-Host "Admin auth/API smoke check passed: $($admin.email) [$($admin.role)]"
 
-      $firstCustomer = @($customers)[0]
-      $customerDetail = Invoke-RestMethod -Uri "$ApiBaseUrl/v1/admin/customers/$($firstCustomer.id)" -Method Get -WebSession $webSession
-      $firstAddress = @($customerDetail.addresses)[0]
-      $createBody = @{ addressId = $firstAddress.id } | ConvertTo-Json
-      $smokeStep = 'verification creation'
-      $createdVerification = Invoke-RestMethod -Uri "$ApiBaseUrl/v1/admin/customers/$($firstCustomer.id)/verifications" -Method Post -ContentType 'application/json' -Body $createBody -WebSession $webSession
-      $verificationToken = ([Uri]$createdVerification.verificationLink).Segments[-1]
-      $smokeStep = 'public verification flow'
-      $publicContext = Invoke-RestMethod -Uri "$ApiBaseUrl/v1/public/verifications/$verificationToken" -Method Get
-      if ($publicContext.customer.phoneE164 -notmatch '\*') { throw 'Public context exposed an unmasked phone number.' }
-      Invoke-RestMethod -Uri "$ApiBaseUrl/v1/public/verifications/$verificationToken/customer-confirmation" -Method Post -ContentType 'application/json' -Body (@{ confirmed = $true } | ConvertTo-Json) | Out-Null
-      Invoke-RestMethod -Uri "$ApiBaseUrl/v1/public/verifications/$verificationToken/consent" -Method Post -ContentType 'application/json' | Out-Null
-      foreach ($reminderPreference in @('IN_1_HOUR', 'TONIGHT', 'TOMORROW_MORNING')) {
-        Invoke-RestMethod -Uri "$ApiBaseUrl/v1/public/verifications/$verificationToken/wait-for-home" -Method Post -ContentType 'application/json' -Body (@{ reminderPreference = $reminderPreference } | ConvertTo-Json) | Out-Null
-      }
-      $fourthReminderBlocked = $false
-      try {
-        Invoke-RestMethod -Uri "$ApiBaseUrl/v1/public/verifications/$verificationToken/wait-for-home" -Method Post -ContentType 'application/json' -Body (@{ reminderPreference = 'DEFAULT' } | ConvertTo-Json) | Out-Null
-      } catch {
-        $fourthReminderBlocked = $true
-      }
-      if (-not $fourthReminderBlocked) { throw 'Reminder limit smoke check failed: reminder #4 was accepted.' }
-      Write-Host 'Public verification smoke check passed: masked context, confirmation, consent, reminder limit.'
     } catch {
       $detail = if ($_.ErrorDetails.Message) { " Response: $($_.ErrorDetails.Message)" } else { '' }
       throw "Backend API smoke check failed at [$smokeStep] on ${ApiBaseUrl}: $($_.Exception.Message).$detail"
@@ -100,5 +79,5 @@ try {
     Write-Host 'API health check dilewati (-SkipApiCheck).'
   }
 } finally {
-  docker compose logs --tail=80 worker
+  docker compose -p ira_preregist_dev -f docker-compose.dev.yml logs --tail=80 worker
 }

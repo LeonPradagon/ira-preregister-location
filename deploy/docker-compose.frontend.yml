@@ -6,10 +6,10 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:?VITE_API_URL must be set to the public API URL}
     ports:
-      - "${WEB_PORT:-8080}:80"
+      - '${WEB_PORT:-8080}:80'
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1/ || exit 1']
       interval: 10s
       timeout: 5s
       retries: 6

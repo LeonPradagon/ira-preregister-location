@@ -1,17 +1,17 @@
 services:
   postgres:
     image: postgis/postgis:16-3.4
-    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all"]
+    command: ['postgres', '-c', 'shared_preload_libraries=pg_stat_statements', '-c', 'pg_stat_statements.track=all']
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-exact_location}
-      POSTGRES_USER: ${POSTGRES_USER:-exact_location}
+      POSTGRES_DB: ${POSTGRES_DB:-ira_preregist}
+      POSTGRES_USER: ${POSTGRES_USER:-ira_preregist}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       - backend_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-exact_location} -d ${POSTGRES_DB:-exact_location}"]
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-ira_preregist} -d ${POSTGRES_DB:-ira_preregist}']
       interval: 5s
       timeout: 5s
       retries: 12
@@ -19,11 +19,11 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
     volumes:
       - backend_redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
       retries: 12
@@ -36,14 +36,15 @@ services:
       NODE_ENV: production
       PORT: 3000
       TRUST_PROXY: ${TRUST_PROXY:-1}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-exact_location}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-exact_location}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ira_preregist}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-ira_preregist}
+      DATABASE_SSL: 'false'
       REDIS_URL: redis://redis:6379
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL must be set}
       WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN must be set}
       GPS_MAX_ACCURACY_METERS: ${GPS_MAX_ACCURACY_METERS:-30}
       HOME_RADIUS_METERS: ${HOME_RADIUS_METERS:-50}
-      MAX_LOCATION_ATTEMPTS: ${MAX_LOCATION_ATTEMPTS:-5}
+      MAX_LOCATION_ATTEMPTS: ${MAX_LOCATION_ATTEMPTS:-3}
       MAX_REMINDERS_PER_SESSION: ${MAX_REMINDERS_PER_SESSION:-3}
       ADDRESS_SCORE_THRESHOLD: ${ADDRESS_SCORE_THRESHOLD:-0.90}
       AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: ${AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD:-0.90}
@@ -59,16 +60,22 @@ services:
       GEOCODING_API_KEY: ${GEOCODING_API_KEY:-}
       WHATSAPP_BASE_URL: ${WHATSAPP_BASE_URL:-}
       WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-disabled}
-      WHATSAPP_API_KEY: ${WHATSAPP_API_KEY:-}
-      WHATSAPP_TEMPLATE_NAME: ${WHATSAPP_TEMPLATE_NAME:-}
-      WHATSAPP_TEMPLATE_LANGUAGE: ${WHATSAPP_TEMPLATE_LANGUAGE:-id}
+      WHATSAPP_MEKARI_CLIENT_ID: ${WHATSAPP_MEKARI_CLIENT_ID:-}
+      WHATSAPP_MEKARI_CLIENT_SECRET: ${WHATSAPP_MEKARI_CLIENT_SECRET:-}
+      WHATSAPP_MESSAGE_TEMPLATE_ID: ${WHATSAPP_MESSAGE_TEMPLATE_ID:-}
+      WHATSAPP_CHANNEL_INTEGRATION_ID: ${WHATSAPP_CHANNEL_INTEGRATION_ID:-}
+      WHATSAPP_INVITATION_TEMPLATE_ID: ${WHATSAPP_INVITATION_TEMPLATE_ID:-}
+      WHATSAPP_REMINDER_TEMPLATE_ID: ${WHATSAPP_REMINDER_TEMPLATE_ID:-}
+      WHATSAPP_TEMPLATE_PARAMETER_NAMES: ${WHATSAPP_TEMPLATE_PARAMETER_NAMES:-name,link}
+      WHATSAPP_INVITATION_TEMPLATE_PARAMETER_NAMES: ${WHATSAPP_INVITATION_TEMPLATE_PARAMETER_NAMES:-name,link}
+      WHATSAPP_REMINDER_TEMPLATE_PARAMETER_NAMES: ${WHATSAPP_REMINDER_TEMPLATE_PARAMETER_NAMES:-name,link}
       WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:-}
-      WHATSAPP_DAILY_SEND_LIMIT: ${WHATSAPP_DAILY_SEND_LIMIT:-10000}
+      WHATSAPP_DAILY_SEND_LIMIT: ${WHATSAPP_DAILY_SEND_LIMIT:-500}
       WHATSAPP_MIN_INTERVAL_MINUTES: ${WHATSAPP_MIN_INTERVAL_MINUTES:-60}
       WHATSAPP_CIRCUIT_MIN_ATTEMPTS: ${WHATSAPP_CIRCUIT_MIN_ATTEMPTS:-50}
       WHATSAPP_CIRCUIT_FAILURE_RATIO: ${WHATSAPP_CIRCUIT_FAILURE_RATIO:-0.3}
       WHATSAPP_CIRCUIT_COOLDOWN_MINUTES: ${WHATSAPP_CIRCUIT_COOLDOWN_MINUTES:-15}
-      WHATSAPP_RATE_LIMIT_PER_SECOND: ${WHATSAPP_RATE_LIMIT_PER_SECOND:-2}
+      WHATSAPP_RATE_LIMIT_PER_SECOND: ${WHATSAPP_RATE_LIMIT_PER_SECOND:-1}
       GEOCODING_RATE_LIMIT_PER_SECOND: ${GEOCODING_RATE_LIMIT_PER_SECOND:-1}
       # 3 API + 2 campaign + 2 messaging + 2 maintenance + 1 import = 10 processes.
       # Keep the default at 5 (about 50 connections) and leave headroom for migrations/admin tools.
@@ -89,14 +96,14 @@ services:
       RATE_LIMIT_ADMIN_MAX: ${RATE_LIMIT_ADMIN_MAX:-300}
       RATE_LIMIT_WEBHOOK_MAX: ${RATE_LIMIT_WEBHOOK_MAX:-600}
       CAMPAIGN_DEFAULT_BATCH_SIZE: ${CAMPAIGN_DEFAULT_BATCH_SIZE:-1000}
-      CAMPAIGN_DEFAULT_SEND_WINDOW_DAYS: ${CAMPAIGN_DEFAULT_SEND_WINDOW_DAYS:-7}
+      CAMPAIGN_DEFAULT_SEND_WINDOW_DAYS: ${CAMPAIGN_DEFAULT_SEND_WINDOW_DAYS:-0}
       CAMPAIGN_MATERIALIZATION_BATCH_SIZE: ${CAMPAIGN_MATERIALIZATION_BATCH_SIZE:-1000}
       CAMPAIGN_QUEUE_SCAN_LIMIT: ${CAMPAIGN_QUEUE_SCAN_LIMIT:-100}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:?SEED_ADMIN_EMAIL must be set}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?SEED_ADMIN_PASSWORD must be set}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Production Super Admin}
-    command: ["node", "dist/db/migrate.js"]
-    restart: "no"
+    command: ['node', 'dist/db/migrate.js']
+    restart: 'no'
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,7 +114,7 @@ services:
       dockerfile: app/server/Dockerfile
     environment: *server_environment
     expose:
-      - "3000"
+      - '3000'
     volumes:
       - backend_imports:/workspace/app/server/var/imports
     deploy:
@@ -121,7 +128,13 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/v1/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/v1/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -129,7 +142,7 @@ services:
   api-gateway:
     image: nginx:1.27-alpine
     ports:
-      - "${API_PORT:-3000}:80"
+      - '${API_PORT:-3000}:80'
     volumes:
       - ./nginx-api.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
@@ -144,7 +157,7 @@ services:
     environment:
       <<: *server_environment
       WORKER_ROLE: maintenance
-    command: ["node", "dist/worker.js"]
+    command: ['node', 'dist/worker.js']
     volumes:
       - backend_imports:/workspace/app/server/var/imports
     deploy:
@@ -163,7 +176,7 @@ services:
     environment:
       <<: *server_environment
       WORKER_ROLE: campaign
-    command: ["node", "dist/worker.js"]
+    command: ['node', 'dist/worker.js']
     volumes:
       - backend_imports:/workspace/app/server/var/imports
     restart: unless-stopped
@@ -182,7 +195,7 @@ services:
     environment:
       <<: *server_environment
       WORKER_ROLE: messaging
-    command: ["node", "dist/worker.js"]
+    command: ['node', 'dist/worker.js']
     volumes:
       - backend_imports:/workspace/app/server/var/imports
     restart: unless-stopped
@@ -201,7 +214,7 @@ services:
     environment:
       <<: *server_environment
       WORKER_ROLE: import
-    command: ["node", "dist/worker.js"]
+    command: ['node', 'dist/worker.js']
     volumes:
       - backend_imports:/workspace/app/server/var/imports
     restart: unless-stopped

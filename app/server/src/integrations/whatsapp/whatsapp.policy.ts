@@ -10,7 +10,11 @@ export function isOptOutMessage(text: string): boolean {
   return OPT_OUT_KEYWORDS.has(text.trim().toUpperCase());
 }
 
-export function nextAllowedSendAt(lastSentAt: Date | null, minimumIntervalMinutes: number, now = new Date()): Date | null {
+export function nextAllowedSendAt(
+  lastSentAt: Date | null,
+  minimumIntervalMinutes: number,
+  now = new Date(),
+): Date | null {
   if (!lastSentAt) return null;
   const next = new Date(lastSentAt.getTime() + minimumIntervalMinutes * 60 * 1000);
   return next > now ? next : null;

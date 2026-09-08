@@ -1,8 +1,11 @@
 export interface WhatsAppMessage {
   phoneE164: string;
+  recipientName?: string;
   templateName?: string;
+  messageTemplateId?: string;
   templateLanguage?: string;
   templateParameters?: string[];
+  templateParameterNames?: string[];
   messageText?: string;
   idempotencyKey: string;
 }

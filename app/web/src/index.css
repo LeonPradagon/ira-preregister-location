@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -8,4 +8,154 @@
 
 html.dark {
   color-scheme: dark;
+}
+
+/* Customer verification is intentionally mobile-first and uses the IRA red
+   as the primary action color while retaining semantic colors for success and
+   warning states. */
+.customer-theme {
+  --ira-red: #d71920;
+  --ira-red-dark: #b8171d;
+  --ira-red-soft: #fff1f2;
+  color: #172033;
+}
+
+.customer-theme button,
+.customer-theme input,
+.customer-theme select,
+.customer-theme textarea {
+  touch-action: manipulation;
+}
+
+.customer-theme button {
+  min-height: 48px;
+}
+
+.customer-theme input,
+.customer-theme select {
+  min-height: 48px;
+}
+
+.customer-theme button:focus-visible,
+.customer-theme input:focus-visible,
+.customer-theme select:focus-visible,
+.customer-theme textarea:focus-visible {
+  outline: 3px solid rgb(215 25 32 / 25%);
+  outline-offset: 2px;
+}
+
+.customer-theme .bg-blue-50 {
+  background-color: var(--ira-red-soft) !important;
+}
+.customer-theme .bg-blue-100 {
+  background-color: #ffe4e6 !important;
+}
+.customer-theme .bg-blue-600 {
+  background-color: var(--ira-red) !important;
+}
+.customer-theme .border-blue-200 {
+  border-color: #fecdd3 !important;
+}
+.customer-theme .text-blue-600 {
+  color: var(--ira-red) !important;
+}
+.customer-theme .text-blue-700 {
+  color: var(--ira-red-dark) !important;
+}
+.customer-theme .text-blue-800 {
+  color: #881337 !important;
+}
+.customer-theme .text-blue-900 {
+  color: #701a24 !important;
+}
+.customer-theme .text-blue-950 {
+  color: #4c0519 !important;
+}
+.customer-theme .hover\:bg-blue-700:hover {
+  background-color: var(--ira-red-dark) !important;
+}
+
+/* The admin shell shares the IRA identity so every admin screen remains
+   consistent without recoloring status indicators and other semantic states. */
+.admin-theme {
+  --ira-red: #d71920;
+  --ira-red-dark: #b8171d;
+  --ira-red-soft: #fff1f2;
+}
+
+.admin-theme button,
+.admin-theme input,
+.admin-theme select,
+.admin-theme textarea {
+  touch-action: manipulation;
+}
+
+.admin-theme button:focus-visible,
+.admin-theme input:focus-visible,
+.admin-theme select:focus-visible,
+.admin-theme textarea:focus-visible {
+  outline: 3px solid rgb(215 25 32 / 25%);
+  outline-offset: 2px;
+}
+
+.admin-theme input:focus,
+.admin-theme select:focus,
+.admin-theme textarea:focus {
+  border-color: var(--ira-red) !important;
+  --tw-ring-color: rgb(215 25 32 / 25%) !important;
+}
+
+/* Keep page-level admin actions on the same IRA red palette. Indigo and dark
+   slate are legacy brand utilities in the child views; these scoped rules let
+   the shared shell re-theme them without changing customer/status colors. */
+.admin-theme .bg-indigo-600,
+.admin-theme button.bg-slate-900,
+.admin-theme button.bg-gray-900,
+.admin-theme button.dark\:bg-white,
+.admin-theme button.dark\:bg-gray-100 {
+  background-color: var(--ira-red) !important;
+}
+
+.admin-theme .hover\:bg-indigo-700:hover,
+.admin-theme .hover\:bg-indigo-500:hover,
+.admin-theme button.hover\:bg-slate-700:hover,
+.admin-theme button.hover\:bg-gray-800:hover,
+.admin-theme button.dark\:hover\:bg-white:hover,
+.admin-theme button.dark\:hover\:bg-slate-200:hover {
+  background-color: var(--ira-red-dark) !important;
+}
+
+.admin-theme .bg-indigo-50,
+.admin-theme .bg-indigo-100 {
+  background-color: var(--ira-red-soft) !important;
+}
+
+.admin-theme .border-indigo-100,
+.admin-theme .border-indigo-200 {
+  border-color: #fecdd3 !important;
+}
+
+.admin-theme .text-indigo-600,
+.admin-theme .text-indigo-700,
+.admin-theme .text-indigo-800,
+.admin-theme .text-indigo-900 {
+  color: var(--ira-red-dark) !important;
+}
+
+.admin-theme .dark\:text-indigo-300,
+.admin-theme .dark\:text-indigo-400 {
+  color: #fda4af !important;
+}
+
+.admin-theme button.bg-gray-900,
+.admin-theme button.bg-slate-900,
+.admin-theme button.dark\:bg-white,
+.admin-theme button.dark\:bg-gray-100 {
+  color: white !important;
+}
+
+@media (max-width: 640px) {
+  .admin-theme main {
+    padding: 1rem;
+  }
 }

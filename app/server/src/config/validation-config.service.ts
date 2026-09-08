@@ -38,7 +38,7 @@ export class ValidationConfigService {
       STREET_SOFT_MATCH_THRESHOLD: Number(process.env.STREET_SOFT_MATCH_THRESHOLD ?? 0.7),
       ADDRESS_SCORE_THRESHOLD: Number(process.env.ADDRESS_SCORE_THRESHOLD ?? 0.9),
       AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: Number(process.env.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD ?? 0.9),
-      MAX_LOCATION_ATTEMPTS: Number(process.env.MAX_LOCATION_ATTEMPTS ?? 5),
+      MAX_LOCATION_ATTEMPTS: Math.min(3, Number(process.env.MAX_LOCATION_ATTEMPTS ?? 3)),
       MAX_REMINDERS_PER_SESSION: Number(process.env.MAX_REMINDERS_PER_SESSION ?? 3),
       COORDINATE_DISPLAY_DECIMALS: Number(process.env.COORDINATE_DISPLAY_DECIMALS ?? 6),
       VERIFICATION_TOKEN_TTL_DAYS: Number(process.env.VERIFICATION_TOKEN_TTL_DAYS ?? 7),
@@ -58,10 +58,12 @@ export class ValidationConfigService {
 
   async get(): Promise<RuntimeValidationConfig> {
     const [latest] = await db.select().from(validationConfigs).orderBy(desc(validationConfigs.updatedAt)).limit(1);
-    const persisted = latest?.configValues && typeof latest.configValues === 'object'
-      ? latest.configValues as Partial<RuntimeValidationConfig>
-      : {};
-    return { ...this.fromEnvironment(), ...persisted };
+    const persisted =
+      latest?.configValues && typeof latest.configValues === 'object'
+        ? (latest.configValues as Partial<RuntimeValidationConfig>)
+        : {};
+    const merged = { ...this.fromEnvironment(), ...persisted };
+    return { ...merged, MAX_LOCATION_ATTEMPTS: Math.min(3, Math.max(1, Number(merged.MAX_LOCATION_ATTEMPTS ?? 3))) };
   }
 
   async update(adminId: string, input: ValidationConfigInput): Promise<RuntimeValidationConfig> {

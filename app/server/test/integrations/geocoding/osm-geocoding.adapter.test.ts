@@ -11,7 +11,7 @@ afterEach(() => {
 describe('OSM Nominatim geocoding adapter', () => {
   it('maps reverse geocoding address details and sends an identifying user agent', async () => {
     process.env.OSM_NOMINATIM_BASE_URL = 'https://nominatim.test';
-    process.env.OSM_NOMINATIM_USER_AGENT = 'ExactLocationTest/1.0 (test@example.com)';
+    process.env.OSM_NOMINATIM_USER_AGENT = 'IraPreregistTest/1.0 (test@example.com)';
     const getMock = vi.spyOn(providerHttpClient, 'get').mockResolvedValue({
       data: {
         place_id: 123,
@@ -21,16 +21,37 @@ describe('OSM Nominatim geocoding adapter', () => {
         addresstype: 'house',
         importance: 0.7,
         address: {
-          state: 'DKI Jakarta', city: 'Jakarta Pusat', city_district: 'Menteng', suburb: 'Gondangdia',
-          road: 'Jalan Test', house_number: '10', postcode: '10350',
+          state: 'DKI Jakarta',
+          city: 'Jakarta Pusat',
+          city_district: 'Menteng',
+          suburb: 'Gondangdia',
+          road: 'Jalan Test',
+          house_number: '10',
+          postcode: '10350',
         },
       },
     } as never);
 
     const result = await new OsmGeocodingAdapter().reverse(-6.2088, 106.8456);
 
-    expect(result).toMatchObject({ provider: 'OpenStreetMap Nominatim', precision: 'HOUSE', province: 'DKI Jakarta', city: 'Jakarta Pusat', district: 'Menteng', subdistrict: 'Gondangdia', street: 'Jalan Test', houseNumber: '10', postalCode: '10350' });
-    expect(getMock).toHaveBeenCalledWith('https://nominatim.test/reverse', expect.objectContaining({ params: expect.objectContaining({ format: 'jsonv2', addressdetails: '1' }), headers: expect.objectContaining({ 'User-Agent': 'ExactLocationTest/1.0 (test@example.com)' }) }));
+    expect(result).toMatchObject({
+      provider: 'OpenStreetMap Nominatim',
+      precision: 'HOUSE',
+      province: 'DKI Jakarta',
+      city: 'Jakarta Pusat',
+      district: 'Menteng',
+      subdistrict: 'Gondangdia',
+      street: 'Jalan Test',
+      houseNumber: '10',
+      postalCode: '10350',
+    });
+    expect(getMock).toHaveBeenCalledWith(
+      'https://nominatim.test/reverse',
+      expect.objectContaining({
+        params: expect.objectContaining({ format: 'jsonv2', addressdetails: '1' }),
+        headers: expect.objectContaining({ 'User-Agent': 'IraPreregistTest/1.0 (test@example.com)' }),
+      }),
+    );
   });
 
   it('maps Jakarta province and municipality when Nominatim puts them in adjacent levels', async () => {
@@ -43,15 +64,23 @@ describe('OSM Nominatim geocoding adapter', () => {
         display_name: 'Jalan KH Syahdan, Palmerah, Jakarta Barat, Indonesia',
         addresstype: 'road',
         address: {
-          city: 'Daerah Khusus Ibukota Jakarta', state_district: 'Jakarta Barat',
-          district: 'Jakarta Barat', suburb: 'Palmerah', road: 'Jalan KH Syahdan',
+          city: 'Daerah Khusus Ibukota Jakarta',
+          state_district: 'Jakarta Barat',
+          district: 'Jakarta Barat',
+          suburb: 'Palmerah',
+          road: 'Jalan KH Syahdan',
         },
       },
     } as never);
 
-    const result = await new OsmGeocodingAdapter().reverse(-6.2008, 106.7840);
+    const result = await new OsmGeocodingAdapter().reverse(-6.2008, 106.784);
 
-    expect(result).toMatchObject({ province: 'DKI Jakarta', city: 'Jakarta Barat', district: 'Palmerah', subdistrict: 'Palmerah' });
+    expect(result).toMatchObject({
+      province: 'DKI Jakarta',
+      city: 'Jakarta Barat',
+      district: 'Palmerah',
+      subdistrict: 'Palmerah',
+    });
   });
 
   it('keeps Jakarta municipality, district, and village in the correct levels', async () => {
@@ -64,15 +93,27 @@ describe('OSM Nominatim geocoding adapter', () => {
         display_name: 'Jalan Kamal Muara VI, Kamal Muara, Penjaringan, Jakarta Utara, Indonesia',
         addresstype: 'road',
         address: {
-          state: 'Daerah Khusus Ibukota Jakarta', city: 'Daerah Khusus Ibukota Jakarta',
-          district: 'Jakarta Utara', city_district: 'Jakarta Utara', suburb: 'Penjaringan',
-          village: 'Kamal Muara', road: 'Jalan Kamal Muara VI', postcode: '14470',
+          state: 'Daerah Khusus Ibukota Jakarta',
+          city: 'Daerah Khusus Ibukota Jakarta',
+          district: 'Jakarta Utara',
+          city_district: 'Jakarta Utara',
+          suburb: 'Penjaringan',
+          village: 'Kamal Muara',
+          road: 'Jalan Kamal Muara VI',
+          postcode: '14470',
         },
       },
     } as never);
 
     const result = await new OsmGeocodingAdapter().reverse(-6.127123, 106.744726);
 
-    expect(result).toMatchObject({ province: 'DKI Jakarta', city: 'Jakarta Utara', district: 'Penjaringan', subdistrict: 'Kamal Muara', street: 'Jalan Kamal Muara VI', postalCode: '14470' });
+    expect(result).toMatchObject({
+      province: 'DKI Jakarta',
+      city: 'Jakarta Utara',
+      district: 'Penjaringan',
+      subdistrict: 'Kamal Muara',
+      street: 'Jalan Kamal Muara VI',
+      postalCode: '14470',
+    });
   });
 });

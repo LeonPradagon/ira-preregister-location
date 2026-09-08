@@ -26,17 +26,28 @@ export class ReadCacheService implements OnModuleDestroy {
       if (this.redis.status === 'wait') await this.redis.connect();
       const cached = await this.redis.get(key);
       if (cached) return JSON.parse(cached) as T;
-    } catch { /* Redis is an optional acceleration layer. */ }
+    } catch {
+      /* Redis is an optional acceleration layer. */
+    }
     const result = await producer();
-    try { await this.redis.set(key, JSON.stringify(result), 'EX', ttlSeconds); } catch { /* fall back to the database result */ }
+    try {
+      await this.redis.set(key, JSON.stringify(result), 'EX', ttlSeconds);
+    } catch {
+      /* fall back to the database result */
+    }
     return result;
   }
 
   async count(prefix: string, value: unknown, producer: () => Promise<number>): Promise<CachedCount> {
-    return this.getOrSet<CachedCount>(`count:${prefix}`, value, Number(process.env.READ_COUNT_CACHE_TTL_SECONDS ?? 30), async () => ({
-      total: await producer(),
-      countAsOf: new Date().toISOString(),
-    }));
+    return this.getOrSet<CachedCount>(
+      `count:${prefix}`,
+      value,
+      Number(process.env.READ_COUNT_CACHE_TTL_SECONDS ?? 30),
+      async () => ({
+        total: await producer(),
+        countAsOf: new Date().toISOString(),
+      }),
+    );
   }
 
   async onModuleDestroy() {

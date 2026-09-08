@@ -1,6 +1,0 @@
-{
-  "name": "IRA Preregist",
-  "description": "Customer address and GPS validation system for home installation, verification workflows, reminder management, and admin ops review.",
-  "requestFramePermissions": ["geolocation"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

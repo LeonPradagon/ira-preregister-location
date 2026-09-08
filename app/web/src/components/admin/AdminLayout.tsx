@@ -1,27 +1,23 @@
 import React, { useState } from 'react';
 import {
-  Activity,
   Bell,
   CheckCircle2,
   ChevronDown,
   Compass,
-  FileCheck,
   History,
   LayoutDashboard,
   LogOut,
-  MapPin,
+  Menu,
   Megaphone,
   Moon,
   Radio,
-  Search,
   Settings,
-  Shield,
   Sun,
-  User,
+  UserCog,
   Users,
+  X,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { ThemeMode } from '../../types';
 import { useTranslation } from '../../i18n';
 
 export type AdminTab =
@@ -32,7 +28,8 @@ export type AdminTab =
   | 'reminders'
   | 'audit-logs'
   | 'settings'
-  | 'integrations';
+  | 'integrations'
+  | 'users';
 
 interface AdminLayoutProps {
   currentTab: AdminTab;
@@ -51,23 +48,16 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   onSelectVerification,
   children,
 }) => {
-  const {
-    currentAdmin,
-    logoutAdmin,
-    dashboardSummary,
-    validationConfig,
-    theme,
-    isDarkMode,
-    setTheme,
-    toggleTheme,
-  } = useApp();
+  const { currentAdmin, logoutAdmin, dashboardSummary, validationConfig, theme, isDarkMode, setTheme, toggleTheme } =
+    useApp();
   const { t } = useTranslation();
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const pendingReviewsCount = dashboardSummary.verifications.manualReview
-    + (dashboardSummary.verifications.statusCounts.CUSTOMER_DATA_MISMATCH ?? 0);
+  const pendingReviewsCount =
+    dashboardSummary.verifications.manualReview +
+    (dashboardSummary.verifications.statusCounts.CUSTOMER_DATA_MISMATCH ?? 0);
   const validLocationsCount = dashboardSummary.verifications.locationValid;
 
   const navItems = [
@@ -86,6 +76,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     { id: 'settings' as AdminTab, label: t('nav.validationRules'), icon: Settings },
     { id: 'integrations' as AdminTab, label: t('nav.integrations'), icon: Radio },
   ];
+  if (currentAdmin?.role === 'SUPER_ADMIN') navItems.push({ id: 'users', label: t('nav.users'), icon: UserCog });
 
   const handleNavClick = (tab: AdminTab) => {
     onSelectTab(tab);
@@ -95,28 +86,33 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col font-sans transition-colors duration-200">
+    <div className="admin-theme min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 flex flex-col font-sans transition-colors duration-200">
       {/* Top Navbar */}
-      <header className="h-16 flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-30 px-4 lg:px-6 py-2.5 flex items-center justify-between">
+      <header className="h-16 flex-shrink-0 bg-white dark:bg-gray-900 border-b border-red-100 dark:border-gray-800 sticky top-0 z-30 px-4 lg:px-6 py-2.5 flex items-center justify-between">
         {/* Left Branding */}
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen((open) => !open)}
+            className="inline-flex items-center justify-center rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 md:hidden"
+            aria-label={mobileNavOpen ? 'Tutup menu navigasi' : 'Buka menu navigasi'}
+          >
+            {mobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          </button>
           <button
             type="button"
             onClick={() => handleNavClick('dashboard')}
             className="flex items-center gap-2.5 text-left group"
           >
-            <div className="w-8 h-8 rounded-lg bg-gray-900 dark:bg-gray-800 dark:border dark:border-gray-700 flex items-center justify-center group-hover:bg-gray-800 dark:group-hover:bg-gray-700 transition-colors">
-              <MapPin className="w-4 h-4 text-white" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-red-200 bg-[#d71920] p-0.5 shadow-sm transition-transform group-hover:scale-[1.03] dark:border-red-900/60">
+              <img src="/ira-logo-hd.png?v=3" alt="IRA" className="h-full w-full rounded-[0.65rem] object-contain" />
             </div>
-            <div>
-              <div className="font-semibold text-sm text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
-                <span>IRA Preregist</span>
-                <span className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-[10px] font-mono px-1.5 py-0.5 rounded font-medium border border-gray-200 dark:border-gray-700">
-                  v0.6 MVP
-                </span>
+            <div className="min-w-0 leading-tight">
+              <div className="truncate text-sm font-bold tracking-tight text-[#b8171d] dark:text-red-300">
+                IRA Preregist
               </div>
-              <div className="text-[10px] text-gray-500 dark:text-gray-400 hidden sm:block">
-            IRA Preregist
+              <div className="mt-0.5 hidden truncate text-[10px] font-medium text-gray-500 dark:text-gray-400 sm:block">
+                {t('shell.navSubtitle')}
               </div>
             </div>
           </button>
@@ -136,7 +132,14 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           </div>
           <span className="text-gray-300 dark:text-gray-600">|</span>
           <div className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
-            {t('shell.radius')}: <span className="text-gray-900 dark:text-gray-200 font-semibold">{validationConfig.HOME_RADIUS_METERS}m</span> • {t('shell.accuracy')}: <span className="text-gray-900 dark:text-gray-200 font-semibold">&le;{validationConfig.GPS_MAX_ACCURACY_METERS}m</span>
+            {t('shell.radius')}:{' '}
+            <span className="text-gray-900 dark:text-gray-200 font-semibold">
+              {validationConfig.HOME_RADIUS_METERS}m
+            </span>{' '}
+            • {t('shell.accuracy')}:{' '}
+            <span className="text-gray-900 dark:text-gray-200 font-semibold">
+              &le;{validationConfig.GPS_MAX_ACCURACY_METERS}m
+            </span>
           </div>
         </div>
 
@@ -150,11 +153,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               className="p-1.5 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors border border-gray-200 dark:border-gray-700 flex items-center gap-1.5 text-xs font-medium"
               title={`${t('shell.theme')}: ${theme === 'dark' ? t('shell.dark') : theme === 'light' ? t('shell.light') : t('shell.system')}`}
             >
-              {isDarkMode ? (
-                <Moon className="w-4 h-4 text-indigo-400" />
-              ) : (
-                <Sun className="w-4 h-4 text-amber-500" />
-              )}
+              {isDarkMode ? <Moon className="w-4 h-4 text-indigo-400" /> : <Sun className="w-4 h-4 text-amber-500" />}
               <span className="hidden md:inline capitalize text-[11px]">
                 {theme === 'system' ? t('shell.system') : theme === 'dark' ? t('shell.dark') : t('shell.light')}
               </span>
@@ -233,14 +232,16 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             <button
               type="button"
               onClick={() => setRoleDropdownOpen(!roleDropdownOpen)}
-              className="flex items-center gap-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-750 p-1.5 sm:px-3 sm:py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs transition-colors"
+              className="flex items-center gap-2 bg-white dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-950/30 p-1.5 sm:px-3 sm:py-1.5 rounded-lg border border-red-100 dark:border-gray-700 text-xs transition-colors"
             >
-              <div className="w-6 h-6 rounded bg-gray-900 dark:bg-gray-700 flex items-center justify-center font-medium text-[11px] text-white">
+              <div className="w-6 h-6 rounded-md bg-[#d71920] dark:bg-[#b8171d] flex items-center justify-center font-medium text-[11px] text-white shadow-sm">
                 {currentAdmin?.name.charAt(0) || 'A'}
               </div>
               <div className="hidden md:block text-left">
                 <div className="font-semibold text-gray-900 dark:text-white leading-tight">{currentAdmin?.name}</div>
-                <div className="text-[10px] text-gray-500 dark:text-gray-400 font-mono">{currentAdmin?.role}</div>
+                <div className="text-[10px] text-gray-500 dark:text-gray-400">
+                  {t(`users.role.${currentAdmin?.role || 'VIEWER'}`)}
+                </div>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
             </button>
@@ -252,6 +253,20 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                   <div className="text-[11px] text-gray-500 dark:text-gray-400">{currentAdmin?.email}</div>
                   <div className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5">{currentAdmin?.department}</div>
                 </div>
+
+                {currentAdmin?.role === 'SUPER_ADMIN' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleNavClick('users');
+                      setRoleDropdownOpen(false);
+                    }}
+                    className="w-full px-3 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
+                  >
+                    <UserCog className="w-3.5 h-3.5" />
+                    <span>{t('nav.users')}</span>
+                  </button>
+                )}
 
                 <div className="border-t border-gray-100 dark:border-gray-800 mt-1 pt-1">
                   <button
@@ -275,7 +290,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
       {/* Main Layout Container with Sidebar & Content */}
       <div className="flex-1 flex flex-col md:flex-row md:pl-64">
         {/* Sidebar Navigation */}
-        <aside className="w-full md:fixed md:left-0 md:top-16 md:bottom-0 md:z-20 md:w-64 md:overflow-y-auto bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 p-3 flex md:flex-col justify-between flex-shrink-0">
+        <aside
+          className={`${mobileNavOpen ? 'fixed inset-x-0 top-16 z-40 flex max-h-[calc(100vh-4rem)]' : 'hidden md:flex'} w-full md:fixed md:left-0 md:top-16 md:bottom-0 md:z-20 md:w-64 md:overflow-y-auto bg-white dark:bg-gray-900 border-r border-red-100 dark:border-gray-800 p-3 md:flex-col justify-between flex-shrink-0`}
+        >
           <nav className="space-y-1 w-full flex md:flex-col overflow-x-auto md:overflow-visible gap-1 md:gap-0">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -287,8 +304,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                   onClick={() => handleNavClick(item.id)}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
                     isActive
-                      ? 'bg-gray-900 dark:bg-gray-800 text-white font-semibold shadow-xs'
-                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-800/60'
+                      ? 'bg-[#d71920] dark:bg-[#b8171d] text-white font-semibold shadow-xs'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-[#b8171d] dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -331,9 +348,17 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             </div>
           </div>
         </aside>
+        {mobileNavOpen && (
+          <button
+            type="button"
+            aria-label="Tutup menu navigasi"
+            onClick={() => setMobileNavOpen(false)}
+            className="fixed inset-0 top-16 z-30 bg-slate-950/30 md:hidden"
+          />
+        )}
 
         {/* Main Content Area */}
-        <main className="min-w-0 min-h-[calc(100vh-4rem)] flex-1 bg-gray-50 dark:bg-gray-950 p-4 lg:p-6 overflow-y-auto transition-colors duration-200">
+        <main className="min-w-0 min-h-[calc(100vh-4rem)] flex-1 bg-[#fffafa] dark:bg-gray-950 p-4 lg:p-6 overflow-y-auto transition-colors duration-200">
           {children}
         </main>
       </div>
