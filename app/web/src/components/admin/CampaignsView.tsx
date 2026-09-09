@@ -575,7 +575,7 @@ export const CampaignsView: React.FC = () => {
             </p>
           )}
           <div className="flex flex-col gap-2 sm:flex-row">
-            {/* <button
+            <button
               type="button"
               disabled={previewLoading || candidateLoading || !selectableCustomers.length}
               onClick={() => void simulateWhatsApp()}
@@ -583,7 +583,7 @@ export const CampaignsView: React.FC = () => {
             >
               <MessageCircle className="h-4 w-4" />
               {previewLoading ? t('campaigns.preparing') : t('campaigns.previewMessage')}
-            </button> */}
+            </button>
             <button
               type="submit"
               disabled={busy || !name.trim() || (!selected.length && !selectAllEligible)}

@@ -10,7 +10,7 @@
     "dev:server": "npm --workspace app/server run dev",
     "dev:worker": "npm --workspace app/server run worker",
     "infra:up": "docker compose -p ira_preregist_dev -f docker-compose.dev.yaml up -d postgres redis",
-    "infra:worker": "docker compose -p ira_preregist_dev -f docker-compose.dev.yaml up --build -d worker",
+    "infra:worker": "docker compose -p ira_preregist_dev -f docker-compose.dev.yaml up --build --force-recreate -d worker",
     "infra:ps": "docker compose -p ira_preregist_dev -f docker-compose.dev.yaml ps",
     "build": "npm --workspace app/web run build && npm --workspace app/server run build",
     "lint": "npm --workspace app/web run lint && npm --workspace app/server run lint",
