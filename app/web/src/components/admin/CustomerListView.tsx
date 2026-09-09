@@ -502,7 +502,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
       </section>
 
       {/* Filter & Search Controls */}
-      <div className="bg-white dark:bg-gray-900 p-3.5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs flex flex-col gap-3 text-xs">
+      <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3.5 text-xs shadow-xs dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:w-96">
           <Search className="w-4 h-4 text-gray-400 dark:text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input

@@ -42,6 +42,7 @@ import { ReadCacheService } from '../../common/read-cache.service.js';
 import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js';
 import { buildVerificationSimulationConfig } from '../verification/simulation-config.js';
 import { buildVerifiedAddressReference } from '../verification/verified-location.js';
+import { campaignRecipientReservationStatuses } from '../campaigns/campaign-target.policy.js';
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
 const customerAuditActorIds = ['customer', 'customer-token'];
@@ -357,10 +358,24 @@ export class AdminService {
         sql`exists (select 1 from customer_addresses campaign_address where campaign_address.customer_id = ${customers.id} and campaign_address.is_active = true and campaign_address.is_verified = true)`,
       );
     }
+    if (query.campaignAvailable) {
+      const statuses = sql.join(campaignRecipientReservationStatuses.map((status) => sql`${status}`), sql`, `);
+      filters.push(sql`not exists (
+        select 1
+        from "verification_campaign_items" reserved_item
+        where reserved_item."customer_id" = ${customers.id}
+          and reserved_item."status" in (${statuses})
+      ) and not exists (
+        select 1
+        from "verification_campaigns" reserved_campaign
+        where reserved_campaign."status" in ('DRAFT', 'RUNNING')
+          and reserved_campaign."target_filter" -> 'customerIds' ? (${customers.id})::text
+      )`);
+    }
     const where = and(...filters);
     const cachedCount = await this.readCache.count(
       'customers',
-      { search: query.search, status: query.status, locationStatus: query.locationStatus },
+      { search: query.search, status: query.status, locationStatus: query.locationStatus, campaignAvailable: query.campaignAvailable },
       async () => {
         const [{ total }] = await db
           .select({ total: sql<number>`count(*)` })

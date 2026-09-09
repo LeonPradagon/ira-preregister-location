@@ -70,8 +70,8 @@ npm run lint
 npm test
 npm run build
 docker compose config
-docker compose --env-file deploy/.env.example -f deploy/docker-compose.backend.yml config
-docker compose --env-file deploy/.env.example -f deploy/docker-compose.frontend.yml config
+docker compose --env-file deploy/.env.example -f deploy/docker-compose.backend.yaml config
+docker compose --env-file deploy/.env.example -f deploy/docker-compose.frontend.yaml config
 npm run infra:up
 npm run db:migrate
 npm run db:seed

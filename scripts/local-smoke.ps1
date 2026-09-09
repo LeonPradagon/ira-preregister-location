@@ -23,12 +23,12 @@ if ($PostgresPort -le 0) {
 if ($PostgresPort -le 0) { $PostgresPort = 5433 }
 $env:POSTGRES_PORT = "$PostgresPort"
 
-docker compose -p ira_preregist_dev -f docker-compose.dev.yml up -d postgres redis
+docker compose -p ira_preregist_dev -f docker-compose.dev.yaml up -d postgres redis
 try {
   $databaseReady = $false
   for ($attempt = 1; $attempt -le 30; $attempt++) {
     try {
-      docker compose -p ira_preregist_dev -f docker-compose.dev.yml exec -T postgres pg_isready -U ira_preregist -d ira_preregist | Out-Null
+      docker compose -p ira_preregist_dev -f docker-compose.dev.yaml exec -T postgres pg_isready -U ira_preregist -d ira_preregist | Out-Null
     } catch {
       # The container may still be starting; inspect the native exit code below.
     }
@@ -47,8 +47,8 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Migration gagal.' }
   npm.cmd run db:seed
   if ($LASTEXITCODE -ne 0) { throw 'Seed gagal.' }
-  docker compose -p ira_preregist_dev -f docker-compose.dev.yml up --build -d worker
-  docker compose -p ira_preregist_dev -f docker-compose.dev.yml ps
+  docker compose -p ira_preregist_dev -f docker-compose.dev.yaml up --build -d worker
+  docker compose -p ira_preregist_dev -f docker-compose.dev.yaml ps
 
   if (-not $SkipApiCheck) {
     $smokeStep = 'health'
@@ -79,5 +79,5 @@ try {
     Write-Host 'API health check dilewati (-SkipApiCheck).'
   }
 } finally {
-  docker compose -p ira_preregist_dev -f docker-compose.dev.yml logs --tail=80 worker
+  docker compose -p ira_preregist_dev -f docker-compose.dev.yaml logs --tail=80 worker
 }

@@ -279,6 +279,7 @@ export const reminders = pgTable('reminders', {
   channel: varchar('channel', { length: 32 }).notNull().default('WHATSAPP'),
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
   sentAt: timestamp('sent_at', { withTimezone: true }),
+  openedAt: timestamp('opened_at', { withTimezone: true }),
   tokenId: varchar('token_id', { length: 64 }).unique(),
   tokenHash: varchar('token_hash', { length: 128 }).unique(),
   tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),

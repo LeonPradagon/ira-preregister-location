@@ -164,6 +164,7 @@ export const customerListQuerySchema = z.object({
   search: z.string().trim().max(128).default(''),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
+  campaignAvailable: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
   cursor: z.string().max(255).optional(),
 });
 
@@ -264,6 +265,7 @@ export interface PublicVerificationContext {
     reminderCount: number;
     attemptCount: number;
     isReminderLink: boolean;
+    canScheduleReminder: boolean;
   };
   customer: { id: string; name: string; phoneE164: string };
   address: Record<string, unknown>;

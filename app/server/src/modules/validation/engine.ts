@@ -99,7 +99,7 @@ const isPlaceholderAddressValue = (value?: string): boolean => {
   const normalized = normalizeAddress(value ?? '');
   return (
     !normalized ||
-    ['unknown', 'tidak diketahui', 'tanpa nomor', 'no number', 'n a', 'na', '-', '00000'].includes(normalized)
+    ['unknown', 'tidak diketahui', 'tanpa nomor', 'tanpa no', 'no number', 'n a', 'na', '-', '00000'].includes(normalized)
   );
 };
 
@@ -107,6 +107,20 @@ const plusCodePattern =
   /[23456789cfghjmpqrvwx]{4,8}\+(?:[23456789cfghjmpqrvwx]{3}\d|[23456789cfghjmpqrvwx]{4})(?=$|[\s,])|[23456789cfghjmpqrvwx]{4,8}\+[23456789cfghjmpqrvwx]{2,3}/i;
 const isOnlyPlusCode = (value?: string): boolean =>
   Boolean(value?.trim() && new RegExp(`^(?:${plusCodePattern.source})$`, 'i').test(value.trim()));
+
+export function isAddressIncomplete(
+  address: Pick<AddressEvidence, 'province' | 'city' | 'district' | 'subdistrict' | 'street' | 'houseNumber' | 'postalCode'>,
+): boolean {
+  return [
+    address.province,
+    address.city,
+    address.district,
+    address.subdistrict,
+    address.street,
+    address.houseNumber,
+    address.postalCode,
+  ].some((value) => isPlaceholderAddressValue(value)) || isOnlyPlusCode(address.street);
+}
 
 const tokenScore = (left: string, right: string): number => {
   const a = new Set(normalizeAddress(left).split(' ').filter(Boolean));
@@ -169,16 +183,7 @@ export function decideValidation(
     address.houseNumber && reverseGeocode.houseNumber
       ? normalizeAddress(address.houseNumber) === normalizeAddress(reverseGeocode.houseNumber)
       : undefined;
-  const addressIncomplete =
-    [
-      address.province,
-      address.city,
-      address.district,
-      address.subdistrict,
-      address.street,
-      address.houseNumber,
-      address.postalCode,
-    ].some((value) => isPlaceholderAddressValue(value)) || isOnlyPlusCode(address.street);
+  const addressIncomplete = isAddressIncomplete(address);
   const addressNeedsManualReview = addressIncomplete || !hasReferenceLocation || !precisionOk;
   const addressScore =
     Math.round(

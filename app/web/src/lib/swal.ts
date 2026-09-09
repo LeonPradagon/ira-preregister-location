@@ -8,6 +8,7 @@ interface ConfirmActionOptions {
   cancelButtonText: string;
   icon?: SweetAlertIcon;
   confirmButtonColor?: string;
+  onConfirm?: () => Promise<void>;
 }
 
 export async function confirmAction({
@@ -17,6 +18,7 @@ export async function confirmAction({
   cancelButtonText,
   icon = 'question',
   confirmButtonColor = '#2563eb',
+  onConfirm,
 }: ConfirmActionOptions): Promise<boolean> {
   const result = await Swal.fire({
     icon,
@@ -29,6 +31,18 @@ export async function confirmAction({
     reverseButtons: true,
     focusCancel: true,
     allowOutsideClick: false,
+    showLoaderOnConfirm: Boolean(onConfirm),
+    preConfirm: onConfirm
+      ? async () => {
+          try {
+            await onConfirm();
+            return true;
+          } catch (cause) {
+            Swal.showValidationMessage(cause instanceof Error ? cause.message : 'Action could not be completed.');
+            return false;
+          }
+        }
+      : undefined,
   });
   return result.isConfirmed;
 }

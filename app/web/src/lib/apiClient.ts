@@ -30,6 +30,7 @@ export interface PublicVerificationContextApi {
     reminderCount: number;
     attemptCount: number;
     isReminderLink: boolean;
+    canScheduleReminder: boolean;
   };
   customer: { id: string; name: string; phoneE164: string };
   address: {
@@ -43,6 +44,7 @@ export interface PublicVerificationContextApi {
     street: string;
     houseNumber: string;
     referencePrecision: string;
+    requiresCorrection?: boolean;
     referenceLocation?: { latitude: number; longitude: number } | null;
     simulationConfig?: {
       homeRadiusMeters: number;
@@ -380,6 +382,7 @@ const adminApi = {
       search?: string;
       status?: string;
       locationStatus?: 'UNVERIFIED' | 'VERIFIED';
+      campaignAvailable?: boolean;
       cursor?: string;
     } = {},
   ) => {
@@ -389,6 +392,7 @@ const adminApi = {
     if (query.search) params.set('search', query.search);
     if (query.status && query.status !== 'ALL') params.set('status', query.status);
     if (query.locationStatus) params.set('locationStatus', query.locationStatus);
+    if (query.campaignAvailable) params.set('campaignAvailable', 'true');
     if (query.cursor) params.set('cursor', query.cursor);
     const suffix = params.toString() ? `?${params.toString()}` : '';
     return request<{

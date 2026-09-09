@@ -20,10 +20,14 @@ import {
 } from '../../common/contracts.js';
 import { DomainError, NotFoundError } from '../../common/errors.js';
 import { GeocodingPort, GeocodingResult } from '../../integrations/geocoding/geocoding.port.js';
-import { decideValidation, AddressEvidence, ReverseGeocodeEvidence } from '../validation/engine.js';
+import { decideValidation, AddressEvidence, ReverseGeocodeEvidence, isAddressIncomplete } from '../validation/engine.js';
 import { assertTransition } from './state-machine.js';
 import {
   isReminderScheduledBeforeSessionExpiry,
+  isReminderLinkFirstOpen,
+  isReusableCancelledReminder,
+  canScheduleReminderFromLink,
+  reminderCountAfterOpeningLink,
   nextReminderNumber,
   ReminderPreference,
   scheduleReminderInTimezone,
@@ -38,14 +42,13 @@ function maskPhone(value: string): string {
   return `${'*'.repeat(Math.max(0, value.length - 4))}${value.slice(-4)}`;
 }
 
-function maskAddress(address: {
-  street: string;
-  subdistrict: string;
-  district: string;
-  city: string;
-  province: string;
-}): string {
-  return `${address.street} **, ${address.subdistrict}, ${address.district}, ${address.city}, ${address.province}`;
+function assertAddressCorrectionComplete(address: Parameters<typeof isAddressIncomplete>[0]) {
+  if (isAddressIncomplete(address))
+    throw new DomainError(
+      'Please correct the registered address before continuing the location verification.',
+      409,
+      'ADDRESS_CORRECTION_REQUIRED',
+    );
 }
 
 @Injectable()
@@ -89,15 +92,22 @@ export class VerificationService {
 
   async open(token: string): Promise<PublicVerificationContext> {
     const row = await this.findByToken(token);
-    if (!row.session.openedAt || row.reminder) {
+    const reminder = row.reminder;
+    const firstReminderOpen = Boolean(reminder && isReminderLinkFirstOpen(reminder.openedAt));
+    const effectiveReminderCount = firstReminderOpen
+      ? reminderCountAfterOpeningLink(row.session.reminderCount, reminder!.reminderNumber)
+      : row.session.reminderCount;
+    const canScheduleReminder =
+      !reminder || canScheduleReminderFromLink(effectiveReminderCount, reminder.reminderNumber);
+    if (!row.session.openedAt || firstReminderOpen) {
       const timestamp = now();
       await db.transaction(async (tx) => {
         if (!row.session.openedAt) {
           await tx
             .update(verificationSessions)
             .set({ openedAt: timestamp, verificationStatus: 'LINK_OPENED', updatedAt: timestamp })
-            .where(eq(verificationSessions.id, row.session.id));
-          await tx.insert(auditLogs).values({
+        .where(eq(verificationSessions.id, row.session.id));
+            await tx.insert(auditLogs).values({
             actorUserId: 'customer-token',
             actorName: 'Customer',
             action: 'LINK_OPENED',
@@ -108,24 +118,37 @@ export class VerificationService {
             timestamp,
           });
         }
-        if (row.reminder) {
+        if (reminder && firstReminderOpen) {
           await tx
             .update(reminders)
             .set({ status: 'CANCELLED' })
             .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
+          await tx
+            .update(reminders)
+            .set({ openedAt: timestamp })
+            .where(eq(reminders.id, reminder.id));
           await tx.insert(auditLogs).values({
             actorUserId: 'customer-token',
             actorName: 'Customer',
             action: 'REMINDER_LINK_OPENED',
             entityType: 'REMINDER',
-            entityId: row.reminder.id,
-            after: { reminderNumber: row.reminder.reminderNumber, futureRemindersCancelled: true },
+            entityId: reminder.id,
+            after: {
+              reminderNumber: reminder.reminderNumber,
+              futureRemindersCancelled: true,
+              reminderCountBefore: row.session.reminderCount,
+              reminderCountAfter: effectiveReminderCount,
+            },
             timestamp,
           });
-          if (row.session.attemptCount > 0) {
+          if (row.session.attemptCount > 0 || row.session.reminderCount !== effectiveReminderCount) {
             await tx
               .update(verificationSessions)
-              .set({ attemptCount: 0, updatedAt: timestamp })
+              .set({
+                attemptCount: 0,
+                reminderCount: effectiveReminderCount,
+                updatedAt: timestamp,
+              })
               .where(eq(verificationSessions.id, row.session.id));
             await tx.insert(auditLogs).values({
               actorUserId: 'customer-token',
@@ -133,7 +156,7 @@ export class VerificationService {
               action: 'GPS_ATTEMPT_WINDOW_RESET',
               entityType: 'VERIFICATION_SESSION',
               entityId: row.session.id,
-              after: { reminderNumber: row.reminder.reminderNumber, attemptCount: 0 },
+              after: { reminderNumber: reminder.reminderNumber, attemptCount: 0 },
               timestamp,
             });
           }
@@ -147,28 +170,31 @@ export class VerificationService {
         expiresAt: row.session.expiresAt.toISOString(),
         linkExpiresAt: row.reminder?.tokenExpiresAt?.toISOString() ?? row.session.expiresAt.toISOString(),
         customerConfirmationStatus: row.session.customerConfirmationStatus,
-        reminderCount: row.session.reminderCount,
+        reminderCount: effectiveReminderCount,
         attemptCount: row.reminder ? 0 : row.session.attemptCount,
         isReminderLink: Boolean(row.reminder),
+        canScheduleReminder,
       },
       customer: { id: row.customer.id, name: row.customer.name, phoneE164: maskPhone(row.customer.phoneE164) },
       address: {
         id: row.address.id,
         addressType: row.address.addressType,
-        rawAddress: maskAddress(row.address),
+        rawAddress: row.address.rawAddress,
         province: row.address.province,
         city: row.address.city,
         district: row.address.district,
         subdistrict: row.address.subdistrict,
-        street: `${row.address.street} **`,
-        houseNumber: '**',
+        street: row.address.street,
+        houseNumber: row.address.houseNumber,
         referencePrecision: row.address.referencePrecision,
+        requiresCorrection: isAddressIncomplete(row.address),
       },
     };
   }
 
   async confirm(token: string, confirmed: boolean) {
     const row = await this.findByToken(token);
+    if (confirmed) assertAddressCorrectionComplete(row.address);
     const timestamp = now();
     const nextStatus = confirmed ? 'CONSENTED' : 'CUSTOMER_DATA_MISMATCH';
     assertTransition(row.session.verificationStatus, nextStatus);
@@ -196,7 +222,7 @@ export class VerificationService {
         entityId: row.session.id,
         before: { status: row.session.verificationStatus },
         after: { confirmed },
-        reason: confirmed ? 'Customer confirmed masked data' : 'Customer reported data mismatch',
+        reason: confirmed ? 'Customer confirmed registered data' : 'Customer reported data mismatch',
         timestamp,
       });
     });
@@ -205,6 +231,7 @@ export class VerificationService {
 
   async consent(token: string) {
     const row = await this.findByToken(token);
+    assertAddressCorrectionComplete(row.address);
     if (row.session.customerConfirmationStatus !== 'CONFIRMED')
       throw new DomainError('Customer confirmation is required first');
     assertTransition(row.session.verificationStatus, 'GPS_CAPTURING');
@@ -230,6 +257,7 @@ export class VerificationService {
 
   async submitLocation(token: string, samples: GpsSample[]) {
     const row = await this.findByToken(token);
+    assertAddressCorrectionComplete(row.address);
     const config = await this.validationConfig.get();
     if (row.session.customerConfirmationStatus !== 'CONFIRMED' || !row.session.consentAt)
       throw new DomainError('Confirmation and consent are required before location capture');
@@ -549,6 +577,12 @@ export class VerificationService {
     const max = config.MAX_REMINDERS_PER_SESSION;
     if (!config.ENABLE_REMINDERS || row.session.reminderCount >= max)
       throw new DomainError('Reminder limit reached', 409, 'REMINDER_LIMIT_REACHED');
+    if (row.reminder && !canScheduleReminderFromLink(row.session.reminderCount, row.reminder.reminderNumber))
+      throw new DomainError(
+        'A reminder has already been selected from this link',
+        409,
+        'REMINDER_ALREADY_SELECTED',
+      );
     const reminderNumber = nextReminderNumber(row.session.reminderCount, max);
     if (!reminderNumber) throw new DomainError('Reminder limit reached', 409, 'REMINDER_LIMIT_REACHED');
     const currentTime = now();
@@ -576,22 +610,59 @@ export class VerificationService {
     assertTransition(row.session.verificationStatus, nextStatus);
     await db.transaction(async (tx) => {
       const timestamp = now();
-      await tx.insert(reminders).values(
-        reminderTimes.map((time, index) => {
-          const reminderNumber = row.session.reminderCount + index + 1;
-          return {
-            id: randomUUID(),
-            sessionId: row.session.id,
-            reminderNumber,
-            channel: 'WHATSAPP',
-            scheduledAt: time,
-            status: 'SCHEDULED',
-            messageText: `Halo ${row.customer.name}, pengingat ${reminderNumber} dari ${max}. Tautan baru berlaku maksimal ${config.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`,
-            retryCount: 0,
-            createdAt: timestamp,
-          };
-        }),
+      const [existingReminder] = await tx
+        .select({
+          id: reminders.id,
+          status: reminders.status,
+          sentAt: reminders.sentAt,
+          tokenId: reminders.tokenId,
+        })
+        .from(reminders)
+        .where(
+          and(eq(reminders.sessionId, row.session.id), eq(reminders.reminderNumber, finalReminderNumber)),
+        )
+        .limit(1);
+      const reminderMessage = `Halo ${row.customer.name}, pengingat ${finalReminderNumber} dari ${max}. Tautan baru berlaku maksimal ${config.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`;
+      const reuseCancelledReminder = Boolean(
+        existingReminder &&
+          isReusableCancelledReminder(existingReminder.status, existingReminder.sentAt, existingReminder.tokenId),
       );
+
+      if (existingReminder && !reuseCancelledReminder) {
+        throw new DomainError('Reminder slot has already been used', 409, 'REMINDER_SLOT_ALREADY_USED');
+      }
+
+      if (reuseCancelledReminder) {
+        await tx
+          .update(reminders)
+          .set({
+            channel: 'WHATSAPP',
+            scheduledAt,
+            sentAt: null,
+            openedAt: null,
+            tokenId: null,
+            tokenHash: null,
+            tokenExpiresAt: null,
+            tokenInvalidatedAt: null,
+            status: 'SCHEDULED',
+            messageText: reminderMessage,
+            providerMessageId: null,
+            retryCount: 0,
+          })
+          .where(eq(reminders.id, existingReminder.id));
+      } else {
+        await tx.insert(reminders).values({
+          id: randomUUID(),
+          sessionId: row.session.id,
+          reminderNumber: finalReminderNumber,
+          channel: 'WHATSAPP',
+          scheduledAt,
+          status: 'SCHEDULED',
+          messageText: reminderMessage,
+          retryCount: 0,
+          createdAt: timestamp,
+        });
+      }
       await tx
         .update(verificationSessions)
         .set({ reminderCount: finalReminderNumber, verificationStatus: nextStatus, updatedAt: timestamp })
@@ -608,6 +679,7 @@ export class VerificationService {
           scheduledAt: scheduledAt.toISOString(),
           reminderUntilAt: effectiveReminderUntilAt.toISOString(),
           automaticSchedule: false,
+          reusedCancelledReminder: reuseCancelledReminder,
         },
         timestamp,
       });
@@ -623,6 +695,7 @@ export class VerificationService {
             scheduledAt: time.toISOString(),
             reminderUntilAt: effectiveReminderUntilAt.toISOString(),
             automaticSchedule: false,
+            reusedCancelledReminder: reuseCancelledReminder,
           },
           timestamp,
         })),
@@ -639,6 +712,7 @@ export class VerificationService {
 
   async addressStatus(token: string, sameAddress: boolean) {
     const row = await this.findByToken(token);
+    if (sameAddress) assertAddressCorrectionComplete(row.address);
     const config = await this.validationConfig.get();
     if (sameAddress && row.session.attemptCount >= Math.min(3, config.MAX_LOCATION_ATTEMPTS) && !row.reminder)
       throw new DomainError('Please choose a reminder before trying GPS again.', 409, 'REMINDER_REQUIRED');
@@ -680,6 +754,7 @@ export class VerificationService {
 
   async changeAddress(token: string, input: AddressChangeInput) {
     const row = await this.findByToken(token);
+    assertAddressCorrectionComplete(input);
     const config = await this.validationConfig.get();
     if (!config.ENABLE_ADDRESS_EDIT) throw new DomainError('Address edit is disabled', 409);
     if (row.address.addressType === 'PROPOSED') {

@@ -1,4 +1,11 @@
-const confirmationStatuses = ['CREATED', 'MESSAGE_SENT', 'LINK_OPENED', 'WAITING_FOR_HOME', 'REMINDER_LIMIT_REACHED'];
+const confirmationStatuses = [
+  'CREATED',
+  'MESSAGE_SENT',
+  'LINK_OPENED',
+  'ADDRESS_PROPOSED',
+  'WAITING_FOR_HOME',
+  'REMINDER_LIMIT_REACHED',
+];
 
 export function shouldShowCustomerConfirmation(
   status: string | null | undefined,
@@ -48,5 +55,31 @@ export function shouldShowReminderResume(
     reminderCount > 0 &&
     normalizedConfirmationStatus === 'CONFIRMED' &&
     ['WAITING_FOR_HOME', 'REMINDER_LIMIT_REACHED'].includes(normalizedStatus)
+  );
+}
+
+export function shouldShowReminderPickerOnLink(
+  status: string | null | undefined,
+  confirmationStatus: string | null | undefined,
+  reminderCount: number,
+  isReminderLink: boolean,
+  busy: boolean,
+  maxReminders = 3,
+  canScheduleReminder = true,
+): boolean {
+  const normalizedStatus = String(status || '')
+    .trim()
+    .toUpperCase();
+  const normalizedConfirmationStatus = String(confirmationStatus || '')
+    .trim()
+    .toUpperCase();
+  return (
+    !busy &&
+    isReminderLink &&
+    canScheduleReminder &&
+    normalizedConfirmationStatus === 'CONFIRMED' &&
+    reminderCount > 0 &&
+    reminderCount < maxReminders &&
+    ['WAITING_FOR_HOME', 'REMINDER_REQUIRED', 'REMINDER_LIMIT_REACHED'].includes(normalizedStatus)
   );
 }

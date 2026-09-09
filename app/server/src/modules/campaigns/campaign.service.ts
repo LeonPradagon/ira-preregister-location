@@ -23,6 +23,10 @@ import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/
 import { ReadCacheService } from '../../common/read-cache.service.js';
 import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js';
 import { buildVerificationSimulationConfig } from '../verification/simulation-config.js';
+import {
+  campaignRecipientReservationStatuses,
+  selectCampaignTargetIds,
+} from './campaign-target.policy.js';
 
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
@@ -60,6 +64,21 @@ function filtersForTarget(target: StoredTargetFilter, cursor?: string) {
   }
   return and(...filters);
 }
+
+const campaignRecipientReservationFilter = () => {
+  const statuses = sql.join(campaignRecipientReservationStatuses.map((status) => sql`${status}`), sql`, `);
+  return sql`not exists (
+    select 1
+    from "verification_campaign_items" reserved_item
+    where reserved_item."customer_id" = ${customers.id}
+      and reserved_item."status" in (${statuses})
+  ) and not exists (
+    select 1
+    from "verification_campaigns" reserved_campaign
+    where reserved_campaign."status" in ('DRAFT', 'RUNNING')
+      and reserved_campaign."target_filter" -> 'customerIds' ? (${customers.id})::text
+  )`;
+};
 
 @Injectable()
 export class CampaignService {
@@ -103,38 +122,51 @@ export class CampaignService {
   async create(admin: RequestAdmin, input: CampaignCreateInput) {
     if (!canManage(admin.role)) throw new DomainError('Role cannot create a campaign', 403, 'FORBIDDEN');
     const ids = input.customerIds ?? [];
-    const target: StoredTargetFilter = input.targetFilter
+    const requestedDailySendLimit = Math.min(Math.max(input.dailySendLimit ?? 500, 1), maxDailySendLimit);
+    let target: StoredTargetFilter = input.targetFilter
       ? { ...input.targetFilter }
       : { locationStatus: 'UNVERIFIED', search: '', customerIds: ids };
     if (ids.length > maxBatchSize())
       throw new DomainError('Campaign batch is too large', 413, 'CAMPAIGN_BATCH_TOO_LARGE');
 
-    const [{ total }] = await db
-      .select({ total: sql<number>`count(*)` })
-      .from(customers)
-      .where(filtersForTarget(target));
-    const targetCount = Number(total);
-    if (!targetCount) throw new DomainError('Campaign has no eligible customers', 422, 'CAMPAIGN_TARGET_EMPTY');
-    if (ids.length) {
-      const selected = await db
-        .select({ id: customers.id, optedOut: customers.whatsappOptOutAt })
+    if (input.targetFilter) {
+      const candidateRows = await db
+        .select({ id: customers.id })
         .from(customers)
-        .where(inArray(customers.id, ids));
-      if (selected.length !== ids.length)
-        throw new DomainError('One or more campaign customers were not found', 422, 'CAMPAIGN_TARGET_INVALID');
-      if (selected.some((customer) => customer.optedOut))
-        throw new DomainError(
-          'One or more campaign customers have opted out of WhatsApp messages',
-          422,
-          'CUSTOMER_OPTED_OUT',
-        );
+        .where(and(filtersForTarget(target), campaignRecipientReservationFilter()))
+        .orderBy(asc(customers.id))
+        .limit(requestedDailySendLimit);
+      target = {
+        ...target,
+        customerIds: selectCampaignTargetIds(
+          candidateRows.map((customer) => customer.id),
+          requestedDailySendLimit,
+        ),
+      };
     }
+
+    const targetIds = target.customerIds ?? ids;
+    const selected = targetIds.length
+      ? await db
+          .select({ id: customers.id, optedOut: customers.whatsappOptOutAt })
+          .from(customers)
+          .where(and(filtersForTarget(target), campaignRecipientReservationFilter()))
+      : [];
+    const targetCount = selected.length;
+    if (ids.length > requestedDailySendLimit)
+      throw new DomainError('Selected recipients exceed the daily send limit', 422, 'CAMPAIGN_DAILY_LIMIT_EXCEEDED');
+    if (selected.length !== targetIds.length)
+      throw new DomainError(
+        'One or more selected customers are already reserved by another delivery or are no longer eligible',
+        409,
+        'CAMPAIGN_CUSTOMERS_UNAVAILABLE',
+      );
+    if (!targetCount) throw new DomainError('Campaign has no eligible customers', 422, 'CAMPAIGN_TARGET_EMPTY');
 
     const campaignId = randomUUID();
     const created = timestamp();
     const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : created;
     const requestedBatchSize = input.batchSize ?? Number(process.env.CAMPAIGN_DEFAULT_BATCH_SIZE ?? 500);
-    const requestedDailySendLimit = Math.min(Math.max(input.dailySendLimit ?? 500, 1), maxDailySendLimit);
     const requestedWindowDays = input.sendWindowDays ?? Number(process.env.CAMPAIGN_DEFAULT_SEND_WINDOW_DAYS ?? 0);
     const materializationBatch = Math.min(requestedBatchSize, maxBatchSize(), defaultMaterializationBatch());
     await db.insert(verificationCampaigns).values({

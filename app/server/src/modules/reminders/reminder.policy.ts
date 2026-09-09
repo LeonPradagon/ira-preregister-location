@@ -10,6 +10,29 @@ export function nextReminderNumber(current: number, max = MAX_REMINDERS_PER_SESS
   return current + 1;
 }
 
+export function reminderCountAfterOpeningLink(currentCount: number, reminderNumber: number): number {
+  if (!Number.isInteger(currentCount) || currentCount < 0) throw new Error('Reminder count must be non-negative');
+  if (!Number.isInteger(reminderNumber) || reminderNumber < 1)
+    throw new Error('Reminder number must be a positive integer');
+  return Math.min(currentCount, reminderNumber);
+}
+
+export function isReminderLinkFirstOpen(openedAt: Date | null | undefined): boolean {
+  return !openedAt;
+}
+
+export function canScheduleReminderFromLink(reminderCount: number, reminderNumber: number): boolean {
+  return reminderCount <= reminderNumber;
+}
+
+export function isReusableCancelledReminder(
+  status: string,
+  sentAt: Date | null | undefined,
+  tokenId: string | null | undefined,
+): boolean {
+  return status.trim().toUpperCase() === 'CANCELLED' && !sentAt && !tokenId;
+}
+
 export function reminderLinkExpiresAt(
   sentAt: Date,
   sessionExpiresAt: Date,

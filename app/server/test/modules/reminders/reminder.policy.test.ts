@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   automaticReminderTimes,
+  canScheduleReminderFromLink,
+  isReminderLinkFirstOpen,
+  isReusableCancelledReminder,
   isReminderScheduledBeforeSessionExpiry,
   nextAutomaticReminderAt,
   nextReminderNumber,
+  reminderCountAfterOpeningLink,
   reminderLinkExpiresAt,
   scheduleReminder,
   scheduleReminderInTimezone,
@@ -15,6 +19,14 @@ describe('reminder policy', () => {
     expect(nextReminderNumber(0)).toBe(1);
     expect(nextReminderNumber(2)).toBe(3);
     expect(nextReminderNumber(3)).toBeNull();
+  });
+
+  it.each([
+    [2, 1, 1],
+    [3, 2, 2],
+    [3, 3, 3],
+  ])('normalizes the reminder counter to the opened link', (currentCount, reminderNumber, expectedCount) => {
+    expect(reminderCountAfterOpeningLink(currentCount, reminderNumber)).toBe(expectedCount);
   });
 
   it('schedules one-hour reminders from the supplied clock', () => {
@@ -58,6 +70,24 @@ describe('reminder policy', () => {
       '2026-01-02T10:00:00.000Z',
       '2026-01-03T10:00:00.000Z',
     ]);
+  });
+
+  it('processes reminder-link side effects only on the first open', () => {
+    expect(isReminderLinkFirstOpen(null)).toBe(true);
+    expect(isReminderLinkFirstOpen(undefined)).toBe(true);
+    expect(isReminderLinkFirstOpen(new Date('2026-09-09T00:00:00.000Z'))).toBe(false);
+  });
+
+  it('allows an unsent cancelled reminder slot to be scheduled again', () => {
+    expect(isReusableCancelledReminder('CANCELLED', null, null)).toBe(true);
+    expect(isReusableCancelledReminder('SENT', new Date('2026-09-09T00:00:00.000Z'), 'token')).toBe(false);
+    expect(isReusableCancelledReminder('SCHEDULED', null, null)).toBe(false);
+  });
+
+  it('does not allow the same reminder link to schedule another reminder twice', () => {
+    expect(canScheduleReminderFromLink(1, 1)).toBe(true);
+    expect(canScheduleReminderFromLink(2, 1)).toBe(false);
+    expect(canScheduleReminderFromLink(3, 2)).toBe(false);
   });
 
   it('creates three reminders from one selected time two days apart', () => {

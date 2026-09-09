@@ -3187,7 +3187,7 @@ ira_preregist/
 ├── .dockerignore
 ├── .env.example
 ├── .gitignore
-├── docker-compose.yml                # Semua service didefinisikan di root
+├── docker-compose.yaml               # Semua service didefinisikan di root
 ├── package.json
 ├── pnpm-workspace.yaml
 ├── turbo.json
@@ -3243,7 +3243,7 @@ app/server/Dockerfile
 Root repository mempunyai:
 
 ```text
-docker-compose.yml
+docker-compose.yaml
 ```
 
 Tidak perlu Dockerfile ketiga di root.
@@ -3339,7 +3339,7 @@ Untuk production hardening lebih lanjut, image server nantinya dapat menggunakan
 
 ---
 
-# 53. Root `docker-compose.yml`
+# 53. Root `docker-compose.yaml`
 
 Service yang dibutuhkan untuk core MVP:
 
@@ -3661,7 +3661,7 @@ ROOT
 │   └── server/    → NestJS + Better Auth + Drizzle backend
 │       └── Dockerfile
 │
-├── docker-compose.yml
+├── docker-compose.yaml
 ├── pnpm-workspace.yaml
 ├── package.json
 └── ...
@@ -3671,7 +3671,7 @@ Aturan penting:
 
 1. `web` dan `server` memiliki Dockerfile masing-masing.
 2. Tidak ada Dockerfile aplikasi di root.
-3. `docker-compose.yml` hanya ada di root.
+3. `docker-compose.yaml` hanya ada di root.
 4. PostgreSQL yang digunakan adalah image PostGIS.
 5. Redis menjadi dependency backend untuk BullMQ/reminder.
 6. `server` dan `worker` dapat memakai Docker image/backend source yang sama.

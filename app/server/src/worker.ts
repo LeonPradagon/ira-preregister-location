@@ -72,6 +72,22 @@ const whatsapp: WhatsAppPort =
 const campaigns = new CampaignService(new ValidationConfigService(), new ReadCacheService());
 const reminderConfig = new ValidationConfigService();
 
+const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+const whatsappRateLimitKey = `whatsapp:send:rate-limit:${whatsappProvider}`;
+const acquireWhatsAppSendSlot = async () => {
+  const configuredRate = Number(process.env.WHATSAPP_RATE_LIMIT_PER_SECOND ?? 1);
+  const requestsPerSecond = Number.isFinite(configuredRate) && configuredRate > 0 ? configuredRate : 1;
+  const intervalMilliseconds = Math.max(1, Math.floor(1000 / requestsPerSecond));
+
+  while (true) {
+    const reserved = await connection.set(whatsappRateLimitKey, randomUUID(), 'PX', intervalMilliseconds, 'NX');
+    if (reserved === 'OK') return;
+
+    const timeToNextSlot = await connection.pttl(whatsappRateLimitKey);
+    await wait(timeToNextSlot > 0 ? timeToNextSlot : intervalMilliseconds);
+  }
+};
+
 const circuitBucket = () => `whatsapp:outcomes:${Math.floor(Date.now() / 60000)}`;
 const isCircuitOpen = async () => (await connection.get('whatsapp:circuit:open')) === '1';
 const recordProviderOutcome = async (success: boolean) => {
@@ -257,6 +273,7 @@ const reminderWorker = runs('messaging')
           const runtimeConfig = await reminderConfig.get();
           const reminderTtlHours = runtimeConfig.REMINDER_LINK_TTL_HOURS;
           const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
+          await acquireWhatsAppSendSlot();
           const sent = await whatsapp.send({
             phoneE164: target.customer.phoneE164,
             recipientName: target.customer.name,
@@ -459,6 +476,7 @@ const campaignWorker = runs('campaign')
           const verificationToken = await createVerificationToken();
           const expiresAt = new Date(Date.now() + Number(process.env.VERIFICATION_TOKEN_TTL_DAYS ?? 7) * 86400000);
           const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
+          await acquireWhatsAppSendSlot();
           const sent = await whatsapp.send({
             phoneE164: target.customer.phoneE164,
             recipientName: target.customer.name,

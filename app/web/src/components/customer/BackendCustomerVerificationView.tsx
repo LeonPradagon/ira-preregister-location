@@ -12,6 +12,7 @@ import { findRegionOption, regionOptionValue } from '../../lib/regionSelection';
 import {
   shouldShowCustomerConfirmation,
   shouldShowLocationRetry,
+  shouldShowReminderPickerOnLink,
   shouldShowReminderResume,
 } from '../../lib/customerVerificationFlow';
 import { confirmAction } from '../../lib/swal';
@@ -117,6 +118,7 @@ const createSimulationContext = (
     reminderCount: 0,
     attemptCount: 0,
     isReminderLink: false,
+    canScheduleReminder: true,
   },
   customer: { id: 'simulation-customer', name: customerName, phoneE164: '+628111111111' },
   address: {
@@ -191,11 +193,19 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   const [reminderDateTime, setReminderDateTime] = useState(() =>
     toDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)),
   );
+  const [reminderPickerOpen, setReminderPickerOpen] = useState(false);
   const [reminderScheduledNow, setReminderScheduledNow] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const applyContext = (nextContext: PublicVerificationContextApi) => {
+    setContext(nextContext);
+    if (nextContext.address.requiresCorrection && nextContext.address.addressType !== 'PROPOSED') {
+      setEditingAddress(true);
+      setShowAddressChangeConfirmation(false);
+    }
+  };
   const refresh = async () => {
-    if (!simulation) setContext(await api.context(token));
+    if (!simulation) applyContext(await api.context(token));
   };
   useEffect(() => {
     if (!navigator.permissions?.query) return undefined;
@@ -241,8 +251,10 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     try {
       await action();
       await refresh();
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('customer.requestFailed'));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -269,6 +281,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     setGpsPermissionDenied(false);
     setGpsRetryAvailable(false);
     setReminderDateTime(toDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)));
+    setReminderPickerOpen(false);
     setReminderScheduledNow(false);
     setError(null);
   };
@@ -404,16 +417,21 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       setError(t('customer.reminderInvalid'));
       return;
     }
-    setReminderScheduledNow(true);
-    return simulation
+    const scheduled = simulation
       ? run(async () => {
           const nextReminderCount = (context?.session.reminderCount ?? 0) + 1;
           updateSimulationSession({
             status: nextReminderCount >= 3 ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME',
             reminderCount: nextReminderCount,
-          });
-        })
+        });
+      })
       : run(() => api.waitForHome(token, { scheduledAt: scheduledAt.toISOString() }));
+    return scheduled.then((success) => {
+      if (success) {
+        setReminderScheduledNow(true);
+        setReminderPickerOpen(false);
+      }
+    });
   };
 
   const captureAfterTransition = async (transition: () => Promise<unknown> | unknown) => {
@@ -465,52 +483,54 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       return;
     }
     const submittedAddress: AddressForm = { ...addressForm, postalCode, houseNumber: addressForm.houseNumber.trim() };
+    setBusy(true);
+    setError(null);
     const confirmed = await confirmAction({
       title: t('crud.updateQuestion'),
       text: t('crud.updateText'),
       confirmButtonText: t('crud.continue'),
       cancelButtonText: t('crud.cancel'),
+      onConfirm: async () => {
+        try {
+          if (simulation) {
+            updateSimulationSession({ status: 'ADDRESS_PROPOSED' });
+            setContext((current) =>
+              current
+                ? {
+                    ...current,
+                    address: {
+                      ...current.address,
+                      ...submittedAddress,
+                      addressType: 'PROPOSED',
+                      requiresCorrection: false,
+                      rawAddress: [
+                        submittedAddress.street,
+                        `No. ${submittedAddress.houseNumber}`,
+                        submittedAddress.addressDetail,
+                        submittedAddress.subdistrict,
+                        submittedAddress.district,
+                        submittedAddress.city,
+                        submittedAddress.province,
+                        submittedAddress.postalCode,
+                      ]
+                        .filter(Boolean)
+                        .join(', '),
+                    },
+                  }
+                : current,
+            );
+          } else {
+            await api.changeAddress(token, submittedAddress);
+            await refresh();
+          }
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : t('customer.requestFailed'));
+          throw cause;
+        }
+      },
     });
-    if (!confirmed) return;
-    setBusy(true);
-    setError(null);
-    try {
-      if (simulation) {
-        updateSimulationSession({ status: 'ADDRESS_PROPOSED' });
-        setContext((current) =>
-          current
-            ? {
-                ...current,
-                address: {
-                  ...current.address,
-                  ...submittedAddress,
-                  addressType: 'PROPOSED',
-                  rawAddress: [
-                    submittedAddress.street,
-                    `No. ${submittedAddress.houseNumber}`,
-                    submittedAddress.addressDetail,
-                    submittedAddress.subdistrict,
-                    submittedAddress.district,
-                    submittedAddress.city,
-                    submittedAddress.province,
-                    submittedAddress.postalCode,
-                  ]
-                    .filter(Boolean)
-                    .join(', '),
-                },
-              }
-            : current,
-        );
-      } else {
-        await api.changeAddress(token, submittedAddress);
-        await refresh();
-      }
-      setEditingAddress(false);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('customer.requestFailed'));
-    } finally {
-      setBusy(false);
-    }
+    setBusy(false);
+    if (confirmed) setEditingAddress(false);
   };
 
   const requestAddressChange = () => setShowAddressChangeConfirmation(true);
@@ -683,6 +703,15 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       context.session.isReminderLink,
       busy,
     );
+  const reminderPickerOnLinkAvailable = shouldShowReminderPickerOnLink(
+    status,
+    confirmationStatus,
+    context.session.reminderCount,
+    context.session.isReminderLink,
+    busy,
+    3,
+    context.session.canScheduleReminder,
+  );
   const renderAddressField = (field: string) => {
     const regionLevel = regionLevels.includes(field as RegionLevel) ? (field as RegionLevel) : null;
     const parentLevel = regionLevel ? regionLevels[regionLevels.indexOf(regionLevel) - 1] : undefined;
@@ -772,6 +801,12 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     >
       <div>
         <p className="text-base font-semibold">{t('customer.requestNewAddress')}</p>
+        {context.address.requiresCorrection && context.address.addressType !== 'PROPOSED' && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+            <p className="font-semibold">{t('customer.addressCorrectionRequired')}</p>
+            <p className="mt-1">{t('customer.addressCorrectionHint')}</p>
+          </div>
+        )}
         <p className="mt-1 text-xs leading-relaxed text-slate-600">{t('customer.addressEditFormHint')}</p>
       </div>
       {fields.map(renderAddressField)}
@@ -781,7 +816,14 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
           disabled={busy}
           className="w-full rounded-lg bg-blue-600 px-3 py-3 text-xs font-semibold text-white"
         >
-          {t('customer.submitAddress')}
+          {busy ? (
+            <span className="flex items-center justify-center gap-2">
+              <AppLoader size={16} label={t('customer.submittingAddress')} />
+              {t('customer.submittingAddress')}
+            </span>
+          ) : (
+            t('customer.submitAddress')
+          )}
         </button>
       </div>
     </form>
@@ -800,24 +842,44 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       {t('customer.addressChangeContactSupport')}
     </p>
   );
+  const reminderAction = reminderPickerOpen ? (
+    <ReminderPicker
+      value={reminderDateTime}
+      onChange={setReminderDateTime}
+      disabled={busy || context.session.reminderCount >= 3}
+      max={toDateTimeLocalValue(new Date(context.session.expiresAt))}
+      onSubmit={scheduleReminder}
+      onCancel={() => setReminderPickerOpen(false)}
+    />
+  ) : (
+    <button
+      type="button"
+      disabled={busy || context.session.reminderCount >= 3}
+      onClick={() => setReminderPickerOpen(true)}
+      className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-3 text-xs font-semibold text-amber-900"
+    >
+      <Clock3 className="h-4 w-4 shrink-0" />
+      {t('customer.askReminder')}
+    </button>
+  );
   if (editingAddress)
     return (
       <div className="customer-theme min-h-[100dvh] bg-[#fff5f5] px-0 py-0 sm:px-4 sm:py-6">
-        <div className="mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col overflow-hidden border border-red-100 bg-white shadow-sm sm:min-h-[680px] sm:rounded-3xl sm:shadow-lg">
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col overflow-hidden border border-red-100 bg-white shadow-sm sm:min-h-[680px] sm:rounded-3xl sm:shadow-lg">
           <div className="border-b border-red-100 px-4 py-4 sm:px-7 sm:py-5">
             <div className="flex items-center gap-3">
-              <img
-                src="/ira-logo-hd.png?v=3"
-                alt="IRA"
-                className="h-11 w-11 shrink-0 rounded-xl object-contain shadow-sm"
-              />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-red-200 bg-[#d71920] p-0.5 shadow-sm">
+                <img src="/ira-logo-hd.png?v=3" alt="IRA" className="h-full w-full rounded-[0.65rem] object-contain" />
+              </div>
               <div className="min-w-0">
-                <p className="text-base font-extrabold tracking-tight text-[#d71920]">IRA</p>
+                <p className="truncate text-base font-extrabold tracking-tight text-[#d71920]">
+                  {t('app.customerVerification')}
+                </p>
                 <p className="break-words text-xs font-medium text-slate-600">{t('customer.requestNewAddress')}</p>
               </div>
             </div>
           </div>
-          <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-7">
+          <div className="flex-1 space-y-4 p-4 pb-24 sm:p-7 sm:pb-7">
             {error && (
               <div className="flex gap-2 break-words rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -849,13 +911,13 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
         )}
         <div className="border-b border-red-100 bg-white px-4 py-4 sm:px-7 sm:py-5">
           <div className="flex items-center gap-3">
-            <img
-              src="/ira-logo-hd.png?v=3"
-              alt="IRA"
-              className="h-11 w-11 shrink-0 rounded-xl object-contain shadow-sm"
-            />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-red-200 bg-[#d71920] p-0.5 shadow-sm">
+              <img src="/ira-logo-hd.png?v=3" alt="IRA" className="h-full w-full rounded-[0.65rem] object-contain" />
+            </div>
             <div className="min-w-0">
-              <p className="text-base font-extrabold tracking-tight text-[#d71920]">IRA</p>
+              <p className="truncate text-base font-extrabold tracking-tight text-[#d71920]">
+                {t('app.customerVerification')}
+              </p>
               <p className="break-words text-xs font-medium text-slate-600">{t('customer.verification')}</p>
             </div>
             <div className="ml-auto hidden items-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-[11px] font-semibold text-[#b8171d] sm:flex">
@@ -864,7 +926,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
             </div>
           </div>
         </div>
-        <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-7">
+        <div className="flex-1 space-y-5 p-4 pb-24 sm:p-7 sm:pb-7">
           <div>
             <p className="break-words text-sm text-slate-500">
               {t('customer.hello')}, <span className="font-semibold text-slate-700">{context.customer.name}</span>
@@ -1053,6 +1115,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                     {gpsActionContent(t('customer.startVerificationNow'), <Compass className="h-4 w-4" />)}
                   </button>
                   {addressChangeAction}
+                  {reminderPickerOnLinkAvailable && reminderAction}
                 </div>
               )}
               {!reminderLinkFlow && mismatch && !selectedReminderWaiting && (
@@ -1089,13 +1152,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                 </div>
               )}
               {!reminderLinkFlow && mismatch && !selectedReminderWaiting && (
-                <ReminderPicker
-                  value={reminderDateTime}
-                  onChange={setReminderDateTime}
-                  disabled={busy || context.session.reminderCount >= 3}
-                  max={toDateTimeLocalValue(new Date(context.session.expiresAt))}
-                  onSubmit={scheduleReminder}
-                />
+                reminderAction
               )}
               {!reminderLinkFlow && reminderRequired && !selectedReminderWaiting && (
                 <div className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
@@ -1104,13 +1161,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                     title={t('customer.gpsAttemptLimitTitle')}
                     text={t('customer.gpsAttemptLimitText')}
                   />
-                  <ReminderPicker
-                    value={reminderDateTime}
-                    onChange={setReminderDateTime}
-                    disabled={busy || context.session.reminderCount >= 3}
-                    max={toDateTimeLocalValue(new Date(context.session.expiresAt))}
-                    onSubmit={scheduleReminder}
-                  />
+                  {reminderAction}
                 </div>
               )}
               {!reminderLinkFlow && shouldShowLocationRetry(status, confirmationStatus) && !selectedReminderWaiting && (
@@ -1230,9 +1281,11 @@ const Panel: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     <div className="customer-theme flex min-h-[100dvh] w-full items-center justify-center bg-[#fff5f5] px-4 py-8 text-center">
       <div className="w-full max-w-sm overflow-hidden rounded-3xl border border-red-100 bg-white shadow-lg">
         <div className="flex items-center gap-3 border-b border-red-100 px-5 py-4 text-left">
-          <img src="/ira-logo-hd.png?v=3" alt="IRA" className="h-10 w-10 rounded-xl object-contain" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-red-200 bg-[#d71920] p-0.5 shadow-sm">
+            <img src="/ira-logo-hd.png?v=3" alt="IRA" className="h-full w-full rounded-[0.65rem] object-contain" />
+          </div>
           <div>
-            <p className="font-extrabold tracking-tight text-[#d71920]">IRA</p>
+            <p className="truncate font-extrabold tracking-tight text-[#d71920]">{t('app.customerVerification')}</p>
             <p className="text-[11px] text-slate-500">{t('customer.verification')}</p>
           </div>
         </div>
@@ -1318,7 +1371,14 @@ const AddressChangeConfirmation: React.FC<{
             onClick={() => void onConfirm()}
             className="w-full rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
           >
-            {t('customer.addressChangeConfirmYes')}
+            {busy ? (
+              <span className="flex items-center justify-center gap-2">
+                <AppLoader size={16} label={t('customer.submittingAddress')} />
+                {t('customer.submittingAddress')}
+              </span>
+            ) : (
+              t('customer.addressChangeConfirmYes')
+            )}
           </button>
         </div>
       </div>
@@ -1331,14 +1391,25 @@ const ReminderPicker: React.FC<{
   disabled: boolean;
   max: string;
   onSubmit: () => void;
-}> = ({ value, onChange, disabled, max, onSubmit }) => {
+  onCancel: () => void;
+}> = ({ value, onChange, disabled, max, onSubmit, onCancel }) => {
   const { t } = useTranslation();
   const minimum = toDateTimeLocalValue(new Date(Date.now() + 60_000));
   return (
     <div className="min-w-0 space-y-3 rounded-lg border border-amber-200 bg-white p-3">
-      <div>
-        <p className="break-words text-sm font-semibold text-amber-950">{t('customer.reminderQuestion')}</p>
-        <p className="mt-1 break-words text-xs leading-relaxed text-gray-600">{t('customer.reminderHelp')}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="break-words text-sm font-semibold text-amber-950">{t('customer.reminderQuestion')}</p>
+          <p className="mt-1 break-words text-xs leading-relaxed text-gray-600">{t('customer.reminderHelp')}</p>
+        </div>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onCancel}
+          className="shrink-0 text-xs font-medium text-gray-500 underline underline-offset-2 disabled:opacity-50"
+        >
+          {t('customer.cancelReminder')}
+        </button>
       </div>
       <div>
         <label className="block break-words text-xs font-medium text-gray-700">{t('customer.reminderDateTime')}</label>

@@ -1,4 +1,4 @@
 # Compatibility entry point; the default Compose file owns the complete stack.
 name: ${COMPOSE_PROJECT_NAME:-ira_preregist}
 include:
-  - docker-compose.yml
+  - docker-compose.yaml

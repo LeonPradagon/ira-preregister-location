@@ -4,14 +4,14 @@
 
 Ikuti [README utama](../README.md#deploy-dengan-docker-compose): salin `.env.example` ke `.env` di root, isi secret/domain, lalu jalankan `docker compose up --build -d`.
 
-`docker-compose.yml` menjadi sumber konfigurasi stack lengkap. `docker-compose.prod.yml` hanya entry point kompatibilitas melalui [Compose include](https://docs.docker.com/compose/how-tos/multiple-compose-files/include/); tidak ada salinan stack production kedua yang harus dipelihara.
+`docker-compose.yaml` menjadi sumber konfigurasi stack lengkap. `docker-compose.prod.yaml` hanya entry point kompatibilitas melalui [Compose include](https://docs.docker.com/compose/how-tos/multiple-compose-files/include/); tidak ada salinan stack production kedua yang harus dipelihara.
 
 Untuk tetap menyimpan environment di `deploy/.env`:
 
 ```powershell
 Copy-Item deploy/.env.example deploy/.env
 # Edit secret, domain, dan akun admin terlebih dahulu.
-docker compose --env-file deploy/.env -f docker-compose.prod.yml up --build -d
+docker compose --env-file deploy/.env -f docker-compose.prod.yaml up --build -d
 ```
 
 Template tersebut menetapkan `COMPOSE_ENV_FILE=./deploy/.env`, sehingga konfigurasi provider juga masuk ke container. Jika menggunakan file lain, set `COMPOSE_ENV_FILE` ke lokasi file itu; `--env-file` saja hanya mengatur substitusi Compose.
@@ -64,9 +64,9 @@ VITE_API_URL=https://api.example.com/v1
 ```
 
 ```bash
-docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yml up --build -d
-docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yml run --rm api node dist/db/seed.js --if-missing
-docker compose --env-file deploy/.env -f deploy/docker-compose.frontend.yml up --build -d
+docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yaml up --build -d
+docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yaml run --rm api node dist/db/seed.js --if-missing
+docker compose --env-file deploy/.env -f deploy/docker-compose.frontend.yaml up --build -d
 ```
 
 Split backend memiliki migration otomatis dan seed eksplisit. Split frontend menggunakan `app/web/nginx.conf` untuk static SPA; konfigurasi proxy satu origin hanya dipasang oleh stack lengkap. PostgreSQL/Redis split hanya bind ke loopback host. Atur CORS, HTTPS, dan domain sesuai kedua origin tersebut.

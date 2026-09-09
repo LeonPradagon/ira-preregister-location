@@ -46,10 +46,12 @@ describe('API client', () => {
     });
     apiClient.defaults.adapter = adapterMock;
 
-    await api.customers({ page: 2, pageSize: 100, locationStatus: 'UNVERIFIED' });
+    await api.customers({ page: 2, pageSize: 100, locationStatus: 'UNVERIFIED', campaignAvailable: true });
 
     const config = adapterMock.mock.calls[0][0];
-    expect(config.url).toBe('/admin/customers?page=2&pageSize=100&locationStatus=UNVERIFIED');
+    expect(config.url).toBe(
+      '/admin/customers?page=2&pageSize=100&locationStatus=UNVERIFIED&campaignAvailable=true',
+    );
     expect(config.withCredentials).toBe(true);
   });
 

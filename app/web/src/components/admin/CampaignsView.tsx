@@ -210,7 +210,7 @@ export const CampaignsView: React.FC = () => {
   );
   const allSelected =
     selectableCustomers.length > 0 && selectableCustomers.every((customer) => selected.includes(customer.id));
-  const selectedCount = selectAllEligible ? candidateTotal : selected.length;
+  const selectedCount = selectAllEligible ? Math.min(candidateTotal, dailySendLimit) : selected.length;
 
   const loadCampaigns = async () => {
     setLoading(true);
@@ -247,6 +247,7 @@ export const CampaignsView: React.FC = () => {
         pageSize: candidatePageSize,
         search: customerSearch,
         locationStatus: 'UNVERIFIED',
+        campaignAvailable: true,
         cursor: candidatePage === 1 ? undefined : candidateCursors[candidatePage],
       });
       if (response.nextCursor)
@@ -264,12 +265,16 @@ export const CampaignsView: React.FC = () => {
     void loadCandidates();
   }, [candidatePage, candidatePageSize, customerSearch]);
 
-  const toggleAll = () =>
-    setSelected(
-      allSelected
-        ? selected.filter((id) => !selectableCustomers.some((customer) => customer.id === id))
-        : [...new Set([...selected, ...selectableCustomers.map((customer) => customer.id)])],
-    );
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelected((current) => current.filter((id) => !selectableCustomers.some((customer) => customer.id === id)));
+      return;
+    }
+    const remainingSlots = Math.max(0, dailySendLimit - selected.length);
+    const pageIds = selectableCustomers.map((customer) => customer.id).filter((id) => !selected.includes(id));
+    if (pageIds.length > remainingSlots) setMessage(t('campaigns.dailyLimitReached'));
+    setSelected((current) => [...new Set([...current, ...pageIds.slice(0, remainingSlots)])]);
+  };
   const toggleAllEligible = (checked: boolean) => {
     setSelectAllEligible(checked);
     if (checked) setSelected([]);
@@ -278,6 +283,17 @@ export const CampaignsView: React.FC = () => {
     setCustomerSearch(customerSearchInput.trim());
     setCandidatePage(1);
     setCandidateCursors({});
+  };
+
+  const toggleCustomer = (customerId: string) => {
+    setSelected((current) => {
+      if (current.includes(customerId)) return current.filter((id) => id !== customerId);
+      if (current.length >= dailySendLimit) {
+        setMessage(t('campaigns.dailyLimitReached'));
+        return current;
+      }
+      return [...current, customerId];
+    });
   };
 
   const simulateWhatsApp = async () => {
@@ -339,6 +355,7 @@ export const CampaignsView: React.FC = () => {
       await startCampaign(campaign.id);
       setSelected([]);
       setSelectAllEligible(false);
+      await loadCandidates();
       setMessage(t('campaigns.created', { count: campaign.targetCount.toLocaleString('en-US') }));
       await loadCampaigns();
       await showActionSuccess(
@@ -480,13 +497,7 @@ export const CampaignsView: React.FC = () => {
                   type="checkbox"
                   checked={selected.includes(customer.id)}
                   disabled={selectAllEligible}
-                  onChange={() =>
-                    setSelected((current) =>
-                      current.includes(customer.id)
-                        ? current.filter((id) => id !== customer.id)
-                        : [...current, customer.id],
-                    )
-                  }
+                  onChange={() => toggleCustomer(customer.id)}
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium text-slate-800 dark:text-slate-100">{customer.name}</span>
@@ -545,7 +556,11 @@ export const CampaignsView: React.FC = () => {
                 max={1000}
                 step={1}
                 value={dailySendLimit}
-                onChange={(event) => setDailySendLimit(Math.min(1000, Math.max(1, Number(event.target.value) || 1)))}
+                onChange={(event) => {
+                  const nextLimit = Math.min(1000, Math.max(1, Number(event.target.value) || 1));
+                  setDailySendLimit(nextLimit);
+                  setSelected((current) => current.slice(0, nextLimit));
+                }}
                 className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
                 placeholder={t('campaigns.dailyLimitPlaceholder')}
               />
@@ -560,7 +575,7 @@ export const CampaignsView: React.FC = () => {
             </p>
           )}
           <div className="flex flex-col gap-2 sm:flex-row">
-            <button
+            {/* <button
               type="button"
               disabled={previewLoading || candidateLoading || !selectableCustomers.length}
               onClick={() => void simulateWhatsApp()}
@@ -568,7 +583,7 @@ export const CampaignsView: React.FC = () => {
             >
               <MessageCircle className="h-4 w-4" />
               {previewLoading ? t('campaigns.preparing') : t('campaigns.previewMessage')}
-            </button>
+            </button> */}
             <button
               type="submit"
               disabled={busy || !name.trim() || (!selected.length && !selectAllEligible)}

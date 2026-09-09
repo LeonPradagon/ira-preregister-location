@@ -77,7 +77,7 @@ npm run dev:server
 
 Jalankan `npm run dev` dan `npm run dev:worker` pada terminal terpisah. Frontend tersedia di `http://localhost:5173`, API di `http://localhost:3000`, PostgreSQL di `localhost:5433`, dan Redis di `localhost:6379`. Dengan `app/server/.env.example`, akun development default adalah `admin@surge.com` / `admin123`; ganti nilai `SEED_ADMIN_*` sebelum dipakai di lingkungan bersama.
 
-`docker-compose.dev.yml` menjalankan dependency lokal. `npm run infra:worker` tersedia jika worker ingin dijalankan di Docker; untuk upload asynchronous gunakan API dan worker dengan direktori `IMPORT_STORAGE_DIR` yang sama. Cara paling sederhana untuk debugging import lokal adalah menjalankan keduanya di host. Perintah backend membuat `.env` lokal dari contoh bila belum tersedia. Jangan menimpa `.env` yang sudah berisi konfigurasi Anda.
+`docker-compose.dev.yaml` menjalankan dependency lokal. `npm run infra:worker` tersedia jika worker ingin dijalankan di Docker; untuk upload asynchronous gunakan API dan worker dengan direktori `IMPORT_STORAGE_DIR` yang sama. Cara paling sederhana untuk debugging import lokal adalah menjalankan keduanya di host. Perintah backend membuat `.env` lokal dari contoh bila belum tersedia. Jangan menimpa `.env` yang sudah berisi konfigurasi Anda.
 
 Smoke check health dan login lokal: `./scripts/local-smoke.ps1`. Skrip menjalankan migration/seed lokal, sehingga gunakan hanya pada database development; skrip tidak mengirim undangan ke customer.
 

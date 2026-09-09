@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { decideValidation, AddressEvidence, ReverseGeocodeEvidence } from '../../../src/modules/validation/engine.js';
+import {
+  decideValidation,
+  AddressEvidence,
+  ReverseGeocodeEvidence,
+  isAddressIncomplete,
+} from '../../../src/modules/validation/engine.js';
 import { GpsSample } from '../../../src/common/contracts.js';
 
 const address: AddressEvidence = {
@@ -41,6 +46,12 @@ const config = {
 };
 
 describe('server validation engine', () => {
+  it('identifies placeholder and plus-code-only addresses as requiring correction', () => {
+    expect(isAddressIncomplete({ ...address, houseNumber: 'TANPA NOMOR' })).toBe(true);
+    expect(isAddressIncomplete({ ...address, street: '8H3F+6Q' })).toBe(true);
+    expect(isAddressIncomplete(address)).toBe(false);
+  });
+
   it('accepts a precise, accurate and address-matching capture', () => {
     const decision = decideValidation(
       [sample(-6.884, 107.613), sample(-6.88401, 107.61301, 12, 1), sample(-6.88399, 107.61299, 14, 2)],
