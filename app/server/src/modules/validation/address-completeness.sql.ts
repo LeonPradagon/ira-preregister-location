@@ -19,3 +19,12 @@ export const incompleteAddressSql = (alias: string): SQL => {
   const plusCode = `LOWER(BTRIM(${alias}.street)) ~ '^[23456789cfghjmpqrvwx]{4,8}\\+[23456789cfghjmpqrvwx]{2,4}$'`;
   return sql.raw(`(${missingOrPlaceholder} OR ${plusCode})`);
 };
+
+/**
+ * A customer also needs a location verification campaign when the address is
+ * complete but the admin has not supplied a reference coordinate yet.
+ */
+export const campaignEligibleAddressSql = (alias: string): SQL => {
+  if (!allowedAliases.has(alias)) throw new Error(`Unsupported address SQL alias: ${alias}`);
+  return sql`(${incompleteAddressSql(alias)} OR ${sql.raw(`${alias}.reference_location IS NULL`)})`;
+};

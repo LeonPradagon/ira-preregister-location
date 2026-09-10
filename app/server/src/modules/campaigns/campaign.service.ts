@@ -28,7 +28,7 @@ import {
   campaignRecipientReservationStatuses,
   selectCampaignTargetIds,
 } from './campaign-target.policy.js';
-import { incompleteAddressSql } from '../validation/address-completeness.sql.js';
+import { campaignEligibleAddressSql } from '../validation/address-completeness.sql.js';
 
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
@@ -65,7 +65,7 @@ function filtersForTarget(target: StoredTargetFilter, cursor?: string) {
         where campaign_address.customer_id = ${customers.id}
           and campaign_address.is_active = true
           and campaign_address.is_verified = false
-          and ${incompleteAddressSql('campaign_address')}
+          and ${campaignEligibleAddressSql('campaign_address')}
       )`,
     );
   }

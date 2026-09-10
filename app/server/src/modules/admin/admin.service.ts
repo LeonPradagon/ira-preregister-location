@@ -44,7 +44,7 @@ import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js'
 import { buildVerificationSimulationConfig } from '../verification/simulation-config.js';
 import { buildVerifiedAddressReference } from '../verification/verified-location.js';
 import { campaignRecipientReservationStatuses } from '../campaigns/campaign-target.policy.js';
-import { incompleteAddressSql } from '../validation/address-completeness.sql.js';
+import { campaignEligibleAddressSql, incompleteAddressSql } from '../validation/address-completeness.sql.js';
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
 const customerAuditActorIds = ['customer', 'customer-token'];
@@ -393,7 +393,7 @@ export class AdminService {
           where campaign_address.customer_id = ${customers.id}
             and campaign_address.is_active = true
             and campaign_address.is_verified = false
-            and ${incompleteAddressSql('campaign_address')}
+            and ${campaignEligibleAddressSql('campaign_address')}
         )`,
       );
       const statuses = sql.join(campaignRecipientReservationStatuses.map((status) => sql`${status}`), sql`, `);
