@@ -87,7 +87,42 @@ const administrativeTokenScore = (left: string, right: string): number => {
   const b = normalizeAdministrativeArea(right);
   if (!a || !b) return 0;
   if (a === b || a.replace(/\s/g, '') === b.replace(/\s/g, '')) return 1;
+  const compactA = a.replace(/\s/g, '');
+  const compactB = b.replace(/\s/g, '');
+  const shorterLength = Math.min(compactA.length, compactB.length);
+  if (shorterLength >= 6 && levenshteinDistance(compactA, compactB) <= 1) return 0.95;
   return tokenScore(a, b);
+};
+
+function levenshteinDistance(left: string, right: string): number {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    let diagonal = previous[0];
+    previous[0] = leftIndex;
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const above = previous[rightIndex];
+      previous[rightIndex] = Math.min(
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + 1,
+        diagonal + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1),
+      );
+      diagonal = above;
+    }
+  }
+  return previous[right.length];
+}
+
+const isSimilarStreetToken = (left: string, right: string): boolean => {
+  const minimumLength = Math.min(left.length, right.length);
+  const distance = levenshteinDistance(left, right);
+  if (minimumLength < 4 || distance > 2) return false;
+  if (distance <= 1) return true;
+  return (
+    minimumLength >= 6 &&
+    Math.abs(left.length - right.length) <= 1 &&
+    left[0] === right[0] &&
+    left[left.length - 1] === right[right.length - 1]
+  );
 };
 
 export const administrativeMatch = (expected: string, candidates: string[], threshold = 0.7): boolean =>
@@ -121,12 +156,21 @@ export function isAddressIncomplete(
 }
 
 export const tokenScore = (left: string, right: string): number => {
-  const a = new Set(normalizeAddress(left).split(' ').filter(Boolean));
-  const b = new Set(normalizeAddress(right).split(' ').filter(Boolean));
+  const normalizedLeft = normalizeAddress(left);
+  const normalizedRight = normalizeAddress(right);
+  if (normalizedLeft && normalizedLeft.replace(/\s/g, '') === normalizedRight.replace(/\s/g, '')) return 1;
+  const a = new Set(normalizedLeft.split(' ').filter(Boolean));
+  const b = new Set(normalizedRight.split(' ').filter(Boolean));
   if (!a.size || !b.size) return 0;
-  if (left && right && normalizeAddress(left) === normalizeAddress(right)) return 1;
   const common = [...a].filter(
-    (token) => b.has(token) || [...b].some((candidate) => candidate.includes(token) || token.includes(candidate)),
+    (token) =>
+      b.has(token) ||
+      [...b].some(
+        (candidate) =>
+          candidate.includes(token) ||
+          token.includes(candidate) ||
+          isSimilarStreetToken(token, candidate),
+      ),
   ).length;
   return Math.min(1, Math.round((common / Math.max(a.size, b.size)) * 100) / 100);
 };

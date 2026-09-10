@@ -10,6 +10,10 @@ import {
 } from '../../lib/validationEngine';
 import { findRegionOption, regionOptionValue } from '../../lib/regionSelection';
 import {
+  getMissingAddressFields,
+  normalizeOptionalAddressValue,
+  requiredAddressFields,
+  shouldAllowAddressChange,
   shouldShowCustomerConfirmation,
   shouldShowLocationRetry,
   shouldShowReminderPending,
@@ -27,6 +31,7 @@ type RegionLevel = 'province' | 'city' | 'district' | 'subdistrict';
 type RegionOption = { code: string; name: string; postalCode?: string | null };
 const regionLevels: RegionLevel[] = ['province', 'city', 'district', 'subdistrict'];
 const fields = ['street', 'province', 'city', 'district', 'subdistrict', 'houseNumber', 'postalCode', 'addressDetail'];
+const optionalAddressFields = new Set(['houseNumber', 'postalCode', 'addressDetail']);
 const fieldLabels: Record<string, string> = {
   province: 'Provinsi',
   city: 'Kota / Kabupaten',
@@ -175,6 +180,8 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   const [addressForm, setAddressForm] = useState<AddressForm>({});
   const [editingAddress, setEditingAddress] = useState(false);
   const [showAddressChangeConfirmation, setShowAddressChangeConfirmation] = useState(false);
+  const [addressSubmitting, setAddressSubmitting] = useState(false);
+  const [addressFieldErrors, setAddressFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [gpsBusy, setGpsBusy] = useState(false);
   const [locationBlocked, setLocationBlocked] = useState(false);
@@ -200,7 +207,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
 
   const applyContext = (nextContext: PublicVerificationContextApi) => {
     setContext(nextContext);
-    if (nextContext.address.requiresCorrection && nextContext.address.addressType !== 'PROPOSED') {
+    if (nextContext.address.requiresCorrection) {
       setEditingAddress(true);
       setShowAddressChangeConfirmation(false);
     }
@@ -282,6 +289,8 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     setDecision(null);
     setAddressForm({});
     setEditingAddress(false);
+    setAddressSubmitting(false);
+    setAddressFieldErrors({});
     setPostalLookupLoading(false);
     setBusy(false);
     setGpsBusy(false);
@@ -475,31 +484,52 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     await captureGps();
   };
 
+  const startProposedAddressVerification = async () => {
+    if (simulation) {
+      updateSimulationSession({ status: 'GPS_CAPTURING', customerConfirmationStatus: 'CONFIRMED' });
+      return;
+    }
+    if (!confirmed) await api.confirm(token, true);
+    await api.consent(token);
+  };
+
   const submitAddress = async (event: React.FormEvent) => {
     event.preventDefault();
     const selectedSubdistrict = regionOptions.subdistrict.find(
       (option) => option.name.toLowerCase() === addressForm.subdistrict?.trim().toLowerCase(),
     );
     const postalCode = addressForm.postalCode?.trim() || selectedSubdistrict?.postalCode?.trim() || '';
-    const required = ['province', 'city', 'district', 'subdistrict', 'street'];
-    if (required.some((field) => !addressForm[field]?.trim())) {
-      setError(t('customer.requiredAddressFields'));
+    const missingFields = getMissingAddressFields(addressForm);
+    if (missingFields.length > 0) {
+      const missingFieldLabels = missingFields
+        .map((field) => t(`customer.addressField${field[0].toUpperCase()}${field.slice(1)}`))
+        .join(', ');
+      setAddressFieldErrors(
+        Object.fromEntries(missingFields.map((field) => [field, t('customer.addressFieldRequired')])),
+      );
+      setError(t('customer.addressFieldsMissing', { fields: missingFieldLabels }));
       return;
     }
     if (postalCode && !/^\d{5}$/.test(postalCode)) {
+      setAddressFieldErrors({ postalCode: t('customer.postalCodeInvalid') });
       setError(t('customer.postalCodeInvalid'));
       return;
     }
-    const submittedAddress: AddressForm = { ...addressForm, postalCode, houseNumber: addressForm.houseNumber.trim() };
-    setBusy(true);
+    setAddressFieldErrors({});
+    const submittedAddress: AddressForm = {
+      ...addressForm,
+      postalCode,
+      houseNumber: normalizeOptionalAddressValue(addressForm.houseNumber),
+    };
+    setAddressSubmitting(true);
     setError(null);
-    const confirmed = await confirmAction({
-      title: t('crud.updateQuestion'),
-      text: t('crud.updateText'),
-      confirmButtonText: t('crud.continue'),
-      cancelButtonText: t('crud.cancel'),
-      onConfirm: async () => {
-        try {
+    try {
+      const confirmed = await confirmAction({
+        title: t('crud.updateQuestion'),
+        text: t('crud.updateText'),
+        confirmButtonText: t('crud.continue'),
+        cancelButtonText: t('crud.cancel'),
+        onConfirm: async () => {
           if (simulation) {
             updateSimulationSession({ status: 'ADDRESS_PROPOSED' });
             setContext((current) =>
@@ -531,17 +561,32 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
             await api.changeAddress(token, submittedAddress);
             await refresh();
           }
-        } catch (cause) {
-          setError(cause instanceof Error ? cause.message : t('customer.requestFailed'));
-          throw cause;
-        }
-      },
-    });
-    setBusy(false);
-    if (confirmed) setEditingAddress(false);
+        },
+      });
+      if (confirmed) setEditingAddress(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('customer.requestFailed'));
+    } finally {
+      setAddressSubmitting(false);
+    }
   };
 
   const requestAddressChange = () => setShowAddressChangeConfirmation(true);
+
+  const clearAddressFieldError = (field: string) => {
+    setAddressFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+    setError(null);
+  };
+
+  const updateAddressField = (field: string, value: string) => {
+    clearAddressFieldError(field);
+    setAddressForm((current) => ({ ...current, [field]: value }));
+  };
   const confirmAddressChange = async () => {
     setBusy(true);
     setError(null);
@@ -591,6 +636,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   };
 
   const handleRegionChange = async (field: RegionLevel, value: string) => {
+    clearAddressFieldError(field);
     const levelIndex = regionLevels.indexOf(field);
     const selected =
       findRegionOption(regionOptions[field], value) || regionOptions[field].find((option) => option.code === value);
@@ -672,11 +718,18 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     .trim()
     .toUpperCase();
   const confirmed = confirmationStatus === 'CONFIRMED';
-  const showConfirmation = shouldShowCustomerConfirmation(status, confirmationStatus);
+  const showConfirmation = shouldShowCustomerConfirmation(
+    status,
+    confirmationStatus,
+    context.address.addressType,
+  );
   const mismatch = ['LOCATION_MISMATCH', 'LOW_GPS_ACCURACY'].includes(status);
   const reminderRequired = status === 'REMINDER_REQUIRED';
   const locationMismatchStatus = status === 'LOCATION_MISMATCH';
-  const addressChangeAvailable = context.address.addressType !== 'PROPOSED';
+  const addressChangeAvailable = shouldAllowAddressChange(
+    context.address.addressType,
+    Boolean(context.address.requiresCorrection),
+  );
   const selectedReminderWaiting = shouldShowReminderPending(
     status,
     confirmationStatus,
@@ -729,33 +782,42 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     const regionLevel = regionLevels.includes(field as RegionLevel) ? (field as RegionLevel) : null;
     const parentLevel = regionLevel ? regionLevels[regionLevels.indexOf(regionLevel) - 1] : undefined;
     const isLongText = field === 'addressDetail';
+    const isOptional = optionalAddressFields.has(field);
+    const fieldError = addressFieldErrors[field];
+    const fieldClassName = `mt-1 w-full rounded-lg border px-3 py-3 text-base placeholder:text-slate-400 disabled:bg-slate-100 sm:text-sm ${
+      fieldError ? 'border-rose-400 bg-rose-50' : 'border-slate-300 bg-white'
+    }`;
     const input = isLongText ? (
       <textarea
         required={false}
         rows={3}
         value={addressForm[field] || ''}
         placeholder={fieldPlaceholders[field]}
-        disabled={busy}
+        disabled={addressSubmitting}
         maxLength={1000}
-        onChange={(event) => setAddressForm((prev) => ({ ...prev, [field]: event.target.value }))}
-        className="mt-1 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-3 text-base placeholder:text-slate-400 disabled:bg-slate-100 sm:text-sm"
+        onChange={(event) => updateAddressField(field, event.target.value)}
+        aria-invalid={Boolean(fieldError)}
+        aria-describedby={fieldError ? `${field}-error` : undefined}
+        className={`${fieldClassName} resize-y`}
       />
     ) : (
       <input
-        required={field !== 'addressDetail' && field !== 'postalCode' && field !== 'houseNumber'}
+        required={!isOptional}
         pattern={field === 'postalCode' ? '[0-9]{5}' : undefined}
         value={addressForm[field] || ''}
         placeholder={fieldPlaceholders[field]}
         list={regionLevel ? `customer-${regionLevel}-options` : undefined}
-        disabled={busy || Boolean(parentLevel && !regionCodes[parentLevel])}
+        disabled={addressSubmitting || Boolean(parentLevel && !regionCodes[parentLevel])}
         inputMode={field === 'postalCode' ? 'numeric' : undefined}
         maxLength={field === 'postalCode' ? 5 : undefined}
         onChange={(event) =>
           regionLevel
             ? void handleRegionChange(regionLevel, event.target.value)
-            : setAddressForm((prev) => ({ ...prev, [field]: event.target.value }))
+            : updateAddressField(field, event.target.value)
         }
-        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-base placeholder:text-slate-400 disabled:bg-slate-100 sm:text-sm"
+        aria-invalid={Boolean(fieldError)}
+        aria-describedby={fieldError ? `${field}-error` : undefined}
+        className={fieldClassName}
       />
     );
     const options = regionLevel ? regionOptions[regionLevel] : [];
@@ -766,13 +828,17 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
           required
           value={selectedOption?.code || ''}
           disabled={
-            busy ||
+            addressSubmitting ||
             Boolean(parentLevel && !regionCodes[parentLevel]) ||
             regionLoading === regionLevel ||
             options.length === 0
           }
           onChange={(event) => void handleRegionChange(regionLevel, event.target.value)}
-          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-base disabled:bg-slate-100 sm:text-sm"
+          aria-invalid={Boolean(fieldError)}
+          aria-describedby={fieldError ? `${field}-error` : undefined}
+          className={`mt-1 w-full rounded-lg border px-3 py-3 text-base disabled:bg-slate-100 sm:text-sm ${
+            fieldError ? 'border-rose-400 bg-rose-50' : 'border-slate-300 bg-white'
+          }`}
         >
           <option value="">Pilih {fieldLabels[field]}</option>
           {options.map((option) => (
@@ -793,7 +859,9 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       <label key={field} className="block text-xs font-medium text-slate-700">
         <span>
           {fieldLabels[field] || field}
-          {field !== 'addressDetail' && field !== 'postalCode' && field !== 'houseNumber' && (
+          {isOptional ? (
+            <span className="ml-1 font-normal text-slate-500">(opsional)</span>
+          ) : (
             <span className="ml-1 text-rose-600">*</span>
           )}
         </span>
@@ -804,6 +872,11 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
           </>
         ) : (
           regionInput
+        )}
+        {fieldError && (
+          <p id={`${field}-error`} className="mt-1 text-[11px] font-medium text-rose-600">
+            {fieldError}
+          </p>
         )}
       </label>
     );
@@ -816,22 +889,35 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     >
       <div>
         <p className="text-base font-semibold">{t('customer.requestNewAddress')}</p>
-        {context.address.requiresCorrection && context.address.addressType !== 'PROPOSED' && (
+        {context.address.requiresCorrection && (
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
             <p className="font-semibold">{t('customer.addressCorrectionRequired')}</p>
             <p className="mt-1">{t('customer.addressCorrectionHint')}</p>
           </div>
         )}
         <p className="mt-1 text-xs leading-relaxed text-slate-600">{t('customer.addressEditFormHint')}</p>
+        {requiredAddressFields.some((field) => addressFieldErrors[field]) && (
+          <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs leading-relaxed text-rose-800" role="alert">
+            <p className="font-semibold">{t('customer.requiredAddressFields')}</p>
+            <p className="mt-1">
+              {t('customer.addressFieldsMissing', {
+                fields: requiredAddressFields
+                  .filter((field) => addressFieldErrors[field])
+                  .map((field) => t(`customer.addressField${field[0].toUpperCase()}${field.slice(1)}`))
+                  .join(', '),
+              })}
+            </p>
+          </div>
+        )}
       </div>
       {fields.map(renderAddressField)}
       <div>
         <button
           type="submit"
-          disabled={busy}
+          disabled={addressSubmitting}
           className="w-full rounded-lg bg-blue-600 px-3 py-3 text-xs font-semibold text-white"
         >
-          {busy ? (
+          {addressSubmitting ? (
             <span className="flex items-center justify-center gap-2">
               <AppLoader size={16} label={t('customer.submittingAddress')} />
               {t('customer.submittingAddress')}
@@ -845,6 +931,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   );
   const addressChangeAction = addressChangeAvailable ? (
     <button
+      type="button"
       disabled={busy}
       onClick={requestAddressChange}
       className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-medium"
@@ -955,7 +1042,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
           </div>
           <div className="rounded-2xl border border-red-100 border-l-4 border-l-[#d71920] bg-[#fff8f8] p-4 shadow-sm sm:p-5">
             <p className="text-xs font-bold uppercase tracking-wide text-[#b8171d]">
-              {t('customer.registeredAddress')}
+              {t(context.address.addressType === 'PROPOSED' ? 'customer.proposedAddress' : 'customer.registeredAddress')}
             </p>
             <p className="mt-2 break-words text-base font-semibold leading-relaxed text-slate-900 sm:text-lg">
               {formatAddressForDisplay(context.address.rawAddress)}
@@ -1231,16 +1318,10 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                   />
                   <button
                     disabled={busy}
-                    onClick={() =>
-                      void captureAfterTransition(() =>
-                        simulation
-                          ? updateSimulationSession({ status: 'GPS_CAPTURING' })
-                          : api.addressStatus(token, true),
-                      )
-                    }
+                    onClick={() => void captureAfterTransition(startProposedAddressVerification)}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
                   >
-                    {gpsActionContent(t('customer.retryGps'))}
+                    {gpsActionContent(t('customer.startVerificationNow'))}
                   </button>
                 </div>
               )}

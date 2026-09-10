@@ -37,6 +37,10 @@ import { queueNames } from './common/queue-names.js';
 import { getPublicWebOrigin } from './config/public-origin.js';
 import { OsmGeocodingAdapter } from './integrations/geocoding/osm-geocoding.adapter.js';
 import { auditCoordinateAddress } from './modules/validation/coordinate-audit.js';
+import {
+  shouldAuditImportedCoordinate,
+  shouldAutoVerifyCoordinateAudit,
+} from './modules/validation/coordinate-audit.policy.js';
 
 const connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null }).on(
   'error',
@@ -627,11 +631,13 @@ const importWorker = runs('import')
           const pendingCoordinateAudits = await db
             .select({ id: customerAddresses.id })
             .from(customerAddresses)
+            .innerJoin(customers, eq(customers.id, customerAddresses.customerId))
             .where(
               and(
                 eq(customerAddresses.referenceSource, 'PREREG_IMPORT'),
                 eq(customerAddresses.coordinateAuditStatus, 'PENDING'),
                 isNotNull(customerAddresses.referenceLocation),
+                ne(customers.status, 'VERIFIED'),
               ),
             )
             .limit(10000);
@@ -689,13 +695,24 @@ const coordinateAuditWorker = runs('import')
         const [row] = await db
           .select({
             address: customerAddresses,
+            customerStatus: customers.status,
             referenceLatitude: sql<number>`ST_Y(${customerAddresses.referenceLocation}::geometry)`,
             referenceLongitude: sql<number>`ST_X(${customerAddresses.referenceLocation}::geometry)`,
           })
           .from(customerAddresses)
+          .innerJoin(customers, eq(customers.id, customerAddresses.customerId))
           .where(eq(customerAddresses.id, addressId))
           .limit(1);
-        if (!row || row.address.coordinateAuditStatus !== 'PENDING') return;
+        if (
+          !row ||
+          !shouldAuditImportedCoordinate({
+            customerStatus: row.customerStatus,
+            referenceSource: row.address.referenceSource,
+            coordinateAuditStatus: row.address.coordinateAuditStatus,
+            hasReferenceLocation: row.address.referenceLocation != null,
+          })
+        )
+          return;
 
         const latitude = row.referenceLatitude == null ? null : Number(row.referenceLatitude);
         const longitude = row.referenceLongitude == null ? null : Number(row.referenceLongitude);
@@ -735,17 +752,88 @@ const coordinateAuditWorker = runs('import')
             },
             reverseGeocode,
           );
-          await db
-            .update(customerAddresses)
-            .set({
-              coordinateAuditStatus: audit.status,
-              coordinateAuditReason: audit.reason,
-              coordinateAuditEvidence: audit.evidence,
-              coordinateAuditConfidence: audit.confidence.toFixed(3),
-              coordinateAuditedAt: auditedAt,
-              updatedAt: auditedAt,
-            })
-            .where(eq(customerAddresses.id, addressId));
+          const auditFields = {
+            coordinateAuditStatus: audit.status,
+            coordinateAuditReason: audit.reason,
+            coordinateAuditEvidence: audit.evidence,
+            coordinateAuditConfidence: audit.confidence.toFixed(3),
+            coordinateAuditedAt: auditedAt,
+            updatedAt: auditedAt,
+          };
+          if (!shouldAutoVerifyCoordinateAudit(audit.status)) {
+            await db.update(customerAddresses).set(auditFields).where(eq(customerAddresses.id, addressId));
+            return;
+          }
+
+          await db.transaction(async (tx) => {
+            await tx
+              .update(customerAddresses)
+              .set({
+                addressStatus: 'SUPERSEDED',
+                addressType: 'HISTORICAL',
+                isActive: false,
+                validTo: auditedAt,
+                updatedAt: auditedAt,
+              })
+              .where(
+                and(
+                  eq(customerAddresses.customerId, row.address.customerId),
+                  eq(customerAddresses.isActive, true),
+                  ne(customerAddresses.id, addressId),
+                ),
+              );
+            await tx
+              .update(customerAddresses)
+              .set({
+                ...auditFields,
+                isVerified: true,
+                addressStatus: 'VERIFIED',
+                addressType: 'VERIFIED_INSTALLATION',
+                isActive: true,
+              })
+              .where(eq(customerAddresses.id, addressId));
+            await tx
+              .update(customers)
+              .set({ status: 'VERIFIED', updatedAt: auditedAt })
+              .where(eq(customers.id, row.address.customerId));
+
+            const activeSessions = await tx
+              .select({ id: verificationSessions.id })
+              .from(verificationSessions)
+              .where(and(eq(verificationSessions.customerId, row.address.customerId), isNull(verificationSessions.completedAt)));
+            if (activeSessions.length) {
+              const sessionIds = activeSessions.map(({ id }) => id);
+              await tx
+                .update(verificationSessions)
+                .set({
+                  verificationStatus: 'LOCATION_VALID',
+                  locationVerifiedAt: auditedAt,
+                  completedAt: auditedAt,
+                  revokedAt: auditedAt,
+                  updatedAt: auditedAt,
+                })
+                .where(inArray(verificationSessions.id, sessionIds));
+              await tx
+                .update(reminders)
+                .set({ status: 'CANCELLED' })
+                .where(and(inArray(reminders.sessionId, sessionIds), eq(reminders.status, 'SCHEDULED')));
+            }
+            await tx.insert(auditLogs).values({
+              actorUserId: 'system',
+              actorName: 'Coordinate Audit Worker',
+              action: 'COORDINATE_AUDIT_AUTO_VERIFIED',
+              entityType: 'CUSTOMER_ADDRESS',
+              entityId: addressId,
+              after: {
+                coordinateAuditStatus: audit.status,
+                confidence: audit.confidence,
+                customerStatus: 'VERIFIED',
+                addressStatus: 'VERIFIED',
+                activeSessionsClosed: activeSessions.length,
+              },
+              timestamp: auditedAt,
+            });
+          });
         } catch (error) {
           await db
             .update(customerAddresses)
@@ -771,11 +859,13 @@ const enqueuePendingCoordinateAudits = async () => {
   const pending = await db
     .select({ id: customerAddresses.id })
     .from(customerAddresses)
+    .innerJoin(customers, eq(customers.id, customerAddresses.customerId))
     .where(
       and(
         eq(customerAddresses.referenceSource, 'PREREG_IMPORT'),
         eq(customerAddresses.coordinateAuditStatus, 'PENDING'),
         isNotNull(customerAddresses.referenceLocation),
+        ne(customers.status, 'VERIFIED'),
       ),
     )
     .limit(10000);

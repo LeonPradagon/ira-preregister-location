@@ -7,9 +7,30 @@ const confirmationStatuses = [
   'REMINDER_LIMIT_REACHED',
 ];
 
+export const requiredAddressFields = ['province', 'city', 'district', 'subdistrict', 'street'] as const;
+
+export function getMissingAddressFields(address: Partial<Record<string, string>>): string[] {
+  return requiredAddressFields.filter((field) => !String(address[field] ?? '').trim());
+}
+
+export function normalizeOptionalAddressValue(value: string | null | undefined): string {
+  return String(value ?? '').trim();
+}
+
+export function shouldAllowAddressChange(
+  addressType: string | null | undefined,
+  requiresCorrection = false,
+): boolean {
+  const normalizedAddressType = String(addressType || '')
+    .trim()
+    .toUpperCase();
+  return normalizedAddressType !== 'PROPOSED' || requiresCorrection;
+}
+
 export function shouldShowCustomerConfirmation(
   status: string | null | undefined,
   confirmationStatus: string | null | undefined,
+  addressType: string | null | undefined = undefined,
 ): boolean {
   const normalizedStatus = String(status || 'LINK_OPENED')
     .trim()
@@ -17,7 +38,14 @@ export function shouldShowCustomerConfirmation(
   const normalizedConfirmationStatus = String(confirmationStatus || 'UNCONFIRMED')
     .trim()
     .toUpperCase();
-  return normalizedConfirmationStatus !== 'CONFIRMED' && confirmationStatuses.includes(normalizedStatus);
+  const normalizedAddressType = String(addressType || '')
+    .trim()
+    .toUpperCase();
+  return (
+    normalizedConfirmationStatus !== 'CONFIRMED' &&
+    confirmationStatuses.includes(normalizedStatus) &&
+    normalizedAddressType !== 'PROPOSED'
+  );
 }
 
 export function shouldShowLocationRetry(

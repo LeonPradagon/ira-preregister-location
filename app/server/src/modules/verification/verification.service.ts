@@ -36,6 +36,7 @@ import { ValidationConfigService } from '../../config/validation-config.service.
 import { parseVerificationToken, verifyVerificationToken } from './verification-token.js';
 import { applyApprovalPolicy, getCoordinateMatchScore } from './approval-policy.js';
 import { buildVerifiedAddressReference } from './verified-location.js';
+import { canReplaceAddress } from './address-change.policy.js';
 const now = () => new Date();
 
 function maskPhone(value: string): string {
@@ -716,7 +717,7 @@ export class VerificationService {
     const config = await this.validationConfig.get();
     if (sameAddress && row.session.attemptCount >= Math.min(3, config.MAX_LOCATION_ATTEMPTS) && !row.reminder)
       throw new DomainError('Please choose a reminder before trying GPS again.', 409, 'REMINDER_REQUIRED');
-    if (!sameAddress && row.address.addressType === 'PROPOSED') {
+    if (!sameAddress && !canReplaceAddress(row.address.addressType, isAddressIncomplete(row.address))) {
       throw new DomainError(
         'The address can only be changed once. Please contact IRA Customer Service for further changes.',
         409,
@@ -757,7 +758,7 @@ export class VerificationService {
     assertAddressCorrectionComplete(input);
     const config = await this.validationConfig.get();
     if (!config.ENABLE_ADDRESS_EDIT) throw new DomainError('Address edit is disabled', 409);
-    if (row.address.addressType === 'PROPOSED') {
+    if (!canReplaceAddress(row.address.addressType, isAddressIncomplete(row.address))) {
       throw new DomainError(
         'The address can only be changed once. Please contact IRA Customer Service for further changes.',
         409,

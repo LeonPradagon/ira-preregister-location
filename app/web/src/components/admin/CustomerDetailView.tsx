@@ -180,7 +180,9 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
                       >
                         {addr.isVerified ? 'GPS VERIFIED' : 'GPS BELUM VERIFIED'}
                       </span>
-                      {addr.referenceLocation && (
+                      {customer.status !== 'VERIFIED' &&
+                        !addr.isVerified &&
+                        addr.referenceLocation && (
                         <span
                           className={`${coordinateAuditClass(addr.coordinateAuditStatus)} border text-[10px] px-1.5 py-0.2 rounded font-semibold`}
                         >
@@ -226,7 +228,10 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
                       </a>
                     )}
                   </div>
-                  {addr.referenceLocation && addr.coordinateAuditReason && (
+                  {customer.status !== 'VERIFIED' &&
+                    !addr.isVerified &&
+                    addr.referenceLocation &&
+                    addr.coordinateAuditReason && (
                     <p className="text-[10px] leading-4 text-gray-500 dark:text-gray-400">{addr.coordinateAuditReason}</p>
                   )}
                 </div>

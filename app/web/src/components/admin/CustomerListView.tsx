@@ -661,7 +661,10 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                             {t('customers.addressIncomplete')}
                           </div>
                         )}
-                        {masterAddr.referenceLocation && masterAddr.coordinateAuditStatus && (
+                        {cust.status !== 'VERIFIED' &&
+                          !masterAddr.isVerified &&
+                          masterAddr.referenceLocation &&
+                          masterAddr.coordinateAuditStatus && (
                           <div
                             className={`mt-1 text-[10px] font-semibold ${
                               masterAddr.coordinateAuditStatus === 'MATCHED'

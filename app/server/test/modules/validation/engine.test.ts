@@ -3,7 +3,9 @@ import {
   decideValidation,
   AddressEvidence,
   ReverseGeocodeEvidence,
+  administrativeMatch,
   isAddressIncomplete,
+  tokenScore,
 } from '../../../src/modules/validation/engine.js';
 import { GpsSample } from '../../../src/common/contracts.js';
 
@@ -46,6 +48,26 @@ const config = {
 };
 
 describe('server validation engine', () => {
+  it('matches administrative names when a space is inserted or removed', () => {
+    expect(administrativeMatch('Pal Merah', ['Palmerah'])).toBe(true);
+    expect(administrativeMatch('Palmerah', ['Pal Merah'])).toBe(true);
+  });
+
+  it('accepts one-character typos in longer administrative names', () => {
+    expect(administrativeMatch('Cengkareng', ['Cengkarengg'])).toBe(true);
+    expect(administrativeMatch('Jakarta Barat', ['Jakarta Utara'])).toBe(false);
+  });
+
+  it('tolerates a one-character typo and spacing variation in a street name', () => {
+    expect(tokenScore('Jln KH Syahdan', 'Jalan KH Syahdun')).toBeGreaterThanOrEqual(0.9);
+    expect(tokenScore('Jalan K H Syahdan', 'Jalan KH Syahdan')).toBe(1);
+    expect(tokenScore('Jalan KH Syahdan', 'Jalan Dipatiukur')).toBeLessThan(0.7);
+  });
+
+  it('tolerates the reported Syahdan to Syqdan typo', () => {
+    expect(tokenScore('Jalan KH Syahdan', 'Jalan KH Syqdan')).toBeGreaterThanOrEqual(0.9);
+  });
+
   it('identifies missing and plus-code-only streets as requiring correction', () => {
     expect(isAddressIncomplete({ ...address, street: '' })).toBe(true);
     expect(isAddressIncomplete({ ...address, street: '8H3F+6Q' })).toBe(true);

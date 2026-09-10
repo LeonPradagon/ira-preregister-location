@@ -264,6 +264,7 @@ const messages: Record<Language, Record<TranslationKey, string>> = {
       'Anda tidak perlu menunggu pengingat berikutnya. Jika sudah berada di alamat, gunakan tombol di bawah untuk memulai pemeriksaan sekarang.',
     'customer.startVerificationNow': 'Saya sudah di alamat, mulai verifikasi',
     'customer.registeredAddress': 'Alamat terdaftar',
+    'customer.proposedAddress': 'Alamat baru',
     'customer.phone': 'Telepon',
     'customer.locationPermission':
       'Kami membutuhkan izin lokasi browser untuk memvalidasi Anda berada di alamat tersebut. Pastikan Anda sudah berada di rumah, jika belum bisa ke bagian bawah untuk pasang reminder yang akan diingatkan lagi untuk verifikasi-nya',
@@ -304,7 +305,14 @@ const messages: Record<Language, Record<TranslationKey, string>> = {
     'customer.permissionDenied':
       'Izin lokasi ditolak. Tekan coba lagi. Jika browser tidak menampilkan permintaan izin, buka pengaturan izin lokasi untuk situs ini lalu aktifkan kembali.',
     'customer.requestFailed': 'Permintaan tidak dapat diproses.',
-    'customer.requiredAddressFields': 'Provinsi, kota, kecamatan, kelurahan, dan jalan wajib diisi.',
+    'customer.requiredAddressFields': 'Lengkapi field alamat yang masih kosong sebelum melanjutkan.',
+    'customer.addressFieldsMissing': 'Field yang perlu dilengkapi: {fields}.',
+    'customer.addressFieldRequired': 'Field ini wajib diisi.',
+    'customer.addressFieldProvince': 'Provinsi',
+    'customer.addressFieldCity': 'Kota / kabupaten',
+    'customer.addressFieldDistrict': 'Kecamatan',
+    'customer.addressFieldSubdistrict': 'Kelurahan / desa',
+    'customer.addressFieldStreet': 'Nama jalan / perumahan',
     'customer.manualReviewNotice':
       'Pemeriksaan otomatis sudah selesai dan data lokasi diterima. Lokasi belum dinyatakan berhasil karena tim kami sedang melakukan verifikasi manual. Tidak perlu mengulang selama belum diminta.',
   },
@@ -567,6 +575,7 @@ const messages: Record<Language, Record<TranslationKey, string>> = {
       'You do not need to wait for the next reminder. If you are at the address now, use the button below to start the check.',
     'customer.startVerificationNow': 'I am at the address, start verification',
     'customer.registeredAddress': 'Registered address',
+    'customer.proposedAddress': 'New address',
     'customer.phone': 'Phone',
     'customer.locationPermission': 'We need your browser location permission to verify that you are at this address.',
     'customer.allowAndStart': 'Allow and start GPS verification',
@@ -606,7 +615,14 @@ const messages: Record<Language, Record<TranslationKey, string>> = {
     'customer.permissionDenied':
       "Location permission was denied. Try again. If the browser does not show the permission prompt, open this site's location permissions and enable it.",
     'customer.requestFailed': 'The request could not be processed.',
-    'customer.requiredAddressFields': 'Province, city, district, subdistrict, and street are required.',
+    'customer.requiredAddressFields': 'Complete the empty address fields before continuing.',
+    'customer.addressFieldsMissing': 'Fields to complete: {fields}.',
+    'customer.addressFieldRequired': 'This field is required.',
+    'customer.addressFieldProvince': 'Province',
+    'customer.addressFieldCity': 'City / regency',
+    'customer.addressFieldDistrict': 'District',
+    'customer.addressFieldSubdistrict': 'Subdistrict / village',
+    'customer.addressFieldStreet': 'Street / housing complex',
     'customer.manualReviewNotice':
       'The automated check is complete and your location data was received. It is not marked as verified yet because our team is performing a manual review. Please do not repeat the process unless requested.',
   },
@@ -718,7 +734,8 @@ const extraMessages: Record<Language, Record<string, string>> = {
     'customer.addressChangeContactSupport':
       'Alamat sudah pernah diubah satu kali. Untuk perubahan berikutnya, silakan email atau hubungi Customer Service IRA.',
     'customer.loadingHint': 'Mohon tunggu sebentar.',
-    'customer.addressEditFormHint': 'Isi bagian yang wajib diubah.',
+    'customer.addressEditFormHint':
+      'Isi semua field bertanda *. Nomor rumah, kode pos, dan detail alamat boleh dikosongkan jika tidak tersedia.',
   },
   en: {
     'crud.confirm': 'Confirm action',
@@ -823,7 +840,8 @@ const extraMessages: Record<Language, Record<string, string>> = {
     'customer.addressChangeContactSupport':
       'The address has already been changed once. For further changes, please email or contact IRA Customer Service.',
     'customer.loadingHint': 'Please wait a moment.',
-    'customer.addressEditFormHint': 'Fill in all required fields.',
+    'customer.addressEditFormHint':
+      'Fill in every field marked *. House number, postal code, and address details may be left blank if unavailable.',
   },
 };
 

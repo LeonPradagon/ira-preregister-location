@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   shouldShowCustomerConfirmation,
+  shouldAllowAddressChange,
+  normalizeOptionalAddressValue,
+  getMissingAddressFields,
   shouldShowLocationRetry,
   shouldShowReminderPending,
   shouldShowReminderPickerOnLink,
@@ -8,6 +11,36 @@ import {
 } from '../../src/lib/customerVerificationFlow';
 
 describe('customer verification confirmation flow', () => {
+  it('identifies only the missing required address fields', () => {
+    expect(
+      getMissingAddressFields({
+        province: 'Jawa Barat',
+        city: '',
+        district: 'Coblong',
+        subdistrict: 'Dago',
+        street: 'Jl. Juanda',
+      }),
+    ).toEqual(['city']);
+  });
+
+  it('normalizes an empty optional house number without throwing', () => {
+    expect(normalizeOptionalAddressValue(undefined)).toBe('');
+    expect(normalizeOptionalAddressValue('  A-12  ')).toBe('A-12');
+  });
+
+  it('allows correcting an incomplete proposed address', () => {
+    expect(shouldAllowAddressChange('PROPOSED', true)).toBe(true);
+  });
+
+  it('keeps a complete proposed address locked after its one change', () => {
+    expect(shouldAllowAddressChange('PROPOSED', false)).toBe(false);
+  });
+
+  it('allows the first address change regardless of completeness', () => {
+    expect(shouldAllowAddressChange('MASTER', false)).toBe(true);
+    expect(shouldAllowAddressChange('MASTER', true)).toBe(true);
+  });
+
   it.each(['CREATED', 'MESSAGE_SENT', 'LINK_OPENED', 'WAITING_FOR_HOME', 'REMINDER_LIMIT_REACHED'])(
     'shows confirmation for an unconfirmed %s session',
     (status) => {
@@ -17,6 +50,10 @@ describe('customer verification confirmation flow', () => {
 
   it('requires confirmation again after a customer submits a corrected address', () => {
     expect(shouldShowCustomerConfirmation('ADDRESS_PROPOSED', 'UNCONFIRMED')).toBe(true);
+  });
+
+  it('does not ask the customer to confirm the old name and address after a new address is submitted', () => {
+    expect(shouldShowCustomerConfirmation('ADDRESS_PROPOSED', 'UNCONFIRMED', 'PROPOSED')).toBe(false);
   });
 
   it('does not show confirmation after the customer has confirmed', () => {
