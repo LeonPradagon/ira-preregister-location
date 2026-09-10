@@ -109,7 +109,7 @@ Aturan lokasi tersedia di Validation Settings dan environment: `GPS_MAX_ACCURACY
 
 Untuk Mekari/Qontak, isi `WHATSAPP_PROVIDER=mekari`, `WHATSAPP_BASE_URL`, credential HMAC, channel integration ID, dan template ID undangan/reminder. Nama serta parameter template harus sesuai konfigurasi Qontak yang sudah disetujui. Webhook delivery: `POST /v1/webhooks/whatsapp/status` dengan secret webhook. Opt-out aktif selalu memblokir pengiriman. Metadata opt-in yang tersedia tetap disimpan; aplikasi tidak meminta konfirmasi opt-in WhatsApp tambahan.
 
-Geocoding memakai provider HTTP atau fallback Nominatim sesuai `GEOCODING_*` dan `OSM_NOMINATIM_*`. Atur user agent dengan kontak operator. Provider production yang belum dikonfigurasi tidak menghasilkan pengiriman atau koordinat palsu.
+Geocoding memakai Google Geocoding API sebagai provider utama jika `GOOGLE_GEOCODING_API_KEY` diisi, dengan OSM Nominatim sebagai fallback otomatis. Jika Google tidak dikonfigurasi, aplikasi tetap mendukung provider HTTP pada `GEOCODING_*` atau langsung OSM sesuai `OSM_NOMINATIM_*`. Atur user agent OSM dengan kontak operator. API key Google hanya dibaca server-side dan tidak boleh dimasukkan ke frontend.
 
 ## Endpoint dan referensi
 

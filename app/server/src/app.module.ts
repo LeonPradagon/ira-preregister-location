@@ -6,10 +6,7 @@ import { AdminController } from './modules/admin/admin.controller.js';
 import { VerificationService } from './modules/verification/verification.service.js';
 import { AdminService } from './modules/admin/admin.service.js';
 import { GeocodingPort } from './integrations/geocoding/geocoding.port.js';
-import { DisabledGeocodingAdapter } from './integrations/geocoding/disabled-geocoding.adapter.js';
-import { HttpGeocodingAdapter } from './integrations/geocoding/http-geocoding.adapter.js';
-import { OsmGeocodingAdapter } from './integrations/geocoding/osm-geocoding.adapter.js';
-import { FallbackGeocodingAdapter } from './integrations/geocoding/fallback-geocoding.adapter.js';
+import { createGeocodingAdapter } from './integrations/geocoding/geocoding.adapter.factory.js';
 import { WhatsAppPort } from './integrations/whatsapp/whatsapp.port.js';
 import { ConsoleWhatsAppAdapter } from './integrations/whatsapp/console-whatsapp.adapter.js';
 import { MekariWhatsAppAdapter } from './integrations/whatsapp/mekari-whatsapp.adapter.js';
@@ -53,13 +50,7 @@ import { RedisRateLimitMiddleware } from './common/redis-rate-limit.middleware.j
     RolesGuard,
     {
       provide: GeocodingPort,
-      useFactory: () => {
-        const osmEnabled = process.env.OSM_NOMINATIM_ENABLED !== 'false';
-        if (!osmEnabled)
-          return process.env.GEOCODING_BASE_URL ? new HttpGeocodingAdapter() : new DisabledGeocodingAdapter();
-        const osm = new OsmGeocodingAdapter();
-        return process.env.GEOCODING_BASE_URL ? new FallbackGeocodingAdapter(new HttpGeocodingAdapter(), osm) : osm;
-      },
+      useFactory: createGeocodingAdapter,
     },
     {
       provide: WhatsAppPort,

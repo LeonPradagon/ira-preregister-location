@@ -11,7 +11,15 @@ const required = {
 
 describe('runtime configuration', () => {
   it('treats blank optional provider settings as disabled', () => {
-    const config = envSchema.parse({ ...required, GEOCODING_BASE_URL: '', WHATSAPP_BASE_URL: '' });
+    const config = envSchema.parse({
+      ...required,
+      GOOGLE_GEOCODING_API_KEY: '',
+      GOOGLE_GEOCODING_BASE_URL: '',
+      GEOCODING_BASE_URL: '',
+      WHATSAPP_BASE_URL: '',
+    });
+    expect(config.GOOGLE_GEOCODING_API_KEY).toBeUndefined();
+    expect(config.GOOGLE_GEOCODING_BASE_URL).toBeUndefined();
     expect(config.GEOCODING_BASE_URL).toBeUndefined();
     expect(config.WHATSAPP_BASE_URL).toBeUndefined();
   });

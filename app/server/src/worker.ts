@@ -35,7 +35,7 @@ import { ReadCacheService } from './common/read-cache.service.js';
 import { logEvent } from './common/structured-log.js';
 import { queueNames } from './common/queue-names.js';
 import { getPublicWebOrigin } from './config/public-origin.js';
-import { OsmGeocodingAdapter } from './integrations/geocoding/osm-geocoding.adapter.js';
+import { createGeocodingAdapter } from './integrations/geocoding/geocoding.adapter.factory.js';
 import { auditCoordinateAddress } from './modules/validation/coordinate-audit.js';
 import {
   shouldAuditImportedCoordinate,
@@ -686,7 +686,7 @@ const importWorker = runs('import')
     )
   : null;
 
-const coordinateGeocoder = runs('import') ? new OsmGeocodingAdapter() : null;
+const coordinateGeocoder = runs('import') ? createGeocodingAdapter() : null;
 const coordinateAuditWorker = runs('import')
   ? new Worker(
       coordinateAuditQueueName,
@@ -1107,7 +1107,8 @@ const shutdown = async () => {
   await metricsQueue.close();
   await importQueue.close();
   await coordinateAuditQueue.close();
-  await coordinateGeocoder?.onModuleDestroy();
+  if (coordinateGeocoder && 'onModuleDestroy' in coordinateGeocoder)
+    await (coordinateGeocoder as { onModuleDestroy?: () => Promise<void> }).onModuleDestroy?.();
   await connection.quit();
   await pool.end();
 };

@@ -1,8 +1,8 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import { OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common';
 import { AddressLookupInput } from '../../common/contracts.js';
 import { GeocodingPort, GeocodingResult } from './geocoding.port.js';
 
-export class FallbackGeocodingAdapter extends GeocodingPort {
+export class FallbackGeocodingAdapter extends GeocodingPort implements OnModuleDestroy {
   constructor(
     private readonly primary: GeocodingPort,
     private readonly fallback: GeocodingPort,
@@ -25,6 +25,13 @@ export class FallbackGeocodingAdapter extends GeocodingPort {
     } catch (error) {
       if (!(error instanceof ServiceUnavailableException)) throw error;
       return this.fallback.forward(address);
+    }
+  }
+
+  async onModuleDestroy() {
+    for (const adapter of [this.primary, this.fallback]) {
+      if ('onModuleDestroy' in adapter)
+        await (adapter as { onModuleDestroy?: () => Promise<void> }).onModuleDestroy?.();
     }
   }
 }

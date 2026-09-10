@@ -11,6 +11,8 @@ x-server-environment: &server-environment
   BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL must be set}
   WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN must be set}
   IMPORT_STORAGE_DIR: /workspace/app/server/var/imports
+  GOOGLE_GEOCODING_API_KEY: ${GOOGLE_GEOCODING_API_KEY:-}
+  GOOGLE_GEOCODING_BASE_URL: ${GOOGLE_GEOCODING_BASE_URL:-https://maps.googleapis.com/maps/api/geocode/json}
 
 x-server-defaults: &server-defaults
   image: ${COMPOSE_PROJECT_NAME:-ira_preregist}-server:local
