@@ -79,6 +79,8 @@ Jalankan `npm run dev` dan `npm run dev:worker` pada terminal terpisah. Frontend
 
 `docker-compose.dev.yaml` menjalankan dependency lokal. `npm run infra:worker` tersedia jika worker ingin dijalankan di Docker; untuk upload asynchronous gunakan API dan worker dengan direktori `IMPORT_STORAGE_DIR` yang sama. Cara paling sederhana untuk debugging import lokal adalah menjalankan keduanya di host. Perintah backend membuat `.env` lokal dari contoh bila belum tersedia. Jangan menimpa `.env` yang sudah berisi konfigurasi Anda.
 
+Link undangan/reminder worker memakai `WEB_ORIGIN` dari `app/server/.env`. Saat worker dijalankan di host, perubahan tunnel akan dibaca saat job berikutnya. Saat worker dijalankan di Docker, jalankan ulang `npm run infra:worker` setelah mengubah env agar container dibuat ulang. Untuk tunnel yang sama, set `WEB_ORIGIN` dan `BETTER_AUTH_URL` ke origin publik yang sesuai.
+
 Smoke check health dan login lokal: `./scripts/local-smoke.ps1`. Skrip menjalankan migration/seed lokal, sehingga gunakan hanya pada database development; skrip tidak mengirim undangan ke customer.
 
 ## Maintenance kode
@@ -98,7 +100,7 @@ Migration SQL bernomor dijalankan berurutan dan dicatat di `app_migrations`. Bas
 ## Alur bisnis dan konfigurasi
 
 - **Customer dan alamat:** import `.xlsx`/`.csv` dari menu pelanggan, maksimal 50 MB/file. Import menormalisasi nomor ke E.164, meng-upsert source ID, dan menyimpan metadata BTS/coverage. Pekerjaan besar diproses import worker.
-- **Campaign:** pilih customer eligible atau filter seluruh customer; worker mematerialisasi target per batch dan mengirim sesuai jadwal. Batas UI 1–1.000 pesan per pengiriman, dengan kuota global provider tetap berlaku.
+- **Campaign:** pilih customer eligible atau filter seluruh customer; worker mematerialisasi target per batch dan mengirim sesuai jadwal. Batas harian, rate pesan per detik, dan cooldown nomor dapat diatur dari menu Check Rules. Batas harian tetap maksimal 10.000.
 - **Verifikasi:** link `/v/:token` berisi opaque token. Customer mengonfirmasi data, memberi izin lokasi, dan mengirim sampel GPS. Server menjalankan validation engine dan menentukan status; alamat baru berstatus `PROPOSED` sampai validasi selesai.
 - **Reminder:** customer memilih tanggal/jam. Worker mengikuti `REMINDER_TIMEZONE`, batas percobaan, dan masa berlaku link; link baru menggantikan link sebelumnya.
 - **Akses:** Better Auth dan role `SUPER_ADMIN`, `ADMIN`, `REVIEWER`, `VIEWER`. Pengelolaan pengguna tersedia bagi super admin.

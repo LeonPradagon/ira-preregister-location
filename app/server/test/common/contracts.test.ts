@@ -5,6 +5,7 @@ import {
   customerCreateSchema,
   locationSamplesSchema,
   reminderSchema,
+  validationConfigSchema,
 } from '../../src/common/contracts.js';
 
 describe('API contracts', () => {
@@ -116,6 +117,36 @@ describe('API contracts', () => {
         targetFilter: { locationStatus: 'UNVERIFIED' },
       }).success,
     ).toBe(false);
+  });
+
+  it('allows campaign daily limits up to 10,000', () => {
+    expect(
+      campaignCreateSchema.safeParse({
+        name: 'Large campaign',
+        customerIds: ['11111111-1111-4111-8111-111111111111'],
+        dailySendLimit: 10000,
+      }).success,
+    ).toBe(true);
+    expect(
+      campaignCreateSchema.safeParse({
+        name: 'Too large campaign',
+        customerIds: ['11111111-1111-4111-8111-111111111111'],
+        dailySendLimit: 10001,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts configurable WhatsApp rate and cooldown rules', () => {
+    const result = validationConfigSchema.safeParse({
+      WHATSAPP_DAILY_SEND_LIMIT: 2500,
+      WHATSAPP_RATE_LIMIT_PER_SECOND: 5,
+      WHATSAPP_MIN_INTERVAL_MINUTES: 10,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.WHATSAPP_RATE_LIMIT_PER_SECOND).toBe(5);
+      expect(result.data.WHATSAPP_MIN_INTERVAL_MINUTES).toBe(10);
+    }
   });
 
   it('accepts one reminder time and lets the server schedule the remaining reminders', () => {

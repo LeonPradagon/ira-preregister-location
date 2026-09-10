@@ -327,7 +327,7 @@ export const ValidationSettingsView: React.FC = () => {
           </h2>
           <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t('settings.sessionHelp')}</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+          <div className="grid grid-cols-1 gap-4 text-xs sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
                 {t('settings.maxReminders')}
@@ -392,6 +392,61 @@ export const ValidationSettingsView: React.FC = () => {
               <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
                 {t('settings.reminderLinkLifetimeHelp')}
               </p>
+            </div>
+
+            <div>
+              <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                {t('settings.whatsappDailyLimit')}
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="10000"
+                disabled={!canEditSettings}
+                value={formData.WHATSAPP_DAILY_SEND_LIMIT}
+                onChange={(e) =>
+                  handleChangeNumber(
+                    'WHATSAPP_DAILY_SEND_LIMIT',
+                    Math.min(10000, Math.max(1, parseInt(e.target.value) || 1)),
+                  )
+                }
+                className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
+              />
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.whatsappDailyLimitHelp')}</p>
+            </div>
+
+            <div>
+              <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                {t('settings.whatsappRateLimit')}
+              </label>
+              <input
+                type="number"
+                min="1"
+                disabled={!canEditSettings}
+                value={formData.WHATSAPP_RATE_LIMIT_PER_SECOND}
+                onChange={(e) =>
+                  handleChangeNumber('WHATSAPP_RATE_LIMIT_PER_SECOND', Math.max(1, parseInt(e.target.value) || 1))
+                }
+                className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
+              />
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.whatsappRateLimitHelp')}</p>
+            </div>
+
+            <div>
+              <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                {t('settings.whatsappCooldown')}
+              </label>
+              <input
+                type="number"
+                min="1"
+                disabled={!canEditSettings}
+                value={formData.WHATSAPP_MIN_INTERVAL_MINUTES}
+                onChange={(e) =>
+                  handleChangeNumber('WHATSAPP_MIN_INTERVAL_MINUTES', Math.max(1, parseInt(e.target.value) || 1))
+                }
+                className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
+              />
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.whatsappCooldownHelp')}</p>
             </div>
           </div>
         </div>

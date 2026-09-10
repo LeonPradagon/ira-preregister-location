@@ -4,6 +4,19 @@ import { db } from '../db/client.js';
 import { validationConfigs } from '../db/schema/index.js';
 import { ValidationConfigInput } from '../common/contracts.js';
 
+export const MAX_WHATSAPP_DAILY_SEND_LIMIT = 10000;
+
+export const normalizeWhatsAppDailySendLimit = (value: unknown, fallback = 1000) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(MAX_WHATSAPP_DAILY_SEND_LIMIT, Math.max(1, Math.trunc(parsed)));
+};
+
+const normalizePositiveInteger = (value: unknown, fallback: number) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : fallback;
+};
+
 export interface RuntimeValidationConfig extends Record<string, unknown> {
   GPS_MAX_ACCURACY_METERS: number;
   HOME_RADIUS_METERS: number;
@@ -19,6 +32,9 @@ export interface RuntimeValidationConfig extends Record<string, unknown> {
   REMINDER_DEFAULT_1_HOURS: number;
   REMINDER_DEFAULT_2_HOURS: number;
   REMINDER_DEFAULT_3_HOURS: number;
+  WHATSAPP_DAILY_SEND_LIMIT: number;
+  WHATSAPP_RATE_LIMIT_PER_SECOND: number;
+  WHATSAPP_MIN_INTERVAL_MINUTES: number;
   ENABLE_CUSTOMER_OTP: boolean;
   ENABLE_IRA_COVERAGE: boolean;
   ENABLE_TICKETING: boolean;
@@ -46,6 +62,9 @@ export class ValidationConfigService {
       REMINDER_DEFAULT_1_HOURS: Number(process.env.REMINDER_DEFAULT_1_HOURS ?? 2),
       REMINDER_DEFAULT_2_HOURS: Number(process.env.REMINDER_DEFAULT_2_HOURS ?? 24),
       REMINDER_DEFAULT_3_HOURS: Number(process.env.REMINDER_DEFAULT_3_HOURS ?? 24),
+      WHATSAPP_DAILY_SEND_LIMIT: normalizeWhatsAppDailySendLimit(process.env.WHATSAPP_DAILY_SEND_LIMIT),
+      WHATSAPP_RATE_LIMIT_PER_SECOND: normalizePositiveInteger(process.env.WHATSAPP_RATE_LIMIT_PER_SECOND, 1),
+      WHATSAPP_MIN_INTERVAL_MINUTES: normalizePositiveInteger(process.env.WHATSAPP_MIN_INTERVAL_MINUTES, 60),
       ENABLE_CUSTOMER_OTP: process.env.ENABLE_CUSTOMER_OTP === 'true',
       ENABLE_IRA_COVERAGE: process.env.ENABLE_IRA_COVERAGE === 'true',
       ENABLE_TICKETING: process.env.ENABLE_TICKETING === 'true',
@@ -63,7 +82,13 @@ export class ValidationConfigService {
         ? (latest.configValues as Partial<RuntimeValidationConfig>)
         : {};
     const merged = { ...this.fromEnvironment(), ...persisted };
-    return { ...merged, MAX_LOCATION_ATTEMPTS: Math.min(3, Math.max(1, Number(merged.MAX_LOCATION_ATTEMPTS ?? 3))) };
+    return {
+      ...merged,
+      MAX_LOCATION_ATTEMPTS: Math.min(3, Math.max(1, Number(merged.MAX_LOCATION_ATTEMPTS ?? 3))),
+      WHATSAPP_DAILY_SEND_LIMIT: normalizeWhatsAppDailySendLimit(merged.WHATSAPP_DAILY_SEND_LIMIT),
+      WHATSAPP_RATE_LIMIT_PER_SECOND: normalizePositiveInteger(merged.WHATSAPP_RATE_LIMIT_PER_SECOND, 1),
+      WHATSAPP_MIN_INTERVAL_MINUTES: normalizePositiveInteger(merged.WHATSAPP_MIN_INTERVAL_MINUTES, 60),
+    };
   }
 
   async update(adminId: string, input: ValidationConfigInput): Promise<RuntimeValidationConfig> {

@@ -19,4 +19,9 @@ describe('runtime configuration', () => {
   it('requires a sufficiently long Better Auth secret', () => {
     expect(() => envSchema.parse({ ...required, BETTER_AUTH_SECRET: 'too-short' })).toThrow();
   });
+
+  it('allows a WhatsApp daily limit up to 10,000 but rejects larger values', () => {
+    expect(envSchema.parse({ ...required, WHATSAPP_DAILY_SEND_LIMIT: 10000 }).WHATSAPP_DAILY_SEND_LIMIT).toBe(10000);
+    expect(() => envSchema.parse({ ...required, WHATSAPP_DAILY_SEND_LIMIT: 10001 })).toThrow();
+  });
 });

@@ -23,6 +23,7 @@ import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/
 import { ReadCacheService } from '../../common/read-cache.service.js';
 import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js';
 import { buildVerificationSimulationConfig } from '../verification/simulation-config.js';
+import { getPublicWebOrigin } from '../../config/public-origin.js';
 import {
   campaignRecipientReservationStatuses,
   selectCampaignTargetIds,
@@ -32,8 +33,6 @@ const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
 const maxBatchSize = () => Number(process.env.CAMPAIGN_MAX_BATCH_SIZE ?? 1000);
 const defaultMaterializationBatch = () => Number(process.env.CAMPAIGN_MATERIALIZATION_BATCH_SIZE ?? 1000);
-const maxDailySendLimit = 1000;
-
 type StoredTargetFilter = CampaignTargetFilterInput & { customerIds?: string[] };
 
 function filtersForTarget(target: StoredTargetFilter, cursor?: string) {
@@ -102,7 +101,7 @@ export class CampaignService {
     query.set('manualReview', String(config.ENABLE_MANUAL_REVIEW));
     query.set('autoApprovalEnabled', String(config.ENABLE_AUTO_APPROVAL));
     query.set('autoApprovalScoreThreshold', String(Math.max(0.9, config.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD)));
-    const verificationLink = `${process.env.WEB_ORIGIN ?? 'http://localhost:5173'}/v/simulasi-${randomUUID()}?${query.toString()}`;
+    const verificationLink = `${getPublicWebOrigin()}/v/simulasi-${randomUUID()}?${query.toString()}`;
     return {
       simulation: true,
       recipient: { name: input.customerName, phoneE164: input.phoneE164 },
@@ -122,7 +121,11 @@ export class CampaignService {
   async create(admin: RequestAdmin, input: CampaignCreateInput) {
     if (!canManage(admin.role)) throw new DomainError('Role cannot create a campaign', 403, 'FORBIDDEN');
     const ids = input.customerIds ?? [];
-    const requestedDailySendLimit = Math.min(Math.max(input.dailySendLimit ?? 500, 1), maxDailySendLimit);
+    const config = await this.validationConfig.get();
+    const requestedDailySendLimit = Math.min(
+      Math.max(input.dailySendLimit ?? 500, 1),
+      config.WHATSAPP_DAILY_SEND_LIMIT,
+    );
     let target: StoredTargetFilter = input.targetFilter
       ? { ...input.targetFilter }
       : { locationStatus: 'UNVERIFIED', search: '', customerIds: ids };

@@ -172,14 +172,17 @@ const MobileLandingPreviewCard: React.FC<{ preview: WhatsAppPreview; onOpen: () 
 );
 
 export const CampaignsView: React.FC = () => {
-  const { createCampaign, startCampaign } = useApp();
+  const { createCampaign, startCampaign, validationConfig } = useApp();
   const { t } = useTranslation();
+  const dailySendLimitMax = Math.min(10000, Math.max(1, validationConfig.WHATSAPP_DAILY_SEND_LIMIT || 1000));
+  const messageRate = Math.max(1, validationConfig.WHATSAPP_RATE_LIMIT_PER_SECOND || 1);
+  const sameNumberCooldown = Math.max(1, validationConfig.WHATSAPP_MIN_INTERVAL_MINUTES || 60);
   const [campaigns, setCampaigns] = useState<VerificationCampaign[]>([]);
   const [total, setTotal] = useState(0);
   const [name, setName] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [selectAllEligible, setSelectAllEligible] = useState(false);
-  const [dailySendLimit, setDailySendLimit] = useState(500);
+  const [dailySendLimit, setDailySendLimit] = useState(() => Math.min(500, dailySendLimitMax));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
@@ -235,6 +238,10 @@ export const CampaignsView: React.FC = () => {
     setPage(1);
     setCampaignCursors({});
   }, [searchTerm]);
+  useEffect(() => {
+    setDailySendLimit((current) => Math.min(current, dailySendLimitMax));
+    setSelected((current) => current.slice(0, dailySendLimitMax));
+  }, [dailySendLimitMax]);
   useEffect(() => {
     void loadCampaigns();
   }, [page, pageSize, searchTerm]);
@@ -533,7 +540,9 @@ export const CampaignsView: React.FC = () => {
           </span>
           <div>
             <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('campaigns.messageSettings')}</h2>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('campaigns.messageSettingsHelp')}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {t('campaigns.messageSettingsHelp', { max: dailySendLimitMax.toLocaleString('en-US') })}
+            </p>
           </div>
         </div>
         <form onSubmit={(event) => void submit(event)} className="mt-4 space-y-4">
@@ -549,25 +558,29 @@ export const CampaignsView: React.FC = () => {
               />
             </label>
             <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-              {t('campaigns.dailyLimit')}
+              {t('campaigns.dailyLimit', { max: dailySendLimitMax.toLocaleString('en-US') })}
               <input
                 type="number"
                 min={1}
-                max={1000}
+                max={dailySendLimitMax}
                 step={1}
                 value={dailySendLimit}
                 onChange={(event) => {
-                  const nextLimit = Math.min(1000, Math.max(1, Number(event.target.value) || 1));
+                  const nextLimit = Math.min(dailySendLimitMax, Math.max(1, Number(event.target.value) || 1));
                   setDailySendLimit(nextLimit);
                   setSelected((current) => current.slice(0, nextLimit));
                 }}
                 className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-                placeholder={t('campaigns.dailyLimitPlaceholder')}
+                placeholder={t('campaigns.dailyLimitPlaceholder', { max: dailySendLimitMax.toLocaleString('en-US') })}
               />
             </label>
           </div>
           <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-            {t('campaigns.defaultWindow')}
+            {t('campaigns.defaultWindow', {
+              rate: messageRate,
+              cooldown: sameNumberCooldown,
+              max: dailySendLimitMax.toLocaleString('en-US'),
+            })}
           </p>
           {message && (
             <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">

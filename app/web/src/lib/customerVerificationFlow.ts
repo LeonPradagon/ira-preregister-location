@@ -42,6 +42,7 @@ export function shouldShowReminderResume(
   reminderCount: number,
   isReminderLink: boolean,
   busy: boolean,
+  canScheduleReminder = true,
 ): boolean {
   const normalizedStatus = String(status || '')
     .trim()
@@ -52,9 +53,35 @@ export function shouldShowReminderResume(
   return (
     !busy &&
     isReminderLink &&
+    canScheduleReminder &&
     reminderCount > 0 &&
     normalizedConfirmationStatus === 'CONFIRMED' &&
     ['WAITING_FOR_HOME', 'REMINDER_LIMIT_REACHED'].includes(normalizedStatus)
+  );
+}
+
+export function shouldShowReminderPending(
+  status: string | null | undefined,
+  confirmationStatus: string | null | undefined,
+  reminderCount: number,
+  isReminderLink: boolean,
+  reminderScheduledNow: boolean,
+  canScheduleReminder = true,
+  maxReminders = 3,
+): boolean {
+  const normalizedStatus = String(status || '')
+    .trim()
+    .toUpperCase();
+  const normalizedConfirmationStatus = String(confirmationStatus || '')
+    .trim()
+    .toUpperCase();
+  return (
+    reminderScheduledNow ||
+    (isReminderLink && !canScheduleReminder && reminderCount < maxReminders) ||
+    (!isReminderLink &&
+      normalizedConfirmationStatus === 'CONFIRMED' &&
+      reminderCount > 0 &&
+      ['WAITING_FOR_HOME', 'REMINDER_LIMIT_REACHED'].includes(normalizedStatus))
   );
 }
 

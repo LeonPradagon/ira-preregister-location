@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, Compass, Edit3, MapPin, ShieldCheck, XCircle } from 'lucide-react';
-import { api, PublicVerificationContextApi, ServerValidationDecision } from '../../lib/apiClient';
+import { api, ApiClientError, PublicVerificationContextApi, ServerValidationDecision } from '../../lib/apiClient';
 import { useTranslation } from '../../i18n';
 import { AppLoader } from '../common/AppLoader';
 import {
@@ -12,6 +12,7 @@ import { findRegionOption, regionOptionValue } from '../../lib/regionSelection';
 import {
   shouldShowCustomerConfirmation,
   shouldShowLocationRetry,
+  shouldShowReminderPending,
   shouldShowReminderPickerOnLink,
   shouldShowReminderResume,
 } from '../../lib/customerVerificationFlow';
@@ -253,6 +254,13 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       await refresh();
       return true;
     } catch (cause) {
+      if (cause instanceof ApiClientError && cause.code === 'REMINDER_ALREADY_SELECTED') {
+        setReminderScheduledNow(true);
+        setReminderPickerOpen(false);
+        setError(null);
+        void refresh().catch(() => undefined);
+        return true;
+      }
       setError(cause instanceof Error ? cause.message : t('customer.requestFailed'));
       return false;
     } finally {
@@ -669,15 +677,18 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   const reminderRequired = status === 'REMINDER_REQUIRED';
   const locationMismatchStatus = status === 'LOCATION_MISMATCH';
   const addressChangeAvailable = context.address.addressType !== 'PROPOSED';
-  const selectedReminderWaiting =
-    reminderScheduledNow ||
-    (!context.session.isReminderLink &&
-      confirmed &&
-      context.session.reminderCount > 0 &&
-      ['WAITING_FOR_HOME', 'REMINDER_LIMIT_REACHED'].includes(status));
+  const selectedReminderWaiting = shouldShowReminderPending(
+    status,
+    confirmationStatus,
+    context.session.reminderCount,
+    context.session.isReminderLink,
+    reminderScheduledNow,
+    context.session.canScheduleReminder,
+  );
   const reminderLinkFlow =
     !selectedReminderWaiting &&
     confirmed &&
+    context.session.canScheduleReminder &&
     context.session.reminderCount > 0 &&
     ['WAITING_FOR_HOME', 'REMINDER_LIMIT_REACHED'].includes(status);
   const gpsActionContent = (label: string, idleIcon: React.ReactNode = <Compass className="h-5 w-5" />) =>
@@ -702,6 +713,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       context.session.reminderCount,
       context.session.isReminderLink,
       busy,
+      context.session.canScheduleReminder,
     );
   const reminderPickerOnLinkAvailable = shouldShowReminderPickerOnLink(
     status,
@@ -712,6 +724,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     3,
     context.session.canScheduleReminder,
   );
+  const reminderActionAvailable = context.session.canScheduleReminder && context.session.reminderCount < 3;
   const renderAddressField = (field: string) => {
     const regionLevel = regionLevels.includes(field as RegionLevel) ? (field as RegionLevel) : null;
     const parentLevel = regionLevel ? regionLevels[regionLevels.indexOf(regionLevel) - 1] : undefined;
@@ -1082,20 +1095,16 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
               {selectedReminderWaiting && (
                 <ResultPanel
                   icon={<Clock3 className="h-7 w-7 text-emerald-600" />}
-                  title={t('customer.reminderScheduled')}
-                  text={t(
-                    context.session.reminderCount >= 3
-                      ? 'customer.reminderLimitScheduled'
-                      : 'customer.remindersScheduledAutomatically',
-                  )}
+                  title={t('customer.reminderAlreadySelected')}
+                  text={t('customer.reminderPendingText')}
                 />
               )}
               {reminderResumeAvailable && (
                 <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
                   <div>
-                    <p className="text-sm font-semibold text-blue-900">{t('customer.stillAtAddress')}</p>
+                    <p className="text-sm font-semibold text-blue-900">{t('customer.reminderLinkReadyTitle')}</p>
                     <p className="mt-1 break-words text-xs leading-relaxed text-blue-800">
-                      {t('customer.reminderContinueHelp')}
+                      {t('customer.reminderLinkReadyText')}
                     </p>
                   </div>
                   {context.session.linkExpiresAt && (
@@ -1151,9 +1160,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                   {addressChangeAction}
                 </div>
               )}
-              {!reminderLinkFlow && mismatch && !selectedReminderWaiting && (
-                reminderAction
-              )}
+              {!reminderLinkFlow && mismatch && !selectedReminderWaiting && reminderActionAvailable && reminderAction}
               {!reminderLinkFlow && reminderRequired && !selectedReminderWaiting && (
                 <div className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
                   <ResultPanel
@@ -1161,7 +1168,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                     title={t('customer.gpsAttemptLimitTitle')}
                     text={t('customer.gpsAttemptLimitText')}
                   />
-                  {reminderAction}
+                  {reminderActionAvailable && reminderAction}
                 </div>
               )}
               {!reminderLinkFlow && shouldShowLocationRetry(status, confirmationStatus) && !selectedReminderWaiting && (

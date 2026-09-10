@@ -33,6 +33,7 @@ import { CampaignItemState } from './modules/campaigns/campaign-item-state.js';
 import { ReadCacheService } from './common/read-cache.service.js';
 import { logEvent } from './common/structured-log.js';
 import { queueNames } from './common/queue-names.js';
+import { getPublicWebOrigin } from './config/public-origin.js';
 
 const connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null }).on(
   'error',
@@ -71,12 +72,12 @@ const whatsapp: WhatsAppPort =
       : new ConsoleWhatsAppAdapter();
 const campaigns = new CampaignService(new ValidationConfigService(), new ReadCacheService());
 const reminderConfig = new ValidationConfigService();
+const messagingConfig = new ValidationConfigService();
 
 const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 const whatsappRateLimitKey = `whatsapp:send:rate-limit:${whatsappProvider}`;
 const acquireWhatsAppSendSlot = async () => {
-  const configuredRate = Number(process.env.WHATSAPP_RATE_LIMIT_PER_SECOND ?? 1);
-  const requestsPerSecond = Number.isFinite(configuredRate) && configuredRate > 0 ? configuredRate : 1;
+  const requestsPerSecond = (await messagingConfig.get()).WHATSAPP_RATE_LIMIT_PER_SECOND;
   const intervalMilliseconds = Math.max(1, Math.floor(1000 / requestsPerSecond));
 
   while (true) {
@@ -109,6 +110,7 @@ const recordProviderOutcome = async (success: boolean) => {
 };
 
 const dispatchSafety = async (phoneE164: string, campaignId?: string, campaignDailySendLimit?: number) => {
+  const runtimeConfig = await messagingConfig.get();
   const current = new Date();
   const [last] = await db
     .select({ sentAt: whatsappDeliveryLogs.sentAt })
@@ -118,23 +120,23 @@ const dispatchSafety = async (phoneE164: string, campaignId?: string, campaignDa
     .limit(1);
   const retryAt = nextAllowedSendAt(
     last?.sentAt ?? null,
-    Number(process.env.WHATSAPP_MIN_INTERVAL_MINUTES ?? 60),
+    runtimeConfig.WHATSAPP_MIN_INTERVAL_MINUTES,
     current,
   );
   if (retryAt) return { allowed: false, retryAt };
   const cooldownKey = `whatsapp:cooldown:${hashPhone(phoneE164)}`;
-  const cooldownSeconds = Number(process.env.WHATSAPP_MIN_INTERVAL_MINUTES ?? 60) * 60;
+  const cooldownSeconds = runtimeConfig.WHATSAPP_MIN_INTERVAL_MINUTES * 60;
   const cooldownReserved = await connection.set(cooldownKey, '1', 'EX', cooldownSeconds, 'NX');
   if (!cooldownReserved) return { allowed: false, retryAt: new Date(current.getTime() + cooldownSeconds * 1000) };
   const dailyDate = current.toISOString().slice(0, 10);
-  const globalDailyLimit = Number(process.env.WHATSAPP_DAILY_SEND_LIMIT ?? 1000);
+  const globalDailyLimit = runtimeConfig.WHATSAPP_DAILY_SEND_LIMIT;
   const dailyReservations = [
     { key: `whatsapp:daily:${dailyDate}`, limit: globalDailyLimit },
     ...(campaignId
       ? [
           {
             key: `whatsapp:daily:campaign:${campaignId}:${dailyDate}`,
-            limit: Math.min(Math.max(campaignDailySendLimit ?? globalDailyLimit, 1), 1000),
+            limit: Math.min(Math.max(campaignDailySendLimit ?? globalDailyLimit, 1), globalDailyLimit),
           },
         ]
       : []),
@@ -272,7 +274,7 @@ const reminderWorker = runs('messaging')
           const verificationToken = await createVerificationToken();
           const runtimeConfig = await reminderConfig.get();
           const reminderTtlHours = runtimeConfig.REMINDER_LINK_TTL_HOURS;
-          const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
+          const verificationLink = `${getPublicWebOrigin()}/v/${verificationToken.rawToken}`;
           await acquireWhatsAppSendSlot();
           const sent = await whatsapp.send({
             phoneE164: target.customer.phoneE164,
@@ -475,7 +477,7 @@ const campaignWorker = runs('campaign')
         try {
           const verificationToken = await createVerificationToken();
           const expiresAt = new Date(Date.now() + Number(process.env.VERIFICATION_TOKEN_TTL_DAYS ?? 7) * 86400000);
-          const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
+          const verificationLink = `${getPublicWebOrigin()}/v/${verificationToken.rawToken}`;
           await acquireWhatsAppSendSlot();
           const sent = await whatsapp.send({
             phoneE164: target.customer.phoneE164,
@@ -566,7 +568,6 @@ const campaignWorker = runs('campaign')
       {
         connection,
         concurrency: 5,
-        limiter: { max: Number(process.env.WHATSAPP_RATE_LIMIT_PER_SECOND ?? 1), duration: 1000 },
       },
     )
   : null;

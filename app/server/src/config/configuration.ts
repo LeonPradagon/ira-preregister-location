@@ -66,7 +66,7 @@ export const envSchema = z.object({
   WHATSAPP_INVITATION_TEMPLATE_NAME: optionalString,
   WHATSAPP_REMINDER_TEMPLATE_NAME: optionalString,
   WHATSAPP_WEBHOOK_SECRET: optionalString,
-  WHATSAPP_DAILY_SEND_LIMIT: z.coerce.number().int().positive().max(1000).default(1000),
+  WHATSAPP_DAILY_SEND_LIMIT: z.coerce.number().int().positive().max(10000).default(1000),
   WHATSAPP_MIN_INTERVAL_MINUTES: z.coerce.number().int().positive().default(60),
   WHATSAPP_CIRCUIT_MIN_ATTEMPTS: z.coerce.number().int().positive().default(50),
   WHATSAPP_CIRCUIT_FAILURE_RATIO: z.coerce.number().min(0).max(1).default(0.3),

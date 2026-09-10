@@ -1239,6 +1239,12 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'settings.tokenLifetime': 'Masa berlaku tautan pemeriksaan',
     'settings.reminderLinkLifetime': 'Masa berlaku link reminder (jam)',
     'settings.reminderLinkLifetimeHelp': 'Berlaku sejak link dikirim atau sampai sesi berakhir jika lebih cepat.',
+    'settings.whatsappDailyLimit': 'Maksimal pesan WhatsApp per hari',
+    'settings.whatsappDailyLimitHelp': 'Batas global pengiriman harian. Dapat diubah dari 1 sampai 10.000 pesan.',
+    'settings.whatsappRateLimit': 'Pesan maksimal per detik',
+    'settings.whatsappRateLimitHelp': 'Jumlah pesan yang boleh dikirim setiap detik sesuai limit provider.',
+    'settings.whatsappCooldown': 'Jeda nomor yang sama (menit)',
+    'settings.whatsappCooldownHelp': 'Jeda minimum sebelum nomor WhatsApp yang sama dapat dikirimi lagi.',
     'settings.decimalPrecision': 'Ketelitian angka lokasi',
     'settings.strictReminder': 'Batasi pengingat setelah alamat sesuai',
     'settings.defaultExpiry': 'Masa berlaku bawaan',
@@ -1668,6 +1674,12 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'settings.tokenLifetime': 'Check link validity period',
     'settings.reminderLinkLifetime': 'Reminder link validity (hours)',
     'settings.reminderLinkLifetimeHelp': 'Valid from delivery or until the session expires, whichever comes first.',
+    'settings.whatsappDailyLimit': 'Maximum WhatsApp messages per day',
+    'settings.whatsappDailyLimitHelp': 'Global daily sending limit. You can set it from 1 to 10,000 messages.',
+    'settings.whatsappRateLimit': 'Maximum messages per second',
+    'settings.whatsappRateLimitHelp': 'Messages allowed per second according to the provider limit.',
+    'settings.whatsappCooldown': 'Same-number cooldown (minutes)',
+    'settings.whatsappCooldownHelp': 'Minimum wait before the same WhatsApp number can receive another message.',
     'settings.decimalPrecision': 'Location number precision',
     'settings.strictReminder': 'Limit reminders after address match',
     'settings.defaultExpiry': 'Default validity period',
@@ -1706,7 +1718,7 @@ const deliveryWording: Record<Language, Record<string, string>> = {
     'campaigns.batchSize': 'Jumlah penerima per pengiriman',
     'campaigns.window': 'Rentang waktu pengiriman (hari)',
     'campaigns.defaultWindow':
-      'Pesan dikirim bertahap: maksimal 1 pesan per detik, jeda 5 menit untuk nomor yang sama, dan total maksimal 1.000 pesan WhatsApp per hari.',
+      'Pesan dikirim bertahap: maksimal {rate} pesan per detik, jeda {cooldown} menit untuk nomor yang sama, dan total maksimal {max} pesan WhatsApp per hari.',
     'campaigns.searchCustomer': 'Cari nama, ID, atau nomor WhatsApp pelanggan...',
     'campaigns.findCustomer': 'Cari pelanggan',
     'campaigns.selectPage': 'Pilih semua di halaman ini',
@@ -1717,9 +1729,9 @@ const deliveryWording: Record<Language, Record<string, string>> = {
     'campaigns.chooseRecipients': 'Pilih penerima',
     'campaigns.chooseRecipientsHelp': 'Pilih pelanggan yang belum masuk pengiriman aktif. Customer yang sudah diproses tidak ditampilkan lagi.',
     'campaigns.messageSettings': 'Atur pengiriman',
-    'campaigns.messageSettingsHelp': 'Tentukan nama pengiriman dan jumlah pesan maksimal per hari (1–1.000).',
-    'campaigns.dailyLimit': 'Batas pesan per hari',
-    'campaigns.dailyLimitPlaceholder': 'Masukkan angka 1–1.000',
+    'campaigns.messageSettingsHelp': 'Tentukan nama pengiriman dan jumlah pesan maksimal per hari (1–{max}).',
+    'campaigns.dailyLimit': 'Batas pesan per hari (maksimum {max} per hari)',
+    'campaigns.dailyLimitPlaceholder': 'Masukkan angka 1–{max}',
     'campaigns.dailyLimitSummary': 'Batas harian: {count} pesan',
     'campaigns.dailyLimitReached': 'Batas harian tercapai. Kurangi pilihan atau naikkan batas pesan per hari.',
     'campaigns.selectCustomerFirst': 'Pilih pelanggan dengan alamat aktif terlebih dahulu.',
@@ -1823,7 +1835,7 @@ const deliveryWording: Record<Language, Record<string, string>> = {
     'campaigns.batchSize': 'Recipients per delivery',
     'campaigns.window': 'Delivery period (days)',
     'campaigns.defaultWindow':
-      'Messages are sent gradually: at most 1 message per second, a 5-minute gap for the same number, and a maximum of 1,000 WhatsApp messages per day in total.',
+      'Messages are sent gradually: at most {rate} messages per second, a {cooldown}-minute gap for the same number, and a maximum of {max} WhatsApp messages per day in total.',
     'campaigns.searchCustomer': 'Search customer name, ID, or WhatsApp number...',
     'campaigns.findCustomer': 'Find customers',
     'campaigns.selectPage': 'Select everyone on this page',
@@ -1834,9 +1846,9 @@ const deliveryWording: Record<Language, Record<string, string>> = {
     'campaigns.chooseRecipients': 'Choose recipients',
     'campaigns.chooseRecipientsHelp': 'Select customers not already in an active delivery. Processed customers are hidden.',
     'campaigns.messageSettings': 'Set up delivery',
-    'campaigns.messageSettingsHelp': 'Set a delivery name and the maximum messages to send per day (1–1,000).',
-    'campaigns.dailyLimit': 'Messages per day (maksimum 1,000 per day)',
-    'campaigns.dailyLimitPlaceholder': 'Enter a number from 1–1,000',
+    'campaigns.messageSettingsHelp': 'Set a delivery name and the maximum messages to send per day (1–{max}).',
+    'campaigns.dailyLimit': 'Messages per day (maximum {max} per day)',
+    'campaigns.dailyLimitPlaceholder': 'Enter a number from 1–{max}',
     'campaigns.dailyLimitSummary': 'Daily limit: {count} messages',
     'campaigns.dailyLimitReached': 'Daily limit reached. Reduce the selection or increase the daily message limit.',
     'campaigns.selectCustomerFirst': 'Select a customer with an active address first.',
@@ -1952,6 +1964,12 @@ const customerMessages: Record<Language, Record<string, string>> = {
     'customer.waitingAtHome': 'Pemeriksaan lokasi belum selesai',
     'customer.reminderScheduled':
       'Pengingat sudah dijadwalkan. Buka kembali tautan ini saat sudah berada di alamat pemasangan.',
+    'customer.reminderAlreadySelected': 'Pengingat sudah dipilih',
+    'customer.reminderPendingText':
+      'Anda sudah memilih pengingat. Silakan tunggu sampai tautan pengingat baru dikirim melalui WhatsApp. Setelah membuka tautan baru, Anda dapat melanjutkan verifikasi.',
+    'customer.reminderLinkReadyTitle': 'Tautan pengingat baru sudah diterima',
+    'customer.reminderLinkReadyText':
+      'Pengingat Anda sudah dikirim melalui WhatsApp. Jika sudah berada di alamat pemasangan, lanjutkan verifikasi di bawah.',
     'customer.remindersScheduledAutomatically':
       'Pengingat berikutnya sudah dijadwalkan. Jika tautan tidak dibuka, pengingat berikutnya akan dikirim 2 hari kemudian pada jam yang sama.',
     'customer.reminderLimitScheduled':
@@ -2026,6 +2044,12 @@ const customerMessages: Record<Language, Record<string, string>> = {
     'customer.waitingAtHome': 'Location check is not finished',
     'customer.reminderScheduled':
       'A reminder has been scheduled. Reopen this link when you are at the installation address.',
+    'customer.reminderAlreadySelected': 'Reminder already selected',
+    'customer.reminderPendingText':
+      'You have already selected a reminder. Please wait until a new reminder link is sent through WhatsApp. After opening the new link, you can continue verification.',
+    'customer.reminderLinkReadyTitle': 'Your new reminder link is ready',
+    'customer.reminderLinkReadyText':
+      'Your reminder was sent through WhatsApp. If you are now at the installation address, continue verification below.',
     'customer.remindersScheduledAutomatically':
       'The next reminder has been scheduled. If the link is not opened, another reminder will be sent 2 days later at the same time.',
     'customer.reminderLimitScheduled':

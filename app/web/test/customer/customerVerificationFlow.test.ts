@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   shouldShowCustomerConfirmation,
   shouldShowLocationRetry,
+  shouldShowReminderPending,
   shouldShowReminderPickerOnLink,
   shouldShowReminderResume,
 } from '../../src/lib/customerVerificationFlow';
@@ -34,8 +35,26 @@ describe('customer verification confirmation flow', () => {
     expect(shouldShowReminderResume('WAITING_FOR_HOME', 'CONFIRMED', 1, false, false)).toBe(false);
   });
 
+  it('shows a waiting state on the original link after a reminder is selected', () => {
+    expect(shouldShowReminderPending('WAITING_FOR_HOME', 'CONFIRMED', 1, false, false)).toBe(true);
+    expect(shouldShowReminderPending('WAITING_FOR_HOME', 'CONFIRMED', 1, false, true)).toBe(true);
+  });
+
+  it('clears the waiting state only when a new reminder link is opened', () => {
+    expect(shouldShowReminderPending('WAITING_FOR_HOME', 'CONFIRMED', 1, true, false)).toBe(false);
+  });
+
+  it('waits for the next link after the current reminder link schedules another reminder', () => {
+    expect(shouldShowReminderPending('LOCATION_MISMATCH', 'CONFIRMED', 2, true, false, false)).toBe(true);
+  });
+
+  it('does not show a pending reminder state after the third reminder', () => {
+    expect(shouldShowReminderPending('REMINDER_LIMIT_REACHED', 'CONFIRMED', 3, true, false, false)).toBe(false);
+  });
+
   it('shows the verification button only when a unique reminder link is opened', () => {
     expect(shouldShowReminderResume('WAITING_FOR_HOME', 'CONFIRMED', 1, true, false)).toBe(true);
+    expect(shouldShowReminderResume('WAITING_FOR_HOME', 'CONFIRMED', 2, true, false, false)).toBe(false);
   });
 
   it.each([1, 2])('keeps the next reminder picker available on reminder link %s', (reminderCount) => {

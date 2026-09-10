@@ -35,6 +35,7 @@ import { auth } from '../../auth/auth.js';
 import { WhatsAppPort } from '../../integrations/whatsapp/whatsapp.port.js';
 import { assertTransition } from '../verification/state-machine.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
+import { getPublicWebOrigin } from '../../config/public-origin.js';
 import { hashPhone, nextAllowedSendAt } from '../../integrations/whatsapp/whatsapp.policy.js';
 import { createVerificationToken } from '../verification/verification-token.js';
 import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/whatsapp/whatsapp.templates.js';
@@ -730,7 +731,7 @@ export class AdminService {
         updatedAt: created,
       })
       .returning();
-    const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
+    const verificationLink = `${getPublicWebOrigin()}/v/${verificationToken.rawToken}`;
     const invitationTemplate = getWhatsAppTemplate('INVITATION');
     let sent;
     try {
@@ -814,7 +815,7 @@ export class AdminService {
         updatedAt: created,
       })
       .returning();
-    const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
+    const verificationLink = `${getPublicWebOrigin()}/v/${verificationToken.rawToken}`;
     const invitationTemplate = getWhatsAppTemplate('INVITATION');
     await db.insert(auditLogs).values({
       actorUserId: admin.id,
@@ -1080,7 +1081,7 @@ export class AdminService {
     await this.assertManualSendAllowed(detail.customer.phoneE164);
     const verificationToken = await createVerificationToken();
     const expiresAt = new Date(Date.now() + config.VERIFICATION_TOKEN_TTL_DAYS * 86400000);
-    const verificationLink = `${process.env.WEB_ORIGIN}/v/${verificationToken.rawToken}`;
+    const verificationLink = `${getPublicWebOrigin()}/v/${verificationToken.rawToken}`;
     const idempotencyKey = `invitation-resend:${id}:${verificationToken.tokenId}`;
     const invitationTemplate = getWhatsAppTemplate('INVITATION');
     const sent = await this.whatsapp.send({
@@ -1533,13 +1534,14 @@ export class AdminService {
   }
 
   private async assertManualSendAllowed(phoneE164: string) {
+    const runtimeConfig = await this.validationConfig.get();
     const [last] = await db
       .select({ sentAt: whatsappDeliveryLogs.sentAt })
       .from(whatsappDeliveryLogs)
       .where(eq(whatsappDeliveryLogs.phoneHash, hashPhone(phoneE164)))
       .orderBy(desc(whatsappDeliveryLogs.sentAt))
       .limit(1);
-    const retryAt = nextAllowedSendAt(last?.sentAt ?? null, Number(process.env.WHATSAPP_MIN_INTERVAL_MINUTES ?? 60));
+    const retryAt = nextAllowedSendAt(last?.sentAt ?? null, runtimeConfig.WHATSAPP_MIN_INTERVAL_MINUTES);
     if (retryAt)
       throw new DomainError(`WhatsApp cooldown active until ${retryAt.toISOString()}`, 429, 'WHATSAPP_COOLDOWN');
     const dayStart = new Date();
@@ -1548,7 +1550,7 @@ export class AdminService {
       .select({ total: sql<number>`count(*)` })
       .from(whatsappDeliveryLogs)
       .where(sql`${whatsappDeliveryLogs.sentAt} >= ${dayStart}`);
-    if (Number(daily.total) >= Number(process.env.WHATSAPP_DAILY_SEND_LIMIT ?? 1000))
+    if (Number(daily.total) >= runtimeConfig.WHATSAPP_DAILY_SEND_LIMIT)
       throw new DomainError('WhatsApp daily send limit reached', 429, 'WHATSAPP_DAILY_LIMIT_REACHED');
   }
 
