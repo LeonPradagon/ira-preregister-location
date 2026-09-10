@@ -697,6 +697,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                         )}
                         {cust.status !== 'VERIFIED' &&
                           !masterAddr.isVerified &&
+                          masterAddr.referenceSource === 'PREREG_IMPORT' &&
                           masterAddr.referenceLocation &&
                           masterAddr.coordinateAuditStatus && (
                           <div

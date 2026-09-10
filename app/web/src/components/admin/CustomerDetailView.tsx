@@ -182,6 +182,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
                       </span>
                       {customer.status !== 'VERIFIED' &&
                         !addr.isVerified &&
+                        addr.referenceSource === 'PREREG_IMPORT' &&
                         addr.referenceLocation && (
                         <span
                           className={`${coordinateAuditClass(addr.coordinateAuditStatus)} border text-[10px] px-1.5 py-0.2 rounded font-semibold`}
@@ -230,6 +231,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
                   </div>
                   {customer.status !== 'VERIFIED' &&
                     !addr.isVerified &&
+                    addr.referenceSource === 'PREREG_IMPORT' &&
                     addr.referenceLocation &&
                     addr.coordinateAuditReason && (
                     <p className="text-[10px] leading-4 text-gray-500 dark:text-gray-400">{addr.coordinateAuditReason}</p>
