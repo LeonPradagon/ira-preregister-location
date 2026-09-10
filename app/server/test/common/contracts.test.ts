@@ -3,6 +3,7 @@ import {
   addressChangeSchema,
   campaignCreateSchema,
   customerCreateSchema,
+  customerListQuerySchema,
   locationSamplesSchema,
   reminderSchema,
   validationConfigSchema,
@@ -80,7 +81,7 @@ describe('API contracts', () => {
     }
   });
 
-  it('requires a five-digit postal code and a real house number', () => {
+  it('allows a missing postal code but requires a real house number', () => {
     const baseAddress = {
       province: 'DKI Jakarta',
       city: 'Jakarta Barat',
@@ -91,9 +92,12 @@ describe('API contracts', () => {
       houseNumber: '10',
     };
 
-    expect(addressChangeSchema.safeParse({ ...baseAddress, houseNumber: '' }).success).toBe(false);
+    expect(addressChangeSchema.safeParse({ ...baseAddress, houseNumber: '' }).success).toBe(true);
+    expect(addressChangeSchema.safeParse({ ...baseAddress, houseNumber: undefined }).success).toBe(true);
     expect(addressChangeSchema.safeParse({ ...baseAddress, houseNumber: 'TANPA NOMOR' }).success).toBe(false);
     expect(addressChangeSchema.safeParse({ ...baseAddress, postalCode: '1154' }).success).toBe(false);
+    expect(addressChangeSchema.safeParse({ ...baseAddress, postalCode: '' }).success).toBe(true);
+    expect(addressChangeSchema.safeParse({ ...baseAddress, postalCode: undefined }).success).toBe(true);
     expect(
       addressChangeSchema.safeParse({ ...baseAddress, addressDetail: 'Blok A', landmark: 'Dekat pos satpam' }).success,
     ).toBe(true);
@@ -106,6 +110,12 @@ describe('API contracts', () => {
     });
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.targetFilter?.locationStatus).toBe('UNVERIFIED');
+  });
+
+  it('accepts registered address completeness filters', () => {
+    expect(customerListQuerySchema.safeParse({ addressCompleteness: 'INCOMPLETE' }).success).toBe(true);
+    expect(customerListQuerySchema.safeParse({ addressCompleteness: 'COMPLETE' }).success).toBe(true);
+    expect(customerListQuerySchema.safeParse({ addressCompleteness: 'UNKNOWN' }).success).toBe(false);
   });
 
   it('requires exactly one campaign target source', () => {

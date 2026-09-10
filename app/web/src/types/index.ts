@@ -45,6 +45,8 @@ export type ReferencePrecision =
   | 'CITY'
   | 'UNKNOWN';
 
+export type CoordinateAuditStatus = 'PENDING' | 'MATCHED' | 'UNCERTAIN' | 'MISMATCH' | 'INVALID';
+
 export interface Coordinate {
   latitude: number;
   longitude: number;
@@ -77,6 +79,11 @@ export interface CustomerAddress {
   referenceConfidence: number; // 0.0 - 1.0
   geocodingProvider?: string;
   providerPlaceId?: string;
+  coordinateAuditStatus?: CoordinateAuditStatus;
+  coordinateAuditReason?: string;
+  coordinateAuditEvidence?: Record<string, unknown>;
+  coordinateAuditConfidence?: number;
+  coordinateAuditedAt?: string;
   isActive: boolean;
   isVerified: boolean;
   validFrom: string;

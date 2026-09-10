@@ -7,6 +7,7 @@ import { createInterface } from 'node:readline';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import pg from 'pg';
+import { houseNumberFromAddress, streetFromAddress } from './address-parser.mjs';
 
 const { Pool } = pg;
 const sourcePath = process.argv[2] ? resolve(process.argv[2]) : null;
@@ -103,44 +104,6 @@ const parseCoordinate = (value, label, rowNumber) => {
 };
 
 const postalCodeFromAddress = (address) => address.match(/\b(\d{5})\b/)?.[1] ?? '00000';
-
-// Plus Codes in the source export are sometimes concatenated with the next
-// address token (for example `M8VF+Q5FBulurejo`). Keep the raw address, but
-// recognize and remove the code when deriving structured street data.
-const plusCodePattern =
-  /[23456789cfghjmpqrvwx]{4,8}\+(?:[23456789cfghjmpqrvwx]{3}\d|[23456789cfghjmpqrvwx]{4})(?=$|[\s,])|[23456789cfghjmpqrvwx]{4,8}\+[23456789cfghjmpqrvwx]{2,3}/i;
-const isPlusCode = (value) => Boolean(value?.trim() && plusCodePattern.test(value));
-const removePlusCode = (value) => value.replace(plusCodePattern, ' ').replace(/\s+/g, ' ').trim();
-
-const isAdministrativePart = (value) =>
-  /^(rt\.?|rw\.?|kec\.?|kecamatan|kel\.?|kelurahan|desa|kab\.?|kabupaten|kota|jawa|indonesia)\b/i.test(value.trim());
-const isStreetPrefixOnly = (value) => /^(jl\.?|jalan|jln\.?|gg\.?|gang|komplek|komp\.?)$/i.test(value.trim());
-
-const streetFromAddress = (address) => {
-  const parts = address
-    .split(',')
-    .map((part) => removePlusCode(part))
-    .filter(Boolean);
-  return (
-    parts.find(
-      (part) =>
-        !isPlusCode(part) &&
-        !isStreetPrefixOnly(part) &&
-        /^(jl\.?|jalan|jln\.?|gg\.?|gang|komplek|komp\.?|kampung|kp\.?|dusun)\b/i.test(part),
-    ) ??
-    parts.find(
-      (part) =>
-        !isPlusCode(part) &&
-        !isStreetPrefixOnly(part) &&
-        !isAdministrativePart(part) &&
-        !/^rt\.?\s*\d|^rw\.?\s*\d/i.test(part),
-    ) ??
-    'UNKNOWN'
-  ).slice(0, 255);
-};
-
-const houseNumberFromAddress = (address) =>
-  address.match(/\b(?:no|nomor)\.?\s*([0-9]+[a-z]?(?:[/-][a-z0-9]+)*)/i)?.[1] ?? 'UNKNOWN';
 
 const parseBoolean = (value) => ['1', 'true', 'yes', 'y'].includes(text(value).toLowerCase());
 
@@ -246,12 +209,10 @@ const parseDataRow = (
   const rawAddress = values.effective_address || 'UNKNOWN ADDRESS';
   const postalCode = postalCodeFromAddress(rawAddress);
   const street = streetFromAddress(rawAddress);
-  const houseNumber = houseNumberFromAddress(rawAddress);
+  const houseNumber = houseNumberFromAddress(rawAddress, values.address_reference);
   if (postalCode === '00000') stats.missingPostalCodes += 1;
   if (
-    postalCode === '00000' ||
     street === 'UNKNOWN' ||
-    houseNumber === 'UNKNOWN' ||
     !values.effective_province ||
     !values.effective_kota ||
     !values.effective_kecamatan ||
@@ -552,6 +513,11 @@ const importRows = async ({ rows, stats }) => {
           reference_source = CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN 'PREREG_IMPORT' ELSE 'CUSTOMER_PROPOSED' END,
           reference_precision = CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN 'STREET' ELSE 'UNKNOWN' END,
           reference_confidence = 0.000,
+          coordinate_audit_status = CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN 'PENDING' ELSE 'INVALID' END,
+          coordinate_audit_reason = CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN NULL ELSE 'Latitude atau longitude tidak tersedia.' END,
+          coordinate_audit_evidence = NULL,
+          coordinate_audit_confidence = NULL,
+          coordinate_audited_at = NULL,
           is_verified = false,
           updated_at = $1
       FROM prereg_import_stage stage
@@ -566,6 +532,7 @@ const importRows = async ({ rows, stats }) => {
       INSERT INTO customer_addresses (
         customer_id, address_type, address_status, raw_address, province, city, district, subdistrict, postal_code,
         street, house_number, landmark, address_reference, reference_location, reference_source, reference_precision, reference_confidence,
+        coordinate_audit_status, coordinate_audit_reason,
         is_active, is_verified, valid_from, created_at, updated_at
       )
       SELECT customer.id, 'MASTER', 'ACTIVE', stage.raw_address, stage.province, stage.city, stage.district, stage.subdistrict, stage.postal_code,
@@ -573,7 +540,10 @@ const importRows = async ({ rows, stats }) => {
         CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN ST_SetSRID(ST_MakePoint(stage.longitude, stage.latitude), 4326)::geography ELSE NULL END,
         CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN 'PREREG_IMPORT' ELSE 'CUSTOMER_PROPOSED' END,
         CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN 'STREET' ELSE 'UNKNOWN' END,
-        0.000, true, false, COALESCE(stage.source_created_at, $1), COALESCE(stage.source_created_at, $1), $1
+        0.000,
+        CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN 'PENDING' ELSE 'INVALID' END,
+        CASE WHEN stage.longitude IS NOT NULL AND stage.latitude IS NOT NULL THEN NULL ELSE 'Latitude atau longitude tidak tersedia.' END,
+        true, false, COALESCE(stage.source_created_at, $1), COALESCE(stage.source_created_at, $1), $1
       FROM prereg_import_stage stage
       INNER JOIN customers customer ON customer.external_id = stage.external_id
       WHERE NOT EXISTS (

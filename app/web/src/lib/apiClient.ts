@@ -382,6 +382,7 @@ const adminApi = {
       search?: string;
       status?: string;
       locationStatus?: 'UNVERIFIED' | 'VERIFIED';
+      addressCompleteness?: 'COMPLETE' | 'INCOMPLETE';
       campaignAvailable?: boolean;
       cursor?: string;
     } = {},
@@ -392,6 +393,7 @@ const adminApi = {
     if (query.search) params.set('search', query.search);
     if (query.status && query.status !== 'ALL') params.set('status', query.status);
     if (query.locationStatus) params.set('locationStatus', query.locationStatus);
+    if (query.addressCompleteness) params.set('addressCompleteness', query.addressCompleteness);
     if (query.campaignAvailable) params.set('campaignAvailable', 'true');
     if (query.cursor) params.set('cursor', query.cursor);
     const suffix = params.toString() ? `?${params.toString()}` : '';

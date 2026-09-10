@@ -6,4 +6,5 @@ export const queueNames = {
   campaignSend: 'ira_preregist-campaign-send',
   metrics: 'ira_preregist-metrics',
   imports: 'ira_preregist-imports',
+  coordinateAudit: 'ira_preregist-coordinate-audit',
 } as const;

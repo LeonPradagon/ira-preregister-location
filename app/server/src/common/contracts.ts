@@ -61,18 +61,19 @@ export const addressChangeSchema = z.object({
   postalCode: z
     .string()
     .trim()
-    .regex(/^\d{5}$/, 'Kode pos harus terdiri dari 5 digit'),
+    .refine((value) => !value || /^\d{5}$/.test(value), 'Kode pos harus terdiri dari 5 digit')
+    .default(''),
   street: z.string().trim().min(1).max(255),
   houseNumber: z
     .string()
     .trim()
-    .min(1)
     .max(64)
     .refine(
       (value) =>
-        !['unknown', 'tidak diketahui', 'tanpa nomor', 'n/a', 'na', '-', '00000'].includes(value.toLowerCase()),
-      'Nomor rumah wajib diisi dengan nomor yang valid',
-    ),
+        !value || !['unknown', 'tidak diketahui', 'tanpa nomor', 'n/a', 'na', '-', '00000'].includes(value.toLowerCase()),
+      'Nomor rumah harus berupa nomor yang valid jika diisi',
+    )
+    .default(''),
   rt: z.string().trim().max(8).optional(),
   rw: z.string().trim().max(8).optional(),
   building: z.string().trim().max(255).optional(),
@@ -164,6 +165,7 @@ export const customerListQuerySchema = z.object({
   search: z.string().trim().max(128).default(''),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
+  addressCompleteness: z.enum(['COMPLETE', 'INCOMPLETE']).optional(),
   campaignAvailable: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
   cursor: z.string().max(255).optional(),
 });

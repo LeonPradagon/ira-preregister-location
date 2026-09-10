@@ -22,6 +22,7 @@ const CUSTOMER_STATUS_LABEL: Record<CustomerStatus, string> = {
   SUSPENDED: 'customers.statusLabel.SUSPENDED',
   VERIFIED: 'customers.statusLabel.VERIFIED',
 };
+type AddressCompletenessFilter = 'ALL' | 'COMPLETE' | 'INCOMPLETE';
 
 const CUSTOMER_CHECK_STATUS_LABEL: Record<string, string> = {
   CREATED: 'customers.checkStatus.CREATED',
@@ -84,6 +85,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
   const canManageCustomers = hasCapability(currentAdmin?.role, 'manageCustomers');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [addressCompletenessFilter, setAddressCompletenessFilter] =
+    useState<AddressCompletenessFilter>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -280,12 +283,18 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
     const timer = window.setTimeout(() => {
       setIsLoading(true);
       setLoadError('');
-      void loadCustomerPage(1, searchTerm, statusFilter as CustomerStatus | 'ALL')
+      void loadCustomerPage(
+        1,
+        searchTerm,
+        statusFilter as CustomerStatus | 'ALL',
+        customerPage.pageSize,
+        addressCompletenessFilter,
+      )
         .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : t('customers.loadError')))
         .finally(() => setIsLoading(false));
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [searchTerm, statusFilter, t]);
+  }, [searchTerm, statusFilter, addressCompletenessFilter, t]);
 
   const handleCreateCustomerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -309,7 +318,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
     setFormError('');
     const rawAddr = [
       newCustStreet,
-      `No. ${newCustHouseNo.trim()}`,
+      newCustHouseNo.trim() && `No. ${newCustHouseNo.trim()}`,
       newCustAddressDetail.trim(),
       newCustSubdistrict,
       newCustDistrict,
@@ -372,7 +381,13 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
             validFrom: new Date().toISOString(),
           },
         );
-        await loadCustomerPage(1, searchTerm, statusFilter as CustomerStatus | 'ALL');
+        await loadCustomerPage(
+          1,
+          searchTerm,
+          statusFilter as CustomerStatus | 'ALL',
+          customerPage.pageSize,
+          addressCompletenessFilter,
+        );
       }
       setIsAddModalOpen(false);
       await showActionSuccess(
@@ -531,6 +546,19 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
             <option value="ACTIVE">{t('customers.active')}</option>
             <option value="SUSPENDED">{t('customers.suspended')}</option>
           </select>
+          <label htmlFor="customer-address-completeness-filter" className="text-gray-600 dark:text-gray-300 font-medium">
+            {t('customers.addressFilter')}:
+          </label>
+          <select
+            id="customer-address-completeness-filter"
+            value={addressCompletenessFilter}
+            onChange={(e) => setAddressCompletenessFilter(e.target.value as AddressCompletenessFilter)}
+            className="min-w-0 max-w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400 sm:flex-none"
+          >
+            <option value="ALL">{t('customers.addressFilterAll')}</option>
+            <option value="INCOMPLETE">{t('customers.addressFilterIncomplete')}</option>
+            <option value="COMPLETE">{t('customers.addressFilterComplete')}</option>
+          </select>
         </div>
         <p className="text-[11px] text-gray-500 dark:text-gray-400">{t('customers.filterHelp')}</p>
       </div>
@@ -544,9 +572,23 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
             pageSize={customerPage.pageSize}
             total={customerPage.total}
             disabled={isLoading}
-            onPageChange={(page) => void loadCustomerPage(page, searchTerm, statusFilter as CustomerStatus | 'ALL')}
+            onPageChange={(page) =>
+              void loadCustomerPage(
+                page,
+                searchTerm,
+                statusFilter as CustomerStatus | 'ALL',
+                customerPage.pageSize,
+                addressCompletenessFilter,
+              )
+            }
             onPageSizeChange={(pageSize: TablePageSize) =>
-              void loadCustomerPage(1, searchTerm, statusFilter as CustomerStatus | 'ALL', pageSize)
+              void loadCustomerPage(
+                1,
+                searchTerm,
+                statusFilter as CustomerStatus | 'ALL',
+                pageSize,
+                addressCompletenessFilter,
+              )
             }
           />
         }
@@ -617,6 +659,29 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                         {isIncompleteAddress(masterAddr) && (
                           <div className="mt-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
                             {t('customers.addressIncomplete')}
+                          </div>
+                        )}
+                        {masterAddr.referenceLocation && masterAddr.coordinateAuditStatus && (
+                          <div
+                            className={`mt-1 text-[10px] font-semibold ${
+                              masterAddr.coordinateAuditStatus === 'MATCHED'
+                                ? 'text-emerald-700 dark:text-emerald-300'
+                                : masterAddr.coordinateAuditStatus === 'MISMATCH' || masterAddr.coordinateAuditStatus === 'INVALID'
+                                  ? 'text-rose-700 dark:text-rose-300'
+                                  : 'text-amber-700 dark:text-amber-300'
+                            }`}
+                          >
+                            {t(
+                              masterAddr.coordinateAuditStatus === 'MATCHED'
+                                ? 'customers.coordinateAuditMatched'
+                                : masterAddr.coordinateAuditStatus === 'MISMATCH'
+                                  ? 'customers.coordinateAuditMismatch'
+                                  : masterAddr.coordinateAuditStatus === 'INVALID'
+                                    ? 'customers.coordinateAuditInvalid'
+                                    : masterAddr.coordinateAuditStatus === 'UNCERTAIN'
+                                      ? 'customers.coordinateAuditUncertain'
+                                      : 'customers.coordinateAuditPending',
+                            )}
                           </div>
                         )}
                       </div>
@@ -837,11 +902,11 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                    {t('customers.houseNumber')} <span className="text-rose-600">*</span>
+                    {t('customers.houseNumber')}{' '}
+                    <span className="font-normal text-gray-400">({t('customers.optional')})</span>
                   </label>
                   <input
                     type="text"
-                    required
                     placeholder="Contoh: 12 atau A-12"
                     value={newCustHouseNo}
                     onChange={(e) => setNewCustHouseNo(e.target.value)}
@@ -851,10 +916,10 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 </div>
                 <div>
                   <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                    {t('customers.postalCode')} <span className="text-rose-600">*</span>
+                    {t('customers.postalCode')}{' '}
+                    <span className="font-normal text-gray-400">({t('customers.optional')})</span>
                   </label>
                   <input
-                    required
                     inputMode="numeric"
                     maxLength={5}
                     pattern="[0-9]{5}"
@@ -945,7 +1010,13 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           onClose={() => setIsImportModalOpen(false)}
           onImported={async () => {
             await Promise.all([
-              loadCustomerPage(1, searchTerm, statusFilter as CustomerStatus | 'ALL', customerPage.pageSize),
+              loadCustomerPage(
+                1,
+                searchTerm,
+                statusFilter as CustomerStatus | 'ALL',
+                customerPage.pageSize,
+                addressCompletenessFilter,
+              ),
               refreshDashboard(),
             ]);
           }}

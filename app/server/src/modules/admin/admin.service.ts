@@ -44,6 +44,7 @@ import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js'
 import { buildVerificationSimulationConfig } from '../verification/simulation-config.js';
 import { buildVerifiedAddressReference } from '../verification/verified-location.js';
 import { campaignRecipientReservationStatuses } from '../campaigns/campaign-target.policy.js';
+import { incompleteAddressSql } from '../validation/address-completeness.sql.js';
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
 const customerAuditActorIds = ['customer', 'customer-token'];
@@ -359,7 +360,42 @@ export class AdminService {
         sql`exists (select 1 from customer_addresses campaign_address where campaign_address.customer_id = ${customers.id} and campaign_address.is_active = true and campaign_address.is_verified = true)`,
       );
     }
+    if (query.addressCompleteness === 'INCOMPLETE') {
+      filters.push(sql`(
+        not exists (
+          select 1
+          from customer_addresses address_status
+          where address_status.customer_id = ${customers.id}
+            and address_status.is_active = true
+        )
+        or exists (
+          select 1
+          from customer_addresses campaign_address
+          where campaign_address.customer_id = ${customers.id}
+            and campaign_address.is_active = true
+            and ${incompleteAddressSql('campaign_address')}
+        )
+      )`);
+    } else if (query.addressCompleteness === 'COMPLETE') {
+      filters.push(sql`exists (
+        select 1
+        from customer_addresses campaign_address
+        where campaign_address.customer_id = ${customers.id}
+          and campaign_address.is_active = true
+          and not ${incompleteAddressSql('campaign_address')}
+      )`);
+    }
     if (query.campaignAvailable) {
+      filters.push(
+        sql`exists (
+          select 1
+          from customer_addresses campaign_address
+          where campaign_address.customer_id = ${customers.id}
+            and campaign_address.is_active = true
+            and campaign_address.is_verified = false
+            and ${incompleteAddressSql('campaign_address')}
+        )`,
+      );
       const statuses = sql.join(campaignRecipientReservationStatuses.map((status) => sql`${status}`), sql`, `);
       filters.push(sql`not exists (
         select 1
@@ -376,7 +412,13 @@ export class AdminService {
     const where = and(...filters);
     const cachedCount = await this.readCache.count(
       'customers',
-      { search: query.search, status: query.status, locationStatus: query.locationStatus, campaignAvailable: query.campaignAvailable },
+      {
+        search: query.search,
+        status: query.status,
+        locationStatus: query.locationStatus,
+        addressCompleteness: query.addressCompleteness,
+        campaignAvailable: query.campaignAvailable,
+      },
       async () => {
         const [{ total }] = await db
           .select({ total: sql<number>`count(*)` })

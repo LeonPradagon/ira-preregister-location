@@ -69,7 +69,7 @@ export function isIncompleteAddress(address: {
   street?: string;
   houseNumber?: string;
 }): boolean {
-  const values = [address.postalCode, address.street, address.houseNumber];
+  const values = [address.street];
   const hasPlaceholder = values.some(
     (value) =>
       !value?.trim() ||

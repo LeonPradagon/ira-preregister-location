@@ -5,6 +5,7 @@ import { useTranslation } from '../../i18n';
 import { buildGoogleMapsDeepLink, formatAddressForDisplay, isIncompleteAddress } from '../../lib/validationEngine';
 import { userFriendlyStatus } from '../../lib/statusLabels';
 import { confirmAction } from '../../lib/swal';
+import { CoordinateAuditStatus } from '../../types';
 
 interface CustomerDetailViewProps {
   customerId: string;
@@ -35,6 +36,24 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
   }
 
   const masterAddress = custAddresses.find((a) => a.addressType === 'MASTER') || custAddresses[0];
+  const coordinateAuditLabel = (status?: CoordinateAuditStatus) =>
+    t(
+      status === 'MATCHED'
+        ? 'customers.coordinateAuditMatched'
+        : status === 'MISMATCH'
+          ? 'customers.coordinateAuditMismatch'
+          : status === 'INVALID'
+            ? 'customers.coordinateAuditInvalid'
+            : status === 'UNCERTAIN'
+              ? 'customers.coordinateAuditUncertain'
+              : 'customers.coordinateAuditPending',
+    );
+  const coordinateAuditClass = (status?: CoordinateAuditStatus) =>
+    status === 'MATCHED'
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+      : status === 'MISMATCH' || status === 'INVALID'
+        ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
+        : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800';
 
   const handleOptOut = async () => {
     const confirmed = await confirmAction({
@@ -161,6 +180,13 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
                       >
                         {addr.isVerified ? 'GPS VERIFIED' : 'GPS BELUM VERIFIED'}
                       </span>
+                      {addr.referenceLocation && (
+                        <span
+                          className={`${coordinateAuditClass(addr.coordinateAuditStatus)} border text-[10px] px-1.5 py-0.2 rounded font-semibold`}
+                        >
+                          {coordinateAuditLabel(addr.coordinateAuditStatus)}
+                        </span>
+                      )}
                     </span>
                   </div>
 
@@ -200,6 +226,9 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
                       </a>
                     )}
                   </div>
+                  {addr.referenceLocation && addr.coordinateAuditReason && (
+                    <p className="text-[10px] leading-4 text-gray-500 dark:text-gray-400">{addr.coordinateAuditReason}</p>
+                  )}
                 </div>
               ))}
             </div>

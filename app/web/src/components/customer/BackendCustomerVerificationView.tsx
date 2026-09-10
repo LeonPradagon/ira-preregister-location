@@ -481,12 +481,12 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       (option) => option.name.toLowerCase() === addressForm.subdistrict?.trim().toLowerCase(),
     );
     const postalCode = addressForm.postalCode?.trim() || selectedSubdistrict?.postalCode?.trim() || '';
-    const required = ['province', 'city', 'district', 'subdistrict', 'street', 'houseNumber', 'postalCode'];
-    if (required.some((field) => (field === 'postalCode' ? !postalCode : !addressForm[field]?.trim()))) {
-      setError(t('customer.requiredAddressFieldsWithPostal'));
+    const required = ['province', 'city', 'district', 'subdistrict', 'street'];
+    if (required.some((field) => !addressForm[field]?.trim())) {
+      setError(t('customer.requiredAddressFields'));
       return;
     }
-    if (!/^\d{5}$/.test(postalCode)) {
+    if (postalCode && !/^\d{5}$/.test(postalCode)) {
       setError(t('customer.postalCodeInvalid'));
       return;
     }
@@ -742,7 +742,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       />
     ) : (
       <input
-        required={field !== 'addressDetail'}
+        required={field !== 'addressDetail' && field !== 'postalCode' && field !== 'houseNumber'}
         pattern={field === 'postalCode' ? '[0-9]{5}' : undefined}
         value={addressForm[field] || ''}
         placeholder={fieldPlaceholders[field]}
@@ -793,7 +793,9 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       <label key={field} className="block text-xs font-medium text-slate-700">
         <span>
           {fieldLabels[field] || field}
-          {field !== 'addressDetail' && <span className="ml-1 text-rose-600">*</span>}
+          {field !== 'addressDetail' && field !== 'postalCode' && field !== 'houseNumber' && (
+            <span className="ml-1 text-rose-600">*</span>
+          )}
         </span>
         {field === 'postalCode' ? (
           <>

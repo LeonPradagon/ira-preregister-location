@@ -74,4 +74,19 @@ describe('API client', () => {
       correlationId: 'server-correlation-id',
     });
   });
+
+  it('requests customers by registered address completeness', async () => {
+    const adapterMock = vi.fn().mockResolvedValue({
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { items: [], page: 1, pageSize: 25, total: 0, totalPages: 0 },
+    });
+    apiClient.defaults.adapter = adapterMock;
+
+    await api.customers({ addressCompleteness: 'INCOMPLETE' });
+
+    const config = adapterMock.mock.calls[0][0];
+    expect(config.url).toBe('/admin/customers?addressCompleteness=INCOMPLETE');
+  });
 });

@@ -11,6 +11,7 @@ import { db, pool } from './db/client.js';
 import {
   auditLogs,
   customers,
+  customerAddresses,
   importJobs,
   integrationOutbox,
   reminders,
@@ -34,6 +35,8 @@ import { ReadCacheService } from './common/read-cache.service.js';
 import { logEvent } from './common/structured-log.js';
 import { queueNames } from './common/queue-names.js';
 import { getPublicWebOrigin } from './config/public-origin.js';
+import { OsmGeocodingAdapter } from './integrations/geocoding/osm-geocoding.adapter.js';
+import { auditCoordinateAddress } from './modules/validation/coordinate-audit.js';
 
 const connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null }).on(
   'error',
@@ -52,6 +55,7 @@ const {
   campaignSend: campaignSendQueueName,
   metrics: metricsQueueName,
   imports: importQueueName,
+  coordinateAudit: coordinateAuditQueueName,
 } = queueNames;
 const queueSafeJobId = (...parts: Array<string | number>) =>
   parts.map((part) => String(part).replace(/[^a-zA-Z0-9_-]/g, '-')).join('-');
@@ -61,6 +65,8 @@ const campaignMaterializationQueue = new Queue(campaignMaterializationQueueName,
 const campaignSendQueue = new Queue(campaignSendQueueName, { connection });
 const metricsQueue = new Queue(metricsQueueName, { connection });
 const importQueue = new Queue(importQueueName, { connection });
+const coordinateAuditQueue = new Queue(coordinateAuditQueueName, { connection });
+let pendingCoordinateAuditsEnqueued = false;
 const whatsappProvider = process.env.WHATSAPP_PROVIDER ?? 'disabled';
 const invitationTemplate = getWhatsAppTemplate('INVITATION');
 const reminderTemplate = getWhatsAppTemplate('REMINDER');
@@ -618,6 +624,25 @@ const importWorker = runs('import')
               updatedAt: completedAt,
             })
             .where(eq(importJobs.id, importJobId));
+          const pendingCoordinateAudits = await db
+            .select({ id: customerAddresses.id })
+            .from(customerAddresses)
+            .where(
+              and(
+                eq(customerAddresses.referenceSource, 'PREREG_IMPORT'),
+                eq(customerAddresses.coordinateAuditStatus, 'PENDING'),
+                isNotNull(customerAddresses.referenceLocation),
+              ),
+            )
+            .limit(10000);
+          if (pendingCoordinateAudits.length)
+            await coordinateAuditQueue.addBulk(
+              pendingCoordinateAudits.map(({ id }) => ({
+                name: 'audit-imported-coordinate',
+                data: { addressId: id },
+                opts: { jobId: queueSafeJobId('coordinate-audit', id), removeOnComplete: true, removeOnFail: false },
+              })),
+            );
           await db.insert(auditLogs).values({
             actorUserId: 'system',
             actorName: 'Import Worker',
@@ -629,6 +654,7 @@ const importWorker = runs('import')
               customersUpserted: result.customersUpserted,
               addressesInserted: result.addressesInserted,
               addressesUpdated: result.addressesUpdated,
+              coordinateAuditsQueued: pendingCoordinateAudits.length,
             },
             timestamp: completedAt,
           });
@@ -653,6 +679,116 @@ const importWorker = runs('import')
       { connection, concurrency: Number(process.env.IMPORT_WORKER_CONCURRENCY ?? 1) },
     )
   : null;
+
+const coordinateGeocoder = runs('import') ? new OsmGeocodingAdapter() : null;
+const coordinateAuditWorker = runs('import')
+  ? new Worker(
+      coordinateAuditQueueName,
+      async (job) => {
+        const addressId = String(job.data.addressId);
+        const [row] = await db
+          .select({
+            address: customerAddresses,
+            referenceLatitude: sql<number>`ST_Y(${customerAddresses.referenceLocation}::geometry)`,
+            referenceLongitude: sql<number>`ST_X(${customerAddresses.referenceLocation}::geometry)`,
+          })
+          .from(customerAddresses)
+          .where(eq(customerAddresses.id, addressId))
+          .limit(1);
+        if (!row || row.address.coordinateAuditStatus !== 'PENDING') return;
+
+        const latitude = row.referenceLatitude == null ? null : Number(row.referenceLatitude);
+        const longitude = row.referenceLongitude == null ? null : Number(row.referenceLongitude);
+        const auditedAt = new Date();
+        if (
+          latitude == null ||
+          longitude == null ||
+          !Number.isFinite(latitude) ||
+          !Number.isFinite(longitude) ||
+          latitude < -90 ||
+          latitude > 90 ||
+          longitude < -180 ||
+          longitude > 180
+        ) {
+          await db
+            .update(customerAddresses)
+            .set({
+              coordinateAuditStatus: 'INVALID',
+              coordinateAuditReason: 'Latitude atau longitude tidak valid.',
+              coordinateAuditConfidence: '1.000',
+              coordinateAuditedAt: auditedAt,
+              updatedAt: auditedAt,
+            })
+            .where(eq(customerAddresses.id, addressId));
+          return;
+        }
+
+        try {
+          const reverseGeocode = await coordinateGeocoder!.reverse(latitude, longitude);
+          const audit = auditCoordinateAddress(
+            {
+              province: row.address.province,
+              city: row.address.city,
+              district: row.address.district,
+              subdistrict: row.address.subdistrict,
+              street: row.address.street,
+            },
+            reverseGeocode,
+          );
+          await db
+            .update(customerAddresses)
+            .set({
+              coordinateAuditStatus: audit.status,
+              coordinateAuditReason: audit.reason,
+              coordinateAuditEvidence: audit.evidence,
+              coordinateAuditConfidence: audit.confidence.toFixed(3),
+              coordinateAuditedAt: auditedAt,
+              updatedAt: auditedAt,
+            })
+            .where(eq(customerAddresses.id, addressId));
+        } catch (error) {
+          await db
+            .update(customerAddresses)
+            .set({
+              coordinateAuditStatus: 'UNCERTAIN',
+              coordinateAuditReason: 'Layanan peta tidak tersedia saat audit koordinat.',
+              coordinateAuditEvidence: {
+                error: error instanceof Error ? error.message.slice(0, 255) : String(error).slice(0, 255),
+              },
+              coordinateAuditConfidence: '0.000',
+              coordinateAuditedAt: auditedAt,
+              updatedAt: auditedAt,
+            })
+            .where(eq(customerAddresses.id, addressId));
+        }
+      },
+      { connection, concurrency: Number(process.env.COORDINATE_AUDIT_CONCURRENCY ?? 1) },
+    )
+  : null;
+
+const enqueuePendingCoordinateAudits = async () => {
+  if (pendingCoordinateAuditsEnqueued || !runs('import')) return;
+  const pending = await db
+    .select({ id: customerAddresses.id })
+    .from(customerAddresses)
+    .where(
+      and(
+        eq(customerAddresses.referenceSource, 'PREREG_IMPORT'),
+        eq(customerAddresses.coordinateAuditStatus, 'PENDING'),
+        isNotNull(customerAddresses.referenceLocation),
+      ),
+    )
+    .limit(10000);
+  if (pending.length)
+    await coordinateAuditQueue.addBulk(
+      pending.map(({ id }) => ({
+        name: 'audit-imported-coordinate',
+        data: { addressId: id },
+        opts: { jobId: queueSafeJobId('coordinate-audit', id), removeOnComplete: true, removeOnFail: false },
+      })),
+    );
+  pendingCoordinateAuditsEnqueued = true;
+};
 
 const recoveryWorker = runs('maintenance')
   ? new Worker(
@@ -829,6 +965,7 @@ const poll = async () => {
   const jobs: Promise<unknown>[] = [];
   if (runs('messaging')) jobs.push(enqueuePendingOutbox(), enqueueDueReminders());
   if (runs('campaign')) jobs.push(enqueueDueCampaignItems(), enqueueCampaignMaterialization());
+  if (runs('import')) jobs.push(enqueuePendingCoordinateAudits());
   if (runs('maintenance')) jobs.push(enqueueMaintenance());
   await Promise.all(jobs);
 };
@@ -857,6 +994,12 @@ importWorker?.on('completed', (job) => logEvent('info', 'import.worker_completed
 importWorker?.on('failed', (job, error) =>
   logEvent('error', 'import.worker_failed', { jobId: job?.id, error: error.message }),
 );
+coordinateAuditWorker?.on('completed', (job) =>
+  logEvent('info', 'coordinate_audit.worker_completed', { jobId: job.id }),
+);
+coordinateAuditWorker?.on('failed', (job, error) =>
+  logEvent('error', 'coordinate_audit.worker_failed', { jobId: job?.id, error: error.message }),
+);
 
 const shutdown = async () => {
   clearInterval(poller);
@@ -866,12 +1009,15 @@ const shutdown = async () => {
   await importWorker?.close();
   await campaignMaterializationWorker?.close();
   await recoveryWorker?.close();
+  await coordinateAuditWorker?.close();
   await outboxQueue.close();
   await reminderQueue.close();
   await campaignMaterializationQueue.close();
   await campaignSendQueue.close();
   await metricsQueue.close();
   await importQueue.close();
+  await coordinateAuditQueue.close();
+  await coordinateGeocoder?.onModuleDestroy();
   await connection.quit();
   await pool.end();
 };

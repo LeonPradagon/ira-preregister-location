@@ -46,10 +46,18 @@ const config = {
 };
 
 describe('server validation engine', () => {
-  it('identifies placeholder and plus-code-only addresses as requiring correction', () => {
-    expect(isAddressIncomplete({ ...address, houseNumber: 'TANPA NOMOR' })).toBe(true);
+  it('identifies missing and plus-code-only streets as requiring correction', () => {
+    expect(isAddressIncomplete({ ...address, street: '' })).toBe(true);
     expect(isAddressIncomplete({ ...address, street: '8H3F+6Q' })).toBe(true);
     expect(isAddressIncomplete(address)).toBe(false);
+  });
+
+  it('does not require a postal code when the structured address is complete', () => {
+    expect(isAddressIncomplete({ ...address, postalCode: '00000' })).toBe(false);
+    expect(isAddressIncomplete({ ...address, postalCode: '' })).toBe(false);
+    expect(isAddressIncomplete({ ...address, houseNumber: '' })).toBe(false);
+    expect(isAddressIncomplete({ ...address, houseNumber: 'UNKNOWN' })).toBe(false);
+    expect(isAddressIncomplete({ ...address, street: '' })).toBe(true);
   });
 
   it('accepts a precise, accurate and address-matching capture', () => {
@@ -259,7 +267,7 @@ describe('server validation engine', () => {
       [sample(-6.2, 106.784, 35), sample(-6.20001, 106.78401, 36, 1), sample(-6.19999, 106.78399, 37, 2)],
       {
         ...address,
-        houseNumber: 'UNKNOWN',
+        street: '',
         postalCode: '00000',
         referenceLatitude: null,
         referenceLongitude: null,
@@ -282,7 +290,7 @@ describe('server validation engine', () => {
   it('routes incomplete addresses to manual review even when GPS and reference match', () => {
     const decision = decideValidation(
       [sample(-6.884, 107.613), sample(-6.88401, 107.61301, 12, 1), sample(-6.88399, 107.61299, 14, 2)],
-      { ...address, houseNumber: 'UNKNOWN', postalCode: '00000' },
+      { ...address, street: '', postalCode: '00000' },
       reverseGeocode,
       config,
     );
@@ -293,7 +301,7 @@ describe('server validation engine', () => {
   it('asks the customer to retry when GPS is weak even if the address also needs review', () => {
     const decision = decideValidation(
       [sample(-6.884, 107.613, 60), sample(-6.88401, 107.61301, 65, 1), sample(-6.88399, 107.61299, 70, 2)],
-      { ...address, houseNumber: 'UNKNOWN', postalCode: '00000', referencePrecision: 'UNKNOWN' },
+      { ...address, street: '', postalCode: '00000', referencePrecision: 'UNKNOWN' },
       reverseGeocode,
       config,
     );

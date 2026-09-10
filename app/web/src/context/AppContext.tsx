@@ -105,6 +105,7 @@ interface AppContextType {
     search?: string,
     status?: CustomerStatus | 'ALL',
     pageSize?: number,
+    addressCompleteness?: 'ALL' | 'COMPLETE' | 'INCOMPLETE',
   ) => Promise<CustomerPage>;
   loadCustomerDetail: (
     customerId: string,
@@ -486,12 +487,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     search = '',
     status: CustomerStatus | 'ALL' = 'ALL',
     pageSize = customerPage.pageSize || 25,
+    addressCompleteness: 'ALL' | 'COMPLETE' | 'INCOMPLETE' = 'ALL',
   ): Promise<CustomerPage> => {
     const raw = await api.customers({
       page,
       pageSize,
       search,
       status,
+      addressCompleteness: addressCompleteness === 'ALL' ? undefined : addressCompleteness,
       cursor: page === 1 ? undefined : customerCursors[page],
     });
     if (page === 1) setCustomerCursors({});

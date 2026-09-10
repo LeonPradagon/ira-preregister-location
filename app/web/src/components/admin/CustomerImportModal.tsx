@@ -16,6 +16,7 @@ const formatNumber = (value: number) => value.toLocaleString('id-ID');
 export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClose, onImported }) => {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStage, setUploadStage] = useState<'uploading' | 'processing'>('uploading');
   const [error, setError] = useState('');
   const [result, setResult] = useState<CustomerImportApiResult | null>(null);
 
@@ -55,10 +56,12 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
     });
     if (!confirmed) return;
     setError('');
+    setUploadStage('uploading');
     setIsUploading(true);
     try {
       const queued = await api.importCustomers(file);
       if (!queued.jobId) throw new Error('Server tidak mengembalikan ID import job.');
+      setUploadStage('processing');
       let imported = queued;
       const deadline = Date.now() + 15 * 60 * 1000;
       while (imported.status !== 'COMPLETED' && imported.status !== 'FAILED' && Date.now() < deadline) {
@@ -100,7 +103,7 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
           </button>
         </div>
 
-        <form onSubmit={handleUpload} className="p-5 space-y-4 text-xs">
+        <form onSubmit={handleUpload} aria-busy={isUploading} className="p-5 space-y-4 text-xs">
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
             <p className="font-semibold">Format yang didukung</p>
             <p className="mt-1 leading-relaxed">
@@ -111,11 +114,11 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
 
           <label
             htmlFor="customer-import-file"
-            className="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:border-emerald-600"
+            className="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center hover:border-emerald-400 hover:bg-emerald-50/40 disabled:cursor-not-allowed dark:border-gray-700 dark:bg-gray-800/50 dark:hover:border-emerald-600"
           >
             <Upload className="w-7 h-7 text-gray-400 dark:text-gray-500" />
             <span className="mt-2 font-semibold text-gray-800 dark:text-gray-200">
-              {file ? file.name : 'Pilih file Excel atau CSV'}
+              {isUploading ? 'Import sedang berjalan...' : file ? file.name : 'Pilih file Excel atau CSV'}
             </span>
             <span className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">.xlsx atau .csv • maksimal 50 MB</span>
             <input
@@ -132,6 +135,29 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
             <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {isUploading && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex flex-col items-center justify-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-5 text-center text-indigo-900 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-200"
+            >
+              <AppLoader
+                size={52}
+                label={uploadStage === 'uploading' ? 'Mengunggah file' : 'Memproses import'}
+              />
+              <div>
+                <p className="font-semibold">
+                  {uploadStage === 'uploading' ? 'Sedang mengunggah file...' : 'Sedang memproses data...'}
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed">
+                  {uploadStage === 'uploading'
+                    ? 'File sedang dikirim ke server.'
+                    : 'Data sedang diproses. Mohon jangan tutup halaman ini.'}
+                </p>
+              </div>
             </div>
           )}
 

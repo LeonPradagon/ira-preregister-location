@@ -7,9 +7,12 @@ type TranslationKey = string;
 const messages: Record<Language, Record<TranslationKey, string>> = {
   id: {
     'customers.addressIncomplete': 'Alamat belum lengkap — perlu dilengkapi/manual review',
+    'customers.coordinateAuditPending': 'Audit koordinat sedang diproses',
+    'customers.coordinateAuditMatched': 'Koordinat sesuai alamat',
+    'customers.coordinateAuditUncertain': 'Koordinat perlu diperiksa',
+    'customers.coordinateAuditMismatch': 'Koordinat tidak sesuai alamat',
+    'customers.coordinateAuditInvalid': 'Koordinat tidak valid',
     'detail.addressIncomplete': 'Alamat belum lengkap — koordinat tidak boleh dianggap sebagai bukti alamat lengkap.',
-    'customer.requiredAddressFieldsWithPostal':
-      'Provinsi, kota, kecamatan, kelurahan, kode pos, jalan, dan nomor rumah wajib diisi.',
     'customer.postalCodeInvalid': 'Kode pos harus terdiri dari 5 digit angka.',
     'customer.gpsAutomatic': 'GPS sedang diambil otomatis. Mohon tunggu sebentar.',
     'customer.gpsCheckingTitle': 'Sedang memeriksa lokasi Anda',
@@ -301,15 +304,18 @@ const messages: Record<Language, Record<TranslationKey, string>> = {
     'customer.permissionDenied':
       'Izin lokasi ditolak. Tekan coba lagi. Jika browser tidak menampilkan permintaan izin, buka pengaturan izin lokasi untuk situs ini lalu aktifkan kembali.',
     'customer.requestFailed': 'Permintaan tidak dapat diproses.',
-    'customer.requiredAddressFields': 'Provinsi, kota, kecamatan, kelurahan, jalan, dan nomor rumah wajib diisi.',
+    'customer.requiredAddressFields': 'Provinsi, kota, kecamatan, kelurahan, dan jalan wajib diisi.',
     'customer.manualReviewNotice':
       'Pemeriksaan otomatis sudah selesai dan data lokasi diterima. Lokasi belum dinyatakan berhasil karena tim kami sedang melakukan verifikasi manual. Tidak perlu mengulang selama belum diminta.',
   },
   en: {
     'customers.addressIncomplete': 'Address incomplete — needs completion/manual review',
+    'customers.coordinateAuditPending': 'Coordinate audit is processing',
+    'customers.coordinateAuditMatched': 'Coordinates match the address',
+    'customers.coordinateAuditUncertain': 'Coordinates need review',
+    'customers.coordinateAuditMismatch': 'Coordinates do not match the address',
+    'customers.coordinateAuditInvalid': 'Coordinates are invalid',
     'detail.addressIncomplete': 'Address incomplete — coordinates must not be treated as proof of a complete address.',
-    'customer.requiredAddressFieldsWithPostal':
-      'Province, city, district, subdistrict, postal code, street, and house number are required.',
     'customer.postalCodeInvalid': 'The postal code must contain exactly 5 digits.',
     'customer.gpsAutomatic': 'GPS is being captured automatically. Please wait a moment.',
     'customer.gpsCheckingTitle': 'Checking your location',
@@ -600,7 +606,7 @@ const messages: Record<Language, Record<TranslationKey, string>> = {
     'customer.permissionDenied':
       "Location permission was denied. Try again. If the browser does not show the permission prompt, open this site's location permissions and enable it.",
     'customer.requestFailed': 'The request could not be processed.',
-    'customer.requiredAddressFields': 'Province, city, district, subdistrict, street, and house number are required.',
+    'customer.requiredAddressFields': 'Province, city, district, subdistrict, and street are required.',
     'customer.manualReviewNotice':
       'The automated check is complete and your location data was received. It is not marked as verified yet because our team is performing a manual review. Please do not repeat the process unless requested.',
   },
@@ -964,6 +970,10 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'customers.activeCount': 'Pelanggan aktif',
     'customers.activeCountHelp': 'Pelanggan yang masih aktif di sistem.',
     'customers.filterHelp': 'Cari berdasarkan nama, nomor WhatsApp, atau gunakan status untuk mempersempit daftar.',
+    'customers.addressFilter': 'Alamat terdaftar',
+    'customers.addressFilterAll': 'Semua alamat',
+    'customers.addressFilterIncomplete': 'Belum lengkap',
+    'customers.addressFilterComplete': 'Lengkap',
     'customers.systemId': 'ID sistem',
     'customers.sourceId': 'ID data asal',
     'customers.whatsappLabel': 'Nomor WhatsApp',
@@ -1194,7 +1204,7 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'campaigns.itemStatus.OPTED_OUT': 'Pengiriman dihentikan',
     'campaigns.targetEmpty': 'Tidak ada pelanggan yang perlu diperiksa.',
     'campaigns.info':
-      'Pilih pelanggan yang akan dikirimi undangan pemeriksaan. Pengiriman dilakukan bertahap dan pelanggan yang sudah menolak pesan tidak akan dikirimi lagi.',
+      'Blasting hanya dikirim ke pelanggan dengan alamat belum lengkap. Setelah alamat dilengkapi, pelanggan dapat melanjutkan verifikasi lokasi.',
     'campaigns.processing': 'Sedang menyiapkan pengiriman...',
     'campaigns.created': 'Pengiriman dibuat untuk {count} pelanggan.',
     'campaigns.itemLoadError': 'Status pengiriman tidak dapat dimuat.',
@@ -1402,6 +1412,10 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'customers.activeCount': 'Active customers',
     'customers.activeCountHelp': 'Customers currently active in the system.',
     'customers.filterHelp': 'Search by name or WhatsApp number, or use status to narrow the list.',
+    'customers.addressFilter': 'Registered address',
+    'customers.addressFilterAll': 'All addresses',
+    'customers.addressFilterIncomplete': 'Incomplete',
+    'customers.addressFilterComplete': 'Complete',
     'customers.systemId': 'System ID',
     'customers.sourceId': 'Source ID',
     'customers.whatsappLabel': 'WhatsApp number',
@@ -1631,7 +1645,7 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'campaigns.itemStatus.OPTED_OUT': 'Sending stopped',
     'campaigns.targetEmpty': 'There are no customers who need a check.',
     'campaigns.info':
-      'Select customers who should receive a check invitation. Messages are sent in stages, and customers who declined will not receive another message.',
+      'Messages are sent only to customers with incomplete addresses. After the address is completed, the customer can continue to location verification.',
     'campaigns.processing': 'Preparing messages...',
     'campaigns.created': 'Messages created for {count} customers.',
     'campaigns.itemLoadError': 'Message status could not be loaded.',
@@ -1727,7 +1741,7 @@ const deliveryWording: Record<Language, Record<string, string>> = {
     'campaigns.selectedRecipients': 'penerima',
     'campaigns.loadingTargets': 'Memuat pelanggan yang belum diperiksa...',
     'campaigns.chooseRecipients': 'Pilih penerima',
-    'campaigns.chooseRecipientsHelp': 'Pilih pelanggan yang belum masuk pengiriman aktif. Customer yang sudah diproses tidak ditampilkan lagi.',
+    'campaigns.chooseRecipientsHelp': 'Pilih pelanggan dengan alamat belum lengkap. Pelanggan lengkap atau yang sudah diproses tidak ditampilkan.',
     'campaigns.messageSettings': 'Atur pengiriman',
     'campaigns.messageSettingsHelp': 'Tentukan nama pengiriman dan jumlah pesan maksimal per hari (1–{max}).',
     'campaigns.dailyLimit': 'Batas pesan per hari (maksimum {max} per hari)',
@@ -1844,7 +1858,7 @@ const deliveryWording: Record<Language, Record<string, string>> = {
     'campaigns.selectedRecipients': 'recipients',
     'campaigns.loadingTargets': 'Loading customers who need a check...',
     'campaigns.chooseRecipients': 'Choose recipients',
-    'campaigns.chooseRecipientsHelp': 'Select customers not already in an active delivery. Processed customers are hidden.',
+    'campaigns.chooseRecipientsHelp': 'Select customers with incomplete addresses. Complete or already processed customers are hidden.',
     'campaigns.messageSettings': 'Set up delivery',
     'campaigns.messageSettingsHelp': 'Set a delivery name and the maximum messages to send per day (1–{max}).',
     'campaigns.dailyLimit': 'Messages per day (maximum {max} per day)',

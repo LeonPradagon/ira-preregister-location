@@ -4,6 +4,7 @@ import {
   calculateGeodesicDistanceMeters,
   evaluateBestGpsSample,
   formatAddressForDisplay,
+  isIncompleteAddress,
   isValidCoordinate,
 } from '../../src/lib/validationEngine';
 
@@ -37,5 +38,12 @@ describe('GPS evidence helpers', () => {
       'Jl. Kp. Kandang, Mekarwangi, Kec. Cisauk',
     );
     expect(formatAddressForDisplay('WC35+H22Jl. Delik Sari, Pudakpayung')).toBe('Jl. Delik Sari, Pudakpayung');
+  });
+
+  it('does not require a postal code when street and house number are present', () => {
+    expect(isIncompleteAddress({ street: 'Jl. Mawar', houseNumber: '21', postalCode: '00000' })).toBe(false);
+    expect(isIncompleteAddress({ street: 'Jl. Mawar', houseNumber: '21', postalCode: '' })).toBe(false);
+    expect(isIncompleteAddress({ street: 'Jl. Mawar', houseNumber: '', postalCode: '00000' })).toBe(false);
+    expect(isIncompleteAddress({ street: '', houseNumber: '21', postalCode: '00000' })).toBe(true);
   });
 });

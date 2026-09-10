@@ -90,7 +90,7 @@ const administrativeTokenScore = (left: string, right: string): number => {
   return tokenScore(a, b);
 };
 
-const administrativeMatch = (expected: string, candidates: string[], threshold = 0.7): boolean =>
+export const administrativeMatch = (expected: string, candidates: string[], threshold = 0.7): boolean =>
   candidates.some(
     (candidate) => Boolean(candidate?.trim()) && administrativeTokenScore(expected, candidate) >= threshold,
   );
@@ -117,12 +117,10 @@ export function isAddressIncomplete(
     address.district,
     address.subdistrict,
     address.street,
-    address.houseNumber,
-    address.postalCode,
   ].some((value) => isPlaceholderAddressValue(value)) || isOnlyPlusCode(address.street);
 }
 
-const tokenScore = (left: string, right: string): number => {
+export const tokenScore = (left: string, right: string): number => {
   const a = new Set(normalizeAddress(left).split(' ').filter(Boolean));
   const b = new Set(normalizeAddress(right).split(' ').filter(Boolean));
   if (!a.size || !b.size) return 0;
