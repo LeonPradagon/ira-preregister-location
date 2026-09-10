@@ -460,11 +460,11 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     if (navigator.permissions?.query) {
       try {
         const permission = await navigator.permissions.query({ name: 'geolocation' });
-        if (permission.state === 'denied') {
-          setLocationBlocked(true);
-          setError(t('customer.permissionDenied'));
-          return;
-        }
+        // Permissions API can keep a stale `denied` state while the customer
+        // is returning from the phone/browser settings. Do not stop here:
+        // geolocation is the source of truth and may prompt again or succeed
+        // after the setting has been changed.
+        if (permission.state === 'denied') setLocationBlocked(true);
       } catch {
         // The geolocation request below remains the source of truth on browsers
         // that do not expose the Permissions API consistently.
