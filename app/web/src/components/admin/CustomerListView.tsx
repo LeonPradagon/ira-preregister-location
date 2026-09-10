@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Clock, Eye, Filter, Pencil, Plus, Search, Upload, Trash2, Users } from 'lucide-react';
+import { CheckCircle2, Clock, Eye, Filter, Pencil, Plus, RefreshCw, Search, Upload, Trash2, Users } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../lib/apiClient';
 import { Customer, CustomerStatus } from '../../types';
@@ -120,6 +120,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
 
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const customerRefreshInFlight = useRef(false);
 
   const resetCustomerForm = () => {
     setEditingCustomer(null);
@@ -279,22 +280,45 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
     );
   };
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
+  const refreshCustomerData = async (showLoader: boolean, page = customerPage.page) => {
+    if (customerRefreshInFlight.current) return;
+    customerRefreshInFlight.current = true;
+    if (showLoader) {
       setIsLoading(true);
       setLoadError('');
-      void loadCustomerPage(
-        1,
-        searchTerm,
-        statusFilter as CustomerStatus | 'ALL',
-        customerPage.pageSize,
-        addressCompletenessFilter,
-      )
-        .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : t('customers.loadError')))
-        .finally(() => setIsLoading(false));
+    }
+    try {
+      await Promise.all([
+        loadCustomerPage(
+          page,
+          searchTerm,
+          statusFilter as CustomerStatus | 'ALL',
+          customerPage.pageSize,
+          addressCompletenessFilter,
+        ),
+        refreshDashboard(),
+      ]);
+    } catch (error: unknown) {
+      setLoadError(error instanceof Error ? error.message : t('customers.loadError'));
+    } finally {
+      customerRefreshInFlight.current = false;
+      if (showLoader) setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void refreshCustomerData(true, 1);
     }, 250);
     return () => window.clearTimeout(timer);
   }, [searchTerm, statusFilter, addressCompletenessFilter, t]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refreshCustomerData(false);
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [searchTerm, statusFilter, addressCompletenessFilter, customerPage.page, customerPage.pageSize, t]);
 
   const handleCreateCustomerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -463,6 +487,16 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           >
             <Upload className="w-4 h-4" />
             <span>{t('customers.import')}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void refreshCustomerData(true)}
+            disabled={isLoading}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            title={t('customers.refresh')}
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>{t('customers.refresh')}</span>
           </button>
           <button
             type="button"
