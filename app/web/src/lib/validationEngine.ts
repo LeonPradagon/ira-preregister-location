@@ -63,6 +63,52 @@ export function formatAddressForDisplay(rawAddress?: string): string {
     .join(', ');
 }
 
+export type AddressDisplayField =
+  | 'street'
+  | 'houseNumber'
+  | 'rt'
+  | 'rw'
+  | 'building'
+  | 'block'
+  | 'unit'
+  | 'subdistrict'
+  | 'district'
+  | 'city'
+  | 'province'
+  | 'postalCode'
+  | 'addressDetail'
+  | 'landmark';
+
+export interface AddressDisplayValue {
+  field: AddressDisplayField;
+  value: string;
+}
+
+/** Keep the registered address readable by separating the fields users need to verify. */
+export function buildAddressDisplayValues(
+  address: Partial<Record<AddressDisplayField, unknown>>,
+): AddressDisplayValue[] {
+  const fields: AddressDisplayField[] = [
+    'street',
+    'houseNumber',
+    'rt',
+    'rw',
+    'building',
+    'block',
+    'unit',
+    'subdistrict',
+    'district',
+    'city',
+    'province',
+    'postalCode',
+    'addressDetail',
+    'landmark',
+  ];
+  return fields
+    .map((field) => ({ field, value: String(address[field] ?? '').trim() }))
+    .filter(({ value }) => Boolean(value));
+}
+
 export function isIncompleteAddress(address: {
   rawAddress?: string;
   postalCode?: string;

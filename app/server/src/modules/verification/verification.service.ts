@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { and, eq, gt, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import {
   customerAddresses,
@@ -93,6 +93,28 @@ export class VerificationService {
 
   async open(token: string): Promise<PublicVerificationContext> {
     const row = await this.findByToken(token);
+    const config = await this.validationConfig.get();
+    const [lastValidation] = await db
+      .select({
+        result: validationResults.result,
+        reasonCodes: validationResults.reasonCodes,
+        provinceMatch: validationResults.provinceMatch,
+        cityMatch: validationResults.cityMatch,
+        districtMatch: validationResults.districtMatch,
+        subdistrictMatch: validationResults.subdistrictMatch,
+        streetScore: validationResults.streetScore,
+        houseNumberMatch: validationResults.houseNumberMatch,
+        reverseGeocode: validationResults.reverseGeocode,
+      })
+      .from(validationResults)
+      .where(
+        and(
+          eq(validationResults.sessionId, row.session.id),
+          eq(validationResults.addressId, row.address.id),
+        ),
+      )
+      .orderBy(desc(validationResults.createdAt))
+      .limit(1);
     const reminder = row.reminder;
     const firstReminderOpen = Boolean(reminder && isReminderLinkFirstOpen(reminder.openedAt));
     const effectiveReminderCount = firstReminderOpen
@@ -173,6 +195,8 @@ export class VerificationService {
         customerConfirmationStatus: row.session.customerConfirmationStatus,
         reminderCount: effectiveReminderCount,
         attemptCount: row.reminder ? 0 : row.session.attemptCount,
+        maxAttempts: Math.min(3, config.MAX_LOCATION_ATTEMPTS),
+        maxReminders: config.MAX_REMINDERS_PER_SESSION,
         isReminderLink: Boolean(row.reminder),
         canScheduleReminder,
       },
@@ -185,11 +209,43 @@ export class VerificationService {
         city: row.address.city,
         district: row.address.district,
         subdistrict: row.address.subdistrict,
+        postalCode: row.address.postalCode,
         street: row.address.street,
         houseNumber: row.address.houseNumber,
+        rt: row.address.rt,
+        rw: row.address.rw,
+        building: row.address.building,
+        block: row.address.block,
+        unit: row.address.unit,
+        addressDetail: row.address.addressDetail,
+        landmark: row.address.landmark,
         referencePrecision: row.address.referencePrecision,
         requiresCorrection: isAddressIncomplete(row.address),
       },
+      lastValidationResult: lastValidation
+        ? {
+            result: lastValidation.result,
+            reasonCodes: Array.isArray(lastValidation.reasonCodes)
+              ? lastValidation.reasonCodes.filter((code): code is string => typeof code === 'string')
+              : [],
+            provinceMatch: lastValidation.provinceMatch,
+            cityMatch: lastValidation.cityMatch,
+            districtMatch: lastValidation.districtMatch,
+            subdistrictMatch: lastValidation.subdistrictMatch,
+            streetScore: Number(lastValidation.streetScore),
+            houseNumberMatch: lastValidation.houseNumberMatch,
+            reverseGeocode: lastValidation.reverseGeocode as {
+              province: string;
+              city: string;
+              district: string;
+              subdistrict: string;
+              street: string;
+              houseNumber?: string;
+              postalCode?: string;
+              formattedAddress: string;
+            },
+          }
+        : undefined,
     };
   }
 
@@ -816,7 +872,7 @@ export class VerificationService {
         addressStatus: 'PROPOSED',
         rawAddress: [
           input.street,
-          `No. ${houseNumber}`,
+          houseNumber && `No. ${houseNumber}`,
           input.block && `Blok ${input.block}`,
           input.addressDetail,
           input.landmark && `Patokan: ${input.landmark}`,

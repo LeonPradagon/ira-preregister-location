@@ -62,6 +62,18 @@ describe('server validation engine', () => {
     expect(administrativeMatch('Jakarta Barat', ['Jakarta Utara'])).toBe(false);
   });
 
+  it('includes province and city in the address score shown to Admin', () => {
+    const decision = decideValidation(
+      [sample(-6.884, 107.613), sample(-6.88401, 107.61301, 12, 1), sample(-6.88399, 107.61299, 14, 2)],
+      { ...address, province: 'DKI Jakarta' },
+      reverseGeocode,
+      config,
+    );
+    expect(decision.provinceMatch).toBe(false);
+    expect(decision.addressScore).toBe(0.85);
+    expect(decision.result).toBe('LOCATION_MISMATCH');
+  });
+
   it('tolerates a one-character typo and spacing variation in a street name', () => {
     expect(tokenScore('Jln KH Syahdan', 'Jalan KH Syahdun')).toBeGreaterThanOrEqual(0.9);
     expect(tokenScore('Jalan K H Syahdan', 'Jalan KH Syahdan')).toBe(1);
@@ -98,6 +110,18 @@ describe('server validation engine', () => {
     expect(decision.sampleSpreadMeters).toBeLessThan(50);
   });
 
+  it('accepts a precise address match when the house number is not provided', () => {
+    const decision = decideValidation(
+      [sample(-6.884, 107.613), sample(-6.88401, 107.61301, 12, 1), sample(-6.88399, 107.61299, 14, 2)],
+      { ...address, houseNumber: '' },
+      { ...reverseGeocode, houseNumber: undefined },
+      config,
+    );
+    expect(decision.houseNumberMatch).toBeUndefined();
+    expect(decision.addressScore).toBe(1);
+    expect(decision.result).toBe('LOCATION_VALID');
+  });
+
   it('routes samples with excessive spread to manual review', () => {
     const decision = decideValidation(
       [sample(-6.884, 107.613), sample(-6.8855, 107.613, 12, 1), sample(-6.884, 107.6145, 14, 2)],
@@ -110,16 +134,17 @@ describe('server validation engine', () => {
     expect(decision.reasonCodes).toContain('WAITING_FOR_HOME');
   });
 
-  it('returns low accuracy before applying address/radius rules', () => {
+  it('reports low GPS accuracy separately even when the address matches 100%', () => {
     const decision = decideValidation(
       [sample(-6.884, 107.613, 60), sample(-6.88401, 107.61301, 65, 1), sample(-6.88399, 107.61299, 70, 2)],
       address,
       reverseGeocode,
       config,
     );
-    expect(decision.result).toBe('WAITING_FOR_HOME');
+    expect(decision.addressScore).toBe(1);
+    expect(decision.result).toBe('LOW_GPS_ACCURACY');
     expect(decision.reasonCodes).toContain('LOW_GPS_ACCURACY');
-    expect(decision.reasonCodes).toContain('WAITING_FOR_HOME');
+    expect(decision.reasonCodes).not.toContain('WAITING_FOR_HOME');
   });
 
   it('enforces the street match threshold as a hard rule', () => {
@@ -288,7 +313,7 @@ describe('server validation engine', () => {
     expect(decision.reasonCodes).not.toContain('HOME_RADIUS_EXCEEDED');
   });
 
-  it('asks the customer to retry before reviewing an unreferenced address when GPS is weak', () => {
+  it('reports weak GPS separately before reviewing an unreferenced address', () => {
     const decision = decideValidation(
       [sample(-6.2, 106.784, 35), sample(-6.20001, 106.78401, 36, 1), sample(-6.19999, 106.78399, 37, 2)],
       {
@@ -302,13 +327,12 @@ describe('server validation engine', () => {
       reverseGeocode,
       config,
     );
-    expect(decision.result).toBe('WAITING_FOR_HOME');
+    expect(decision.result).toBe('LOW_GPS_ACCURACY');
     expect(decision.reasonCodes).toEqual(
       expect.arrayContaining([
         'LOW_GPS_ACCURACY',
         'REFERENCE_LOCATION_MISSING',
         'ADDRESS_INCOMPLETE',
-        'WAITING_FOR_HOME',
       ]),
     );
   });
@@ -324,16 +348,16 @@ describe('server validation engine', () => {
     expect(decision.reasonCodes).toContain('ADDRESS_INCOMPLETE');
   });
 
-  it('asks the customer to retry when GPS is weak even if the address also needs review', () => {
+  it('reports weak GPS separately even if the address also needs review', () => {
     const decision = decideValidation(
       [sample(-6.884, 107.613, 60), sample(-6.88401, 107.61301, 65, 1), sample(-6.88399, 107.61299, 70, 2)],
       { ...address, street: '', postalCode: '00000', referencePrecision: 'UNKNOWN' },
       reverseGeocode,
       config,
     );
-    expect(decision.result).toBe('WAITING_FOR_HOME');
+    expect(decision.result).toBe('LOW_GPS_ACCURACY');
     expect(decision.reasonCodes).toEqual(
-      expect.arrayContaining(['LOW_GPS_ACCURACY', 'ADDRESS_INCOMPLETE', 'WAITING_FOR_HOME']),
+      expect.arrayContaining(['LOW_GPS_ACCURACY', 'ADDRESS_INCOMPLETE']),
     );
     expect(decision.reasonCodes).not.toContain('MANUAL_REVIEW_REQUIRED');
   });

@@ -6,6 +6,8 @@ afterEach(() => {
   vi.restoreAllMocks();
   delete process.env.OSM_NOMINATIM_BASE_URL;
   delete process.env.OSM_NOMINATIM_USER_AGENT;
+  delete process.env.GEOCODING_QUEUE_TIMEOUT_MS;
+  delete process.env.GEOCODING_RATE_LIMIT_PER_SECOND;
 });
 
 describe('OSM Nominatim geocoding adapter', () => {
@@ -115,5 +117,14 @@ describe('OSM Nominatim geocoding adapter', () => {
       street: 'Jalan Kamal Muara VI',
       postalCode: '14470',
     });
+  });
+
+  it('returns a controlled unavailable error when geocoding exceeds the queue timeout', async () => {
+    process.env.OSM_NOMINATIM_BASE_URL = 'https://nominatim.test';
+    process.env.GEOCODING_QUEUE_TIMEOUT_MS = '50';
+    vi.spyOn(providerHttpClient, 'get').mockImplementation(() => new Promise(() => {}));
+
+    const adapter = new OsmGeocodingAdapter();
+    await expect(adapter.reverse(-6.2088, 106.8456)).rejects.toThrow('OSM geocoding queue timeout');
   });
 });

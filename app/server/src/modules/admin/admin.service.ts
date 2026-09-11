@@ -42,6 +42,7 @@ import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/
 import { ReadCacheService } from '../../common/read-cache.service.js';
 import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js';
 import { buildVerificationSimulationConfig } from '../verification/simulation-config.js';
+import { canRestartVerificationCycle } from '../verification/verification-cycle.policy.js';
 import { buildVerifiedAddressReference } from '../verification/verified-location.js';
 import { campaignRecipientReservationStatuses } from '../campaigns/campaign-target.policy.js';
 import { campaignEligibleAddressSql, incompleteAddressSql } from '../validation/address-completeness.sql.js';
@@ -939,9 +940,15 @@ export class AdminService {
           .select()
           .from(validationResults)
           .where(
-            inArray(
-              validationResults.sessionId,
-              rows.map(({ session }) => session.id),
+            and(
+              inArray(
+                validationResults.sessionId,
+                rows.map(({ session }) => session.id),
+              ),
+              inArray(
+                validationResults.addressId,
+                rows.map(({ session }) => session.currentAddressId),
+              ),
             ),
           )
           .orderBy(desc(validationResults.createdAt))
@@ -992,7 +999,9 @@ export class AdminService {
       db
         .select()
         .from(validationResults)
-        .where(eq(validationResults.sessionId, id))
+        .where(
+          and(eq(validationResults.sessionId, id), eq(validationResults.addressId, row.address.id)),
+        )
         .orderBy(desc(validationResults.createdAt)),
       db
         .select()
@@ -1171,11 +1180,15 @@ export class AdminService {
     const detail = await this.verification(id);
     const config = await this.validationConfig.get();
     const maxLocationAttempts = Math.min(3, config.MAX_LOCATION_ATTEMPTS);
-    const attemptsExhausted = detail.session.attemptCount >= maxLocationAttempts;
-    const remindersExhausted = detail.session.reminderCount >= config.MAX_REMINDERS_PER_SESSION;
-    const restartableStatuses = ['REMINDER_REQUIRED', 'REMINDER_LIMIT_REACHED', 'EXPIRED'];
-
-    if (!attemptsExhausted || !remindersExhausted || !restartableStatuses.includes(detail.session.verificationStatus))
+    if (
+      !canRestartVerificationCycle(
+        detail.session.verificationStatus,
+        detail.session.attemptCount,
+        detail.session.reminderCount,
+        maxLocationAttempts,
+        config.MAX_REMINDERS_PER_SESSION,
+      )
+    )
       throw new DomainError(
         'A new verification cycle can only be started after the GPS and reminder limits are exhausted',
         409,

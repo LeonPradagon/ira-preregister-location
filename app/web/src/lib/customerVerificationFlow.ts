@@ -7,6 +7,16 @@ const confirmationStatuses = [
   'REMINDER_LIMIT_REACHED',
 ];
 
+const locationMatchDetailStatuses = [
+  'LOCATION_VALID',
+  'LOCATION_MISMATCH',
+  'LOW_GPS_ACCURACY',
+  'WAITING_FOR_HOME',
+  'REMINDER_REQUIRED',
+  'REMINDER_LIMIT_REACHED',
+  'MANUAL_REVIEW',
+];
+
 export const requiredAddressFields = ['province', 'city', 'district', 'subdistrict', 'street'] as const;
 
 export function getMissingAddressFields(address: Partial<Record<string, string>>): string[] {
@@ -62,6 +72,16 @@ export function shouldShowLocationRetry(
     normalizedConfirmationStatus === 'CONFIRMED' &&
     ['GPS_CAPTURING', 'WAITING_FOR_HOME', 'REMINDER_LIMIT_REACHED'].includes(normalizedStatus)
   );
+}
+
+export function shouldShowLocationMatchDetails(
+  status: string | null | undefined,
+  hasReverseGeocode: boolean,
+): boolean {
+  const normalizedStatus = String(status || '')
+    .trim()
+    .toUpperCase();
+  return hasReverseGeocode && locationMatchDetailStatuses.includes(normalizedStatus);
 }
 
 export function isVerificationCycleExhausted(

@@ -71,6 +71,7 @@ export const addressChangeSchema = z.object({
   street: requiredAddressTextSchema(255),
   houseNumber: addressTextSchema(64)
     .max(64)
+    .optional()
     .refine(
       (value) =>
         !value || !['unknown', 'tidak diketahui', 'tanpa nomor', 'n/a', 'na', '-', '00000'].includes(value.toLowerCase()),
@@ -272,9 +273,31 @@ export interface PublicVerificationContext {
     customerConfirmationStatus: string;
     reminderCount: number;
     attemptCount: number;
+    maxAttempts: number;
+    maxReminders: number;
     isReminderLink: boolean;
     canScheduleReminder: boolean;
   };
   customer: { id: string; name: string; phoneE164: string };
   address: Record<string, unknown>;
+  lastValidationResult?: {
+    result: string;
+    reasonCodes: string[];
+    provinceMatch: boolean;
+    cityMatch: boolean;
+    districtMatch: boolean;
+    subdistrictMatch: boolean;
+    streetScore: number;
+    houseNumberMatch: boolean | null;
+    reverseGeocode: {
+      province: string;
+      city: string;
+      district: string;
+      subdistrict: string;
+      street: string;
+      houseNumber?: string;
+      postalCode?: string;
+      formattedAddress: string;
+    };
+  };
 }

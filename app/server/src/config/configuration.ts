@@ -47,6 +47,7 @@ export const envSchema = z.object({
   GEOCODING_BASE_URL: optionalUrl,
   GEOCODING_API_KEY: optionalString,
   GEOCODING_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+  GEOCODING_QUEUE_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
   GEOCODING_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
   OSM_NOMINATIM_ENABLED: booleanFromEnv.default(true),
   OSM_NOMINATIM_BASE_URL: optionalUrl,

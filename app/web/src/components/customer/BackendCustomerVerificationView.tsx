@@ -1,13 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, Compass, Edit3, MapPin, ShieldCheck, XCircle } from 'lucide-react';
-import { api, ApiClientError, PublicVerificationContextApi, ServerValidationDecision } from '../../lib/apiClient';
+import {
+  api,
+  ApiClientError,
+  PublicValidationResult,
+  PublicVerificationContextApi,
+  ServerValidationDecision,
+} from '../../lib/apiClient';
 import { useTranslation } from '../../i18n';
 import { AppLoader } from '../common/AppLoader';
 import {
+  buildAddressDisplayValues,
   calculateGeodesicDistanceMeters,
   evaluateBestGpsSample,
   formatAddressForDisplay,
 } from '../../lib/validationEngine';
+import type { AddressDisplayField } from '../../lib/validationEngine';
 import { findRegionOption, regionOptionValue } from '../../lib/regionSelection';
 import {
   getMissingAddressFields,
@@ -15,6 +23,7 @@ import {
   requiredAddressFields,
   shouldAllowAddressChange,
   shouldShowCustomerConfirmation,
+  shouldShowLocationMatchDetails,
   isVerificationCycleExhausted,
   shouldShowLocationRetry,
   shouldShowReminderPending,
@@ -22,6 +31,7 @@ import {
   shouldShowReminderResume,
 } from '../../lib/customerVerificationFlow';
 import { confirmAction } from '../../lib/swal';
+import { collectGpsSamples } from '../../lib/gpsCapture';
 
 interface Props {
   token: string;
@@ -50,54 +60,215 @@ const fieldPlaceholders: Record<string, string> = {
   subdistrict: 'Contoh: Dago',
   postalCode: 'Contoh: 40135',
   street: 'Contoh: Jalan Ir. H. Juanda atau Perumahan Griya Asri',
-  houseNumber: 'Contoh: 10 atau A-12',
+  houseNumber: 'Contoh: 10 atau A-12 (kosongkan jika tidak ada)',
   addressDetail: 'Contoh: Blok A lantai 2, dekat pos satpam, sebelah minimarket',
 };
-const GPS_SAMPLE_TARGET = 5;
-const GPS_CAPTURE_TIMEOUT_MS = 30_000;
-const GPS_WATCH_OPTIONS: PositionOptions = { enableHighAccuracy: true, timeout: GPS_CAPTURE_TIMEOUT_MS, maximumAge: 0 };
 
-function collectGpsSamples(
-  geolocation: Geolocation,
-): Promise<Array<{ latitude: number; longitude: number; accuracyMeters: number; capturedAt: string }>> {
-  return new Promise((resolve, reject) => {
-    const samples: Array<{ latitude: number; longitude: number; accuracyMeters: number; capturedAt: string }> = [];
-    let watchId: number | null = null;
-    let timeoutId: number | null = null;
-    let lastAcceptedAt = 0;
-    const finish = (error?: Error) => {
-      if (watchId !== null) geolocation.clearWatch(watchId);
-      if (timeoutId !== null) window.clearTimeout(timeoutId);
-      if (error) reject(error);
-      else resolve(samples);
-    };
-    const onSuccess = (position: GeolocationPosition) => {
-      const now = Date.now();
-      if (now - lastAcceptedAt < 1000) return;
-      lastAcceptedAt = now;
-      samples.push({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracyMeters: position.coords.accuracy,
-        capturedAt: new Date().toISOString(),
-      });
-      if (samples.length >= GPS_SAMPLE_TARGET) finish();
-    };
-    const onError = (cause: GeolocationPositionError) => {
-      if (cause.code === 1 || samples.length < 3) {
-        const error = Object.assign(new Error(cause.message || 'GPS tidak tersedia.'), { code: cause.code });
-        finish(error);
-      } else {
-        finish();
-      }
-    };
-    watchId = geolocation.watchPosition(onSuccess, onError, GPS_WATCH_OPTIONS);
-    timeoutId = window.setTimeout(() => {
-      if (samples.length >= 3) finish();
-      else finish(Object.assign(new Error('GPS belum mendapatkan minimal 3 titik lokasi.'), { code: 3 }));
-    }, GPS_CAPTURE_TIMEOUT_MS);
-  });
-}
+const addressDisplayTranslationKeys: Record<AddressDisplayField, string> = {
+  street: 'customer.addressFieldStreet',
+  houseNumber: 'customer.addressFieldHouseNumber',
+  rt: 'customer.addressFieldRt',
+  rw: 'customer.addressFieldRw',
+  building: 'customer.addressFieldBuilding',
+  block: 'customer.addressFieldBlock',
+  unit: 'customer.addressFieldUnit',
+  subdistrict: 'customer.addressFieldSubdistrict',
+  district: 'customer.addressFieldDistrict',
+  city: 'customer.addressFieldCity',
+  province: 'customer.addressFieldProvince',
+  postalCode: 'customer.addressFieldPostalCode',
+  addressDetail: 'customer.addressFieldAddressDetail',
+  landmark: 'customer.addressFieldLandmark',
+};
+
+const RegisteredAddressDetails: React.FC<{ address: PublicVerificationContextApi['address'] }> = ({ address }) => {
+  const { t } = useTranslation();
+  const values = buildAddressDisplayValues(address);
+
+  return (
+    <div className="mt-3 rounded-xl border border-red-100 bg-white/80 p-3 sm:p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-700">
+          {t('customer.addressDetailsTitle')}
+        </p>
+        <p className="text-[11px] text-slate-500">{t('customer.addressDetailsHelp')}</p>
+      </div>
+      <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+        {values.map(({ field, value }) => (
+          <div key={field} className="min-w-0 border-b border-slate-100 pb-2 last:border-b-0">
+            <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {t(addressDisplayTranslationKeys[field])}
+            </dt>
+            <dd className="mt-1 break-words text-sm font-semibold leading-relaxed text-slate-900">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-relaxed text-slate-600">
+        {t('customer.addressMatchAfterGps')}
+      </p>
+    </div>
+  );
+};
+
+const LocationMatchDetails: React.FC<{
+  address: PublicVerificationContextApi['address'];
+  validation?: PublicValidationResult;
+  captureError?: string;
+  remainingAttempts: number;
+}> = ({ address, validation, captureError, remainingAttempts }) => {
+  const { t } = useTranslation();
+  const reverseGeocode = validation?.reverseGeocode;
+
+  const reverseGeocodeUnavailable = validation?.reasonCodes.includes('GEOCODING_UNAVAILABLE') ?? false;
+  const statusLabel = (matched: boolean | undefined) =>
+    !validation
+      ? t('customer.locationMatchPending')
+      : reverseGeocodeUnavailable
+      ? t('customer.locationMatchNotAvailable')
+      : matched
+        ? t('customer.locationMatch')
+        : t('customer.locationNotMatch');
+  const overallResult = !validation
+    ? t('customer.locationMatchPending')
+    : reverseGeocodeUnavailable
+      ? t('customer.locationMatchNotAvailable')
+      : validation.result === 'LOCATION_VALID'
+        ? t('customer.locationMatch')
+        : validation.result === 'LOCATION_MISMATCH'
+          ? t('customer.locationNotMatch')
+          : t('customer.locationMatchPending');
+  const overallResultClass =
+    overallResult === t('customer.locationMatch')
+      ? 'text-emerald-700'
+      : overallResult === t('customer.locationNotMatch')
+        ? 'text-rose-700'
+        : 'text-slate-500';
+  const rows = [
+    {
+      label: t('customer.locationMatchProvince'),
+      registered: address.province,
+      detected: reverseGeocode?.province,
+      result: statusLabel(validation?.provinceMatch),
+      matched: validation?.provinceMatch,
+    },
+    {
+      label: t('customer.locationMatchCity'),
+      registered: address.city,
+      detected: reverseGeocode?.city,
+      result: statusLabel(validation?.cityMatch),
+      matched: validation?.cityMatch,
+    },
+    {
+      label: t('customer.locationMatchDistrict'),
+      registered: address.district,
+      detected: reverseGeocode?.district,
+      result: statusLabel(validation?.districtMatch),
+      matched: validation?.districtMatch,
+    },
+    {
+      label: t('customer.locationMatchSubdistrict'),
+      registered: address.subdistrict,
+      detected: reverseGeocode?.subdistrict,
+      result: statusLabel(validation?.subdistrictMatch),
+      matched: validation?.subdistrictMatch,
+    },
+    {
+      label: t('customer.locationMatchStreet'),
+      registered: address.street,
+      detected: reverseGeocode?.street,
+      result: reverseGeocodeUnavailable
+        ? t('customer.locationMatchNotAvailable')
+        : validation?.reasonCodes.includes('STREET_MISMATCH')
+          ? t('customer.locationNotMatch')
+          : validation?.reasonCodes.includes('STREET_VARIATION')
+            ? t('customer.locationMatchSimilar', { score: Math.round(validation.streetScore * 100) })
+            : t('customer.locationMatchScore', { score: Math.round(validation.streetScore * 100) }),
+      matched: validation ? !reverseGeocodeUnavailable && !validation.reasonCodes.includes('STREET_MISMATCH') : undefined,
+    },
+    {
+      label: t('customer.locationMatchHouseNumber'),
+      registered: address.houseNumber,
+      detected: reverseGeocode?.houseNumber,
+      result:
+        !validation
+          ? t('customer.locationMatchPending')
+          : !String(address.houseNumber ?? '').trim()
+            ? t('customer.locationMatchOptional')
+            : reverseGeocodeUnavailable || validation.houseNumberMatch == null
+            ? t('customer.locationMatchNotAvailable')
+            : statusLabel(validation.houseNumberMatch),
+      matched: validation?.houseNumberMatch,
+    },
+    {
+      label: t('customer.locationMatchPostalCode'),
+      registered: address.postalCode,
+      detected: reverseGeocode?.postalCode,
+      result: validation
+        ? reverseGeocodeUnavailable
+          ? t('customer.locationMatchNotAvailable')
+          : t('customer.locationMatchInfo')
+        : t('customer.locationMatchPending'),
+      matched: undefined,
+    },
+  ];
+
+  return (
+    <div className="space-y-3 rounded-xl border border-slate-200 bg-white/80 p-3 text-xs shadow-sm">
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-bold text-slate-900">{t('customer.locationMatchDetailsTitle')}</p>
+          <p className={`font-bold ${overallResultClass}`}>
+            {t('customer.locationMatchOverall')}: {overallResult}
+          </p>
+        </div>
+        <p className="mt-1 leading-relaxed text-slate-600">{t('customer.locationMatchDetailsHelp')}</p>
+        {captureError && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-700">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="break-words">{captureError}</span>
+          </div>
+        )}
+        <p className="mt-3 font-semibold text-slate-700">
+          {t('customer.locationAttemptsRemaining', { remaining: remainingAttempts })}
+        </p>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <div className="grid grid-cols-[minmax(90px,0.8fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 bg-slate-50 px-2 py-2 font-semibold text-slate-600">
+          <span>{t('customer.locationMatchField')}</span>
+          <span>{t('customer.locationMatchRegistered')}</span>
+          <span>{t('customer.locationMatchDetected')}</span>
+          <span className="text-right">{t('customer.locationMatchResult')}</span>
+        </div>
+        {rows.map((row) => (
+          <div
+            key={row.label}
+            className="grid grid-cols-[minmax(90px,0.8fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 border-t border-slate-200 px-2 py-2 text-slate-700"
+          >
+            <span className="font-semibold text-slate-800">{row.label}</span>
+            <span className="break-words">{row.registered || '-'}</span>
+            <span className="break-words">{row.detected || t('customer.locationMatchNotAvailable')}</span>
+            <span
+              className={`text-right font-semibold ${
+                row.matched === true
+                  ? 'text-emerald-700'
+                  : [
+                        t('customer.locationMatchNotAvailable'),
+                        t('customer.locationMatchOptional'),
+                        t('customer.locationMatchPending'),
+                      ].includes(row.result)
+                    ? 'text-slate-500'
+                    : 'text-rose-700'
+              }`}
+            >
+              {row.result}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const toDateTimeLocalValue = (date: Date) => {
   const offset = date.getTimezoneOffset();
   return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
@@ -106,6 +277,7 @@ const toDateTimeLocalValue = (date: Date) => {
 const createSimulationContext = (
   customerName: string,
   customerAddress: string,
+  postalCode: string,
   referenceLocation: { latitude: number; longitude: number } | null,
   referencePrecision: string,
   simulationConfig: {
@@ -124,6 +296,8 @@ const createSimulationContext = (
     customerConfirmationStatus: 'UNCONFIRMED',
     reminderCount: 0,
     attemptCount: 0,
+    maxAttempts: 3,
+    maxReminders: 3,
     isReminderLink: false,
     canScheduleReminder: true,
   },
@@ -138,6 +312,7 @@ const createSimulationContext = (
     subdistrict: 'Dago',
     street: 'Jalan Ir H Juanda',
     houseNumber: '10',
+    postalCode,
     referencePrecision,
     referenceLocation,
     simulationConfig,
@@ -171,6 +346,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       ? createSimulationContext(
           simulationName,
           simulationAddress,
+          simulationPostalCode,
           simulationReferenceLocation,
           simulationReferencePrecision,
           simulationConfig,
@@ -199,6 +375,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   const regionRequestId = useRef(0);
   const [gpsPermissionDenied, setGpsPermissionDenied] = useState(false);
   const [gpsRetryAvailable, setGpsRetryAvailable] = useState(false);
+  const [locationCaptureError, setLocationCaptureError] = useState(false);
   const [reminderDateTime, setReminderDateTime] = useState(() =>
     toDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)),
   );
@@ -257,6 +434,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
+    setLocationCaptureError(false);
     try {
       await action();
       await refresh();
@@ -282,6 +460,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       createSimulationContext(
         simulationName,
         simulationAddress,
+        simulationPostalCode,
         simulationReferenceLocation,
         simulationReferencePrecision,
         simulationConfig,
@@ -298,6 +477,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     setLocationBlocked(false);
     setGpsPermissionDenied(false);
     setGpsRetryAvailable(false);
+    setLocationCaptureError(false);
     setReminderDateTime(toDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)));
     setReminderPickerOpen(false);
     setReminderScheduledNow(false);
@@ -309,12 +489,14 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       setBusy(false);
       setGpsBusy(false);
       setGpsRetryAvailable(false);
+      setLocationCaptureError(true);
       setError(t('customer.browserNoLocation'));
       return;
     }
     setGpsBusy(true);
     setBusy(true);
     setError(null);
+    setLocationCaptureError(false);
     setGpsPermissionDenied(false);
     setGpsRetryAvailable(false);
     try {
@@ -343,8 +525,8 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
           simulationConfig.autoApprovalEnabled && 1 >= (simulationConfig.autoApprovalScoreThreshold ?? 0.9);
         let result = 'LOCATION_VALID';
         if (evaluation.bestSample.accuracyMeters > simulationConfig.gpsMaxAccuracyMeters) {
-          result = 'WAITING_FOR_HOME';
-          reasonCodes.push('LOW_GPS_ACCURACY', 'WAITING_FOR_HOME');
+          result = 'LOW_GPS_ACCURACY';
+          reasonCodes.push('LOW_GPS_ACCURACY');
         } else if (!evaluation.isConsistent) {
           result = 'WAITING_FOR_HOME';
           reasonCodes.push('GPS_SAMPLE_INCONSISTENT', 'WAITING_FOR_HOME');
@@ -376,6 +558,11 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
           id: 'simulation-result',
           result,
           reasonCodes,
+          provinceMatch: false,
+          cityMatch: false,
+          districtMatch: false,
+          subdistrictMatch: false,
+          streetScore: 0,
           bestSample: evaluation.bestSample,
           distanceFromReferenceMeters,
           addressScore: result === 'LOCATION_VALID' || reasonCodes.includes('AUTOMATED_VALIDATION_PASSED') ? 1 : 0,
@@ -392,23 +579,39 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
         });
         return;
       }
-      setDecision(await api.submitLocation(token, samples));
-      await refresh();
+      const locationDecision = await api.submitLocation(token, samples);
+      setDecision(locationDecision);
+      setContext((current) =>
+        current
+          ? {
+              ...current,
+              session: {
+                ...current.session,
+                status: locationDecision.status ?? locationDecision.result,
+                attemptCount: locationDecision.attemptCount ?? current.session.attemptCount + 1,
+              },
+            }
+          : current,
+      );
+      void refresh().catch(() => undefined);
     } catch (cause) {
       const code =
         typeof cause === 'object' && cause !== null && 'code' in cause
           ? Number((cause as { code?: unknown }).code)
           : undefined;
       if (code === 1) {
+        setLocationCaptureError(true);
         setLocationBlocked(true);
         setGpsPermissionDenied(true);
         setGpsRetryAvailable(true);
         setError(t('customer.permissionDenied'));
       } else if (code === 2 || code === 3) {
+        setLocationCaptureError(true);
         setLocationBlocked(true);
         setGpsRetryAvailable(true);
         setError(t('customer.gpsTimeout'));
       } else {
+        setLocationCaptureError(false);
         setGpsRetryAvailable(true);
         const errorCode =
           typeof cause === 'object' && cause !== null && 'code' in cause
@@ -455,6 +658,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   const captureAfterTransition = async (transition: () => Promise<unknown> | unknown) => {
     if (!navigator.geolocation) {
       setLocationBlocked(true);
+      setLocationCaptureError(true);
       setError(t('customer.browserNoLocation'));
       return;
     }
@@ -473,10 +677,11 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     }
     setBusy(true);
     setError(null);
+    setLocationCaptureError(false);
     setGpsPermissionDenied(false);
     try {
       await transition();
-      if (!simulation) await refresh();
+      if (!simulation) void refresh().catch(() => undefined);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('customer.requestFailed'));
       setBusy(false);
@@ -754,6 +959,18 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   const mismatch = ['LOCATION_MISMATCH', 'LOW_GPS_ACCURACY'].includes(status);
   const reminderRequired = status === 'REMINDER_REQUIRED';
   const locationMismatchStatus = status === 'LOCATION_MISMATCH';
+  const validationEvidence = decision ?? context.lastValidationResult;
+  const attemptsUsed = decision?.attemptCount ?? context.session.attemptCount;
+  const maxAttempts = decision?.maxAttempts ?? context.session.maxAttempts ?? 3;
+  const remainingAttempts = Math.max(0, maxAttempts - attemptsUsed);
+  const maxReminders = context.session.maxReminders ?? 3;
+  const remainingReminders = Math.max(0, maxReminders - context.session.reminderCount);
+  const showLocationMatchDetails = shouldShowLocationMatchDetails(
+    status,
+    Boolean(validationEvidence?.reverseGeocode),
+  );
+  const showLocationCaptureErrorInline =
+    locationCaptureError && (showLocationMatchDetails || ['GPS_CAPTURING', 'WAITING_FOR_HOME'].includes(status));
   const addressChangeAvailable = shouldAllowAddressChange(
     context.address.addressType,
     Boolean(context.address.requiresCorrection),
@@ -1078,8 +1295,9 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
             <p className="text-xs font-bold uppercase tracking-wide text-[#b8171d]">
               {t(context.address.addressType === 'PROPOSED' ? 'customer.proposedAddress' : 'customer.registeredAddress')}
             </p>
-            <p className="mt-2 break-words text-base font-semibold leading-relaxed text-slate-900 sm:text-lg">
-              {formatAddressForDisplay(context.address.rawAddress)}
+            <RegisteredAddressDetails address={context.address} />
+            <p className="mt-3 break-words text-xs leading-relaxed text-slate-500">
+              {t('customer.addressOriginal')}: {formatAddressForDisplay(context.address.rawAddress)}
             </p>
             <p className="mt-3 break-words text-xs text-slate-600 sm:text-sm">
               {t('customer.phone')}: <span className="font-semibold text-slate-800">{context.customer.phoneE164}</span>
@@ -1099,7 +1317,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
             </div>
           ) : (
             <>
-              {error && (
+              {!cycleExhausted && error && !showLocationCaptureErrorInline && (
                 <div className="space-y-2 break-words rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -1120,7 +1338,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                   )}
                 </div>
               )}
-              {showConfirmation && (
+              {!cycleExhausted && showConfirmation && (
                 <div className="space-y-3">
                   <p className="text-base font-medium leading-relaxed text-slate-700">{t('customer.confirmData')}</p>
                   <button
@@ -1158,7 +1376,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                   </button>
                 </div>
               )}
-              {status === 'CONSENTED' && (
+              {!cycleExhausted && status === 'CONSENTED' && (
                 <div
                   role={locationBlocked ? 'alert' : undefined}
                   className="space-y-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-950 sm:p-5"
@@ -1215,14 +1433,19 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                   </button>
                 </div>
               )}
-              {selectedReminderWaiting && (
-                <ResultPanel
-                  icon={<Clock3 className="h-7 w-7 text-emerald-600" />}
-                  title={t('customer.reminderAlreadySelected')}
-                  text={t('customer.reminderPendingText')}
-                />
+              {!cycleExhausted && selectedReminderWaiting && (
+                <div className="space-y-3">
+                  <ResultPanel
+                    icon={<Clock3 className="h-7 w-7 text-emerald-600" />}
+                    title={t('customer.reminderAlreadySelected')}
+                    text={t('customer.reminderPendingText')}
+                  />
+                  <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-center text-xs font-semibold text-emerald-800">
+                    {t('customer.remindersRemaining', { remaining: remainingReminders })}
+                  </p>
+                </div>
               )}
-              {reminderResumeAvailable && (
+              {!cycleExhausted && reminderResumeAvailable && (
                 <div className="space-y-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
                   <div>
                     <p className="text-sm font-semibold text-blue-900">{t('customer.reminderLinkReadyTitle')}</p>
@@ -1250,7 +1473,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                   {reminderPickerOnLinkAvailable && reminderAction}
                 </div>
               )}
-              {!reminderLinkFlow && mismatch && !selectedReminderWaiting && (
+              {!cycleExhausted && !reminderLinkFlow && mismatch && !selectedReminderWaiting && (
                 <div role="status" className="space-y-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
                   <div className="flex items-start gap-3">
                     <div className="shrink-0 rounded-full bg-amber-100 p-2 text-amber-700">
@@ -1267,6 +1490,14 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                       </p>
                     </div>
                   </div>
+                  {(showLocationMatchDetails || !validationEvidence) && (
+                    <LocationMatchDetails
+                      address={context.address}
+                      validation={validationEvidence}
+                      captureError={locationCaptureError ? error ?? undefined : undefined}
+                      remainingAttempts={remainingAttempts}
+                    />
+                  )}
                   <div className="rounded-lg bg-white/70 p-3">
                     <p className="text-xs font-semibold text-amber-950">{t('customer.locationNextSteps')}</p>
                     <p className="mt-1 break-words text-xs leading-relaxed text-amber-900">
@@ -1281,29 +1512,59 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                     {gpsActionContent(t('customer.retryLocation'))}
                   </button>
                   {addressChangeAction}
+                  {reminderActionAvailable && reminderAction}
                 </div>
               )}
-              {!reminderLinkFlow && mismatch && !selectedReminderWaiting && reminderActionAvailable && reminderAction}
-              {!reminderLinkFlow && reminderRequired && !selectedReminderWaiting && (
+              {!cycleExhausted && !reminderLinkFlow && reminderRequired && !selectedReminderWaiting && (
                 <div className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
                   <ResultPanel
                     icon={<Clock3 className="h-7 w-7 text-amber-600" />}
                     title={t('customer.gpsAttemptLimitTitle')}
                     text={t('customer.gpsAttemptLimitText')}
                   />
+                  {(showLocationMatchDetails || !validationEvidence) && (
+                    <LocationMatchDetails
+                      address={context.address}
+                      validation={validationEvidence}
+                      captureError={locationCaptureError ? error ?? undefined : undefined}
+                      remainingAttempts={remainingAttempts}
+                    />
+                  )}
+                  {addressChangeAction}
                   {reminderActionAvailable && reminderAction}
                 </div>
               )}
-              {!reminderLinkFlow &&
-                !cycleExhausted &&
+              {!cycleExhausted &&
+                !reminderLinkFlow &&
                 shouldShowLocationRetry(status, confirmationStatus) &&
-                !selectedReminderWaiting && (
+                !selectedReminderWaiting &&
+                (status !== 'WAITING_FOR_HOME' || !showLocationMatchDetails) && (
                 <div className="space-y-3">
-                  <ResultPanel
-                    icon={<Compass className="h-7 w-7 text-blue-600" />}
-                    title={t('customer.locationWaitingTitle')}
-                    text={t('customer.locationWaitingText')}
-                  />
+                  {locationCaptureError ? (
+                    <div className="space-y-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-700">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span className="break-words">{error}</span>
+                      </div>
+                      <p className="font-semibold">
+                        {t('customer.locationAttemptsRemaining', { remaining: remainingAttempts })}
+                      </p>
+                    </div>
+                  ) : (
+                    <ResultPanel
+                      icon={<Compass className="h-7 w-7 text-blue-600" />}
+                      title={t('customer.locationWaitingTitle')}
+                      text={t('customer.locationWaitingText')}
+                    />
+                  )}
+                  {locationCaptureError && (
+                    <LocationMatchDetails
+                      address={context.address}
+                      validation={validationEvidence}
+                      remainingAttempts={remainingAttempts}
+                    />
+                  )}
+                  {addressChangeAction}
                   <button
                     disabled={busy}
                     onClick={() => void captureGps()}
@@ -1313,13 +1574,28 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                   </button>
                 </div>
               )}
-              {!reminderLinkFlow && status === 'WAITING_FOR_HOME' && !selectedReminderWaiting && !showConfirmation && (
+              {!cycleExhausted &&
+                !reminderLinkFlow &&
+                status === 'WAITING_FOR_HOME' &&
+                !selectedReminderWaiting &&
+                !showConfirmation && (
                 <div className="space-y-3">
-                  <ResultPanel
-                    icon={<Clock3 className="h-7 w-7 text-amber-600" />}
-                    title={t('customer.locationWaitingTitle')}
-                    text={t('customer.locationWaitingText')}
-                  />
+                  {!showLocationMatchDetails && (
+                    <ResultPanel
+                      icon={<Clock3 className="h-7 w-7 text-amber-600" />}
+                      title={t('customer.locationWaitingTitle')}
+                      text={t('customer.locationWaitingText')}
+                    />
+                  )}
+                  {(showLocationMatchDetails || !validationEvidence) && (
+                    <LocationMatchDetails
+                      address={context.address}
+                      validation={validationEvidence}
+                      captureError={locationCaptureError ? error ?? undefined : undefined}
+                      remainingAttempts={remainingAttempts}
+                    />
+                  )}
+                  {addressChangeAction}
                   <button
                     disabled={busy}
                     onClick={() => void captureGps()}
@@ -1327,26 +1603,39 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                   >
                     {gpsActionContent(t('customer.retryLocation'))}
                   </button>
+                  {reminderActionAvailable && reminderAction}
                 </div>
               )}
               {!reminderLinkFlow &&
                 status === 'REMINDER_LIMIT_REACHED' &&
-                !selectedReminderWaiting &&
-                !showConfirmation && (
-                  <ResultPanel
-                    icon={<Clock3 className="h-7 w-7 text-amber-600" />}
-                    title={cycleExhausted ? t('customer.verificationCycleExhaustedTitle') : t('customer.reminderLimit')}
-                    text={cycleExhausted ? t('customer.verificationCycleExhaustedText') : t('customer.returnToLink')}
-                  />
+                (
+                  <div className="space-y-3">
+                    <ResultPanel
+                      icon={<Clock3 className="h-7 w-7 text-amber-600" />}
+                      title={cycleExhausted ? t('customer.verificationCycleExhaustedTitle') : t('customer.reminderLimit')}
+                      text={cycleExhausted ? t('customer.verificationCycleExhaustedText') : t('customer.returnToLink')}
+                    />
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center text-xs font-semibold text-amber-800">
+                      {t('customer.remindersRemaining', { remaining: remainingReminders })}
+                    </p>
+                    {showLocationMatchDetails && validationEvidence && (
+                      <LocationMatchDetails
+                        address={context.address}
+                        validation={validationEvidence}
+                        captureError={locationCaptureError ? error ?? undefined : undefined}
+                        remainingAttempts={remainingAttempts}
+                      />
+                    )}
+                  </div>
                 )}
-              {status === 'CUSTOMER_DATA_MISMATCH' && (
+              {!cycleExhausted && status === 'CUSTOMER_DATA_MISMATCH' && (
                 <ResultPanel
                   icon={<XCircle className="h-7 w-7 text-rose-600" />}
                   title={t('customer.dataNeedsUpdate')}
                   text={t('customer.contactSupport')}
                 />
               )}
-              {status === 'ADDRESS_PROPOSED' && (
+              {!cycleExhausted && status === 'ADDRESS_PROPOSED' && (
                 <div className="space-y-3">
                   <ResultPanel
                     icon={<MapPin className="h-7 w-7 text-blue-600" />}
@@ -1362,7 +1651,26 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                   </button>
                 </div>
               )}
-              {status === 'MANUAL_REVIEW' && <ManualReviewPanel />}
+              {!cycleExhausted && status === 'MANUAL_REVIEW' && (
+                <div className="space-y-3">
+                  <ManualReviewPanel />
+                  {showLocationMatchDetails && validationEvidence && (
+                    <LocationMatchDetails
+                      address={context.address}
+                      validation={validationEvidence}
+                      captureError={locationCaptureError ? error ?? undefined : undefined}
+                      remainingAttempts={remainingAttempts}
+                    />
+                  )}
+                </div>
+              )}
+              {cycleExhausted && status !== 'LOCATION_VALID' && status !== 'REMINDER_LIMIT_REACHED' && (
+                <ResultPanel
+                  icon={<AlertTriangle className="h-7 w-7 text-amber-600" />}
+                  title={t('customer.verificationCycleExhaustedTitle')}
+                  text={t('customer.verificationCycleExhaustedText')}
+                />
+              )}
               {status === 'LOCATION_VALID' && (
                 <>
                   <ResultPanel
@@ -1381,6 +1689,13 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                         </>
                       )}
                     </div>
+                  )}
+                  {showLocationMatchDetails && validationEvidence && (
+                    <LocationMatchDetails
+                      address={context.address}
+                      validation={validationEvidence}
+                      remainingAttempts={remainingAttempts}
+                    />
                   )}
                 </>
               )}

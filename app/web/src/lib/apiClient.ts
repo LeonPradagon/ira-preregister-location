@@ -2,7 +2,7 @@ import axios, { AxiosRequestConfig } from 'axios';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000/v1').replace(/\/$/, '');
 const API_TIMEOUT_MS = 15_000;
-const LOCATION_SUBMISSION_TIMEOUT_MS = 60_000;
+const PUBLIC_LOCATION_REQUEST_TIMEOUT_MS = 60_000;
 
 export interface ApiErrorBody {
   error?: { code?: string; message?: string };
@@ -30,6 +30,8 @@ export interface PublicVerificationContextApi {
     customerConfirmationStatus: string;
     reminderCount: number;
     attemptCount: number;
+    maxAttempts: number;
+    maxReminders: number;
     isReminderLink: boolean;
     canScheduleReminder: boolean;
   };
@@ -42,8 +44,16 @@ export interface PublicVerificationContextApi {
     city: string;
     district: string;
     subdistrict: string;
+    postalCode?: string;
     street: string;
     houseNumber: string;
+    rt?: string | null;
+    rw?: string | null;
+    building?: string | null;
+    block?: string | null;
+    unit?: string | null;
+    addressDetail?: string | null;
+    landmark?: string | null;
     referencePrecision: string;
     requiresCorrection?: boolean;
     referenceLocation?: { latitude: number; longitude: number } | null;
@@ -55,12 +65,35 @@ export interface PublicVerificationContextApi {
       autoApprovalScoreThreshold: number;
     };
   };
+  lastValidationResult?: PublicValidationResult;
 }
 
-export interface ServerValidationDecision {
-  id: string;
+export interface PublicValidationResult {
   result: string;
   reasonCodes: string[];
+  provinceMatch: boolean;
+  cityMatch: boolean;
+  districtMatch: boolean;
+  subdistrictMatch: boolean;
+  streetScore: number;
+  houseNumberMatch?: boolean | null;
+  reverseGeocode?: {
+    province: string;
+    city: string;
+    district: string;
+    subdistrict: string;
+    street: string;
+    houseNumber?: string;
+    postalCode?: string;
+    formattedAddress: string;
+  };
+}
+
+export interface ServerValidationDecision extends PublicValidationResult {
+  id: string;
+  status?: string;
+  attemptCount?: number;
+  maxAttempts?: number;
   bestSample: { latitude: number; longitude: number; accuracyMeters: number; capturedAt: string };
   distanceFromReferenceMeters: number | null;
   addressScore: number;
@@ -72,6 +105,45 @@ export interface ServerValidationDecision {
     coordinateText: string;
     googleMapsUrl: string;
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+export function isUsableServerValidationDecision(value: unknown): value is ServerValidationDecision {
+  if (!isRecord(value)) return false;
+  const bestSample = value.bestSample;
+  const capturedLocation = value.capturedLocation;
+  return (
+    typeof value.id === 'string' &&
+    typeof value.result === 'string' &&
+    Array.isArray(value.reasonCodes) &&
+    value.reasonCodes.every((code) => typeof code === 'string') &&
+    typeof value.provinceMatch === 'boolean' &&
+    typeof value.cityMatch === 'boolean' &&
+    typeof value.districtMatch === 'boolean' &&
+    typeof value.subdistrictMatch === 'boolean' &&
+    isFiniteNumber(value.streetScore) &&
+    isRecord(bestSample) &&
+    isFiniteNumber(bestSample.latitude) &&
+    isFiniteNumber(bestSample.longitude) &&
+    isFiniteNumber(bestSample.accuracyMeters) &&
+    typeof bestSample.capturedAt === 'string' &&
+    isFiniteNumber(value.addressScore) &&
+    isFiniteNumber(value.sampleSpreadMeters) &&
+    (value.distanceFromReferenceMeters === null || isFiniteNumber(value.distanceFromReferenceMeters)) &&
+    isRecord(capturedLocation) &&
+    isFiniteNumber(capturedLocation.latitude) &&
+    isFiniteNumber(capturedLocation.longitude) &&
+    isFiniteNumber(capturedLocation.accuracyMeters) &&
+    typeof capturedLocation.coordinateText === 'string' &&
+    typeof capturedLocation.googleMapsUrl === 'string'
+  );
 }
 
 function correlationId(): string {
@@ -314,12 +386,20 @@ const publicVerificationApi = {
     }),
   consent: (token: string) =>
     request<{ status: string }>(`/public/verifications/${encodeURIComponent(token)}/consent`, { method: 'POST' }),
-  submitLocation: (token: string, samples: unknown[]) =>
-    request<ServerValidationDecision>(`/public/verifications/${encodeURIComponent(token)}/location`, {
+  submitLocation: async (token: string, samples: unknown[]) => {
+    const response = await request<unknown>(`/public/verifications/${encodeURIComponent(token)}/location`, {
       method: 'POST',
       body: JSON.stringify({ samples }),
-      timeout: LOCATION_SUBMISSION_TIMEOUT_MS,
-    }),
+      timeout: PUBLIC_LOCATION_REQUEST_TIMEOUT_MS,
+    });
+    if (!isUsableServerValidationDecision(response))
+      throw new ApiClientError(
+        'Hasil verifikasi lokasi tidak lengkap. Silakan coba pemeriksaan lokasi lagi.',
+        502,
+        'INVALID_LOCATION_RESPONSE',
+      );
+    return response;
+  },
   waitForHome: (
     token: string,
     reminder: { scheduledAt?: string; reminderPreference?: string; reminderUntilAt?: string },
@@ -338,11 +418,12 @@ const publicVerificationApi = {
     request<{ id: string; status: string }>(`/public/verifications/${encodeURIComponent(token)}/address-change`, {
       method: 'POST',
       body: JSON.stringify(address),
+      timeout: PUBLIC_LOCATION_REQUEST_TIMEOUT_MS,
     }),
   lookupAddress: (token: string, address: unknown) =>
     request<{ postalCode: string | null; formattedAddress: string }>(
       `/public/verifications/${encodeURIComponent(token)}/address-lookup`,
-      { method: 'POST', body: JSON.stringify(address) },
+      { method: 'POST', body: JSON.stringify(address), timeout: PUBLIC_LOCATION_REQUEST_TIMEOUT_MS },
     ),
   addressStatus: (token: string, sameAddress: boolean) =>
     request<{ status: string; sameAddress: boolean }>(

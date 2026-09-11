@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, apiClient } from '../../src/lib/apiClient';
+import { api, apiClient, isUsableServerValidationDecision } from '../../src/lib/apiClient';
 
 describe('API client', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('rejects an incomplete location decision before it reaches the UI', () => {
+    expect(isUsableServerValidationDecision({ result: 'LOCATION_VALID', reasonCodes: [] })).toBe(false);
   });
 
   it('sends Better Auth email sign-in with cookies enabled', async () => {
@@ -95,7 +99,33 @@ describe('API client', () => {
       status: 200,
       statusText: 'OK',
       headers: {},
-      data: { result: 'LOCATION_VALID' },
+      data: {
+        id: 'validation-1',
+        status: 'LOCATION_VALID',
+        result: 'LOCATION_VALID',
+        reasonCodes: [],
+        provinceMatch: true,
+        cityMatch: true,
+        districtMatch: true,
+        subdistrictMatch: true,
+        streetScore: 1,
+        bestSample: {
+          latitude: -6.2,
+          longitude: 106.8,
+          accuracyMeters: 10,
+          capturedAt: '2026-09-11T00:00:00.000Z',
+        },
+        distanceFromReferenceMeters: null,
+        addressScore: 1,
+        sampleSpreadMeters: 0,
+        capturedLocation: {
+          latitude: -6.2,
+          longitude: 106.8,
+          accuracyMeters: 10,
+          coordinateText: '-6.200000, 106.800000',
+          googleMapsUrl: 'https://www.google.com/maps/search/?api=1&query=-6.2,106.8',
+        },
+      },
     });
     apiClient.defaults.adapter = adapterMock;
 
@@ -106,5 +136,33 @@ describe('API client', () => {
     const config = adapterMock.mock.calls[0][0];
     expect(config.url).toBe('/public/verifications/verification-token/location');
     expect(config.timeout).toBe(60_000);
+  });
+
+  it('allows address geocoding requests to wait for the provider queue', async () => {
+    const adapterMock = vi.fn().mockResolvedValue({
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { id: 'address-1', status: 'PROPOSED' },
+    });
+    apiClient.defaults.adapter = adapterMock;
+
+    await api.changeAddress('verification-token', { street: 'Jl. Contoh' });
+
+    expect(adapterMock.mock.calls[0][0].timeout).toBe(60_000);
+  });
+
+  it('allows address lookup to wait for the provider queue', async () => {
+    const adapterMock = vi.fn().mockResolvedValue({
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { postalCode: '11520', formattedAddress: 'Jl. Contoh' },
+    });
+    apiClient.defaults.adapter = adapterMock;
+
+    await api.lookupAddress('verification-token', { city: 'Jakarta Barat' });
+
+    expect(adapterMock.mock.calls[0][0].timeout).toBe(60_000);
   });
 });

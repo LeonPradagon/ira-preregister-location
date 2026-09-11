@@ -6,6 +6,7 @@ import {
   getMissingAddressFields,
   isVerificationCycleExhausted,
   shouldShowLocationRetry,
+  shouldShowLocationMatchDetails,
   shouldShowReminderPending,
   shouldShowReminderPickerOnLink,
   shouldShowReminderResume,
@@ -27,6 +28,16 @@ describe('customer verification confirmation flow', () => {
   it('normalizes an empty optional house number without throwing', () => {
     expect(normalizeOptionalAddressValue(undefined)).toBe('');
     expect(normalizeOptionalAddressValue('  A-12  ')).toBe('A-12');
+    expect(
+      getMissingAddressFields({
+        province: 'Jawa Barat',
+        city: 'Bandung',
+        district: 'Coblong',
+        subdistrict: 'Dago',
+        street: 'Jl. Juanda',
+        houseNumber: '',
+      }),
+    ).toEqual([]);
   });
 
   it('allows correcting an incomplete proposed address', () => {
@@ -69,8 +80,18 @@ describe('customer verification confirmation flow', () => {
     expect(shouldShowLocationRetry('REMINDER_LIMIT_REACHED', 'CONFIRMED')).toBe(true);
   });
 
+  it('shows match details for a successful location validation as well as a mismatch', () => {
+    expect(shouldShowLocationMatchDetails('LOCATION_VALID', true)).toBe(true);
+    expect(shouldShowLocationMatchDetails('LOCATION_MISMATCH', true)).toBe(true);
+    expect(shouldShowLocationMatchDetails('LOCATION_VALID', false)).toBe(false);
+  });
+
   it('ends the verification cycle when the final reminder link is opened after GPS attempts are exhausted', () => {
     expect(isVerificationCycleExhausted('REMINDER_LIMIT_REACHED', 0, 3)).toBe(true);
+  });
+
+  it('ends the verification cycle from the counters even if the status is still GPS capturing', () => {
+    expect(isVerificationCycleExhausted('GPS_CAPTURING', 3, 3)).toBe(true);
   });
 
   it('does not end the cycle when only the reminder limit has been reached', () => {

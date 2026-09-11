@@ -224,18 +224,27 @@ export function decideValidation(
   const streetSoftMatchThreshold = Math.min(config.streetMatchThreshold, config.streetSoftMatchThreshold ?? 0.7);
   const administrativeLevelsMatch = provinceMatch && cityMatch && districtMatch && subdistrictMatch;
   const streetIsAcceptablySimilar = streetScore >= streetSoftMatchThreshold;
+  const registeredHouseNumber = isPlaceholderAddressValue(address.houseNumber) ? '' : address.houseNumber;
+  const detectedHouseNumber = isPlaceholderAddressValue(reverseGeocode.houseNumber)
+    ? ''
+    : reverseGeocode.houseNumber;
   const houseNumberMatch =
-    address.houseNumber && reverseGeocode.houseNumber
-      ? normalizeAddress(address.houseNumber) === normalizeAddress(reverseGeocode.houseNumber)
+    registeredHouseNumber && detectedHouseNumber
+      ? normalizeAddress(registeredHouseNumber) === normalizeAddress(detectedHouseNumber)
       : undefined;
   const addressIncomplete = isAddressIncomplete(address);
   const addressNeedsManualReview = addressIncomplete || !hasReferenceLocation || !precisionOk;
+  // Keep the displayed address score aligned with the fields that gate a
+  // match. Unknown house numbers receive their full optional weight, while
+  // every administrative level remains visible in the score.
   const addressScore =
     Math.round(
-      (Number(districtMatch) * 0.2 +
-        Number(subdistrictMatch) * 0.25 +
-        streetScore * 0.35 +
-        (houseNumberMatch === undefined ? 0.2 : Number(houseNumberMatch) * 0.2)) *
+      (Number(provinceMatch) * 0.15 +
+        Number(cityMatch) * 0.15 +
+        Number(districtMatch) * 0.2 +
+        Number(subdistrictMatch) * 0.2 +
+        streetScore * 0.2 +
+        (houseNumberMatch === undefined ? 0.1 : Number(houseNumberMatch) * 0.1)) *
         100,
     ) / 100;
   const addressMatchPasses =
@@ -275,10 +284,11 @@ export function decideValidation(
   if (outsideHomeRadius) reasonCodes.push('HOME_RADIUS_EXCEEDED');
 
   let result: ValidationResult = 'MANUAL_REVIEW';
-  // A weak or unstable GPS capture is an actionable customer retry, not an
-  // Ops decision. Address/reference quality is evaluated after the customer
-  // has produced a usable location sample.
-  if (bestSample.accuracyMeters > config.gpsMaxAccuracyMeters || spreadMeters > 100) result = 'WAITING_FOR_HOME';
+  // Keep weak accuracy separate from an unstable sample. A 100% address
+  // match can still need a retry because the device has not produced a
+  // precise enough position; that is not evidence that the customer is away.
+  if (bestSample.accuracyMeters > config.gpsMaxAccuracyMeters) result = 'LOW_GPS_ACCURACY';
+  else if (spreadMeters > 100) result = 'WAITING_FOR_HOME';
   // A trusted distance failure is conclusive even when the address metadata
   // needs review. The customer is not at the registered home, so do not send
   // this case to the Ops manual-review queue.

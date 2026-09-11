@@ -87,6 +87,7 @@ export class OsmGeocodingAdapter extends GeocodingPort implements OnModuleDestro
   );
   private readonly userAgent = process.env.OSM_NOMINATIM_USER_AGENT || 'IRAPreregist/1.0';
   private readonly cacheTtlMs = Number(process.env.OSM_NOMINATIM_CACHE_TTL_MS ?? 300_000);
+  private readonly queueTimeoutMs = Math.max(1, Number(process.env.GEOCODING_QUEUE_TIMEOUT_MS ?? 10_000));
   private readonly cache = new Map<string, { expiresAt: number; value: GeocodingResult }>();
   private readonly redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
     lazyConnect: true,
@@ -176,7 +177,19 @@ export class OsmGeocodingAdapter extends GeocodingPort implements OnModuleDestro
       () => undefined,
       () => undefined,
     );
-    const result = await task;
+    let timeoutId: NodeJS.Timeout | undefined;
+    const queueTimeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new ServiceUnavailableException('OSM geocoding queue timeout')),
+        this.queueTimeoutMs,
+      );
+    });
+    let result: NominatimResult | NominatimResult[];
+    try {
+      result = await Promise.race([task, queueTimeout]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
     const mapped = Array.isArray(result) ? result[0] : result;
     const value = mapResult(mapped);
     this.cache.set(cacheKey, { expiresAt: Date.now() + this.cacheTtlMs, value });

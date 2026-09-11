@@ -253,9 +253,9 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
 
   const handleRestartVerificationCycle = async () => {
     const confirmed = await confirmAction({
-      title: 'Mulai siklus verifikasi baru?',
-      text: 'Sesi lama akan ditutup sebagai riwayat dan customer akan menerima link verifikasi baru dengan batas percobaan yang baru.',
-      confirmButtonText: 'Ya, buat siklus baru',
+      title: 'Kirim ulang link verifikasi?',
+      text: 'Siklus lama akan ditutup sebagai riwayat dan customer akan menerima link baru dengan batas GPS dan reminder yang baru.',
+      confirmButtonText: 'Ya, kirim link baru',
       cancelButtonText: 'Batal',
     });
     if (!confirmed) return;
@@ -318,11 +318,11 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
               type="button"
               onClick={() => void handleRestartVerificationCycle()}
               disabled={!canSendVerification}
-              title={!canSendVerification ? 'Role ini tidak dapat membuat siklus baru' : 'Mulai siklus verifikasi baru'}
+              title={!canSendVerification ? 'Role ini tidak dapat mengirim link' : 'Kirim link verifikasi baru'}
               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Mulai Siklus Baru</span>
+              <span>Kirim Ulang Link</span>
             </button>
           ) : (
             <button

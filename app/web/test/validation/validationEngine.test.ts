@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildGoogleMapsDeepLink,
+  buildAddressDisplayValues,
   calculateGeodesicDistanceMeters,
   evaluateBestGpsSample,
   formatAddressForDisplay,
@@ -38,6 +39,42 @@ describe('GPS evidence helpers', () => {
       'Jl. Kp. Kandang, Mekarwangi, Kec. Cisauk',
     );
     expect(formatAddressForDisplay('WC35+H22Jl. Delik Sari, Pudakpayung')).toBe('Jl. Delik Sari, Pudakpayung');
+  });
+
+  it('keeps administrative and address details available as separate display fields', () => {
+    expect(
+      buildAddressDisplayValues({
+        street: 'Jln Green Ville',
+        houseNumber: '10',
+        subdistrict: 'Duri Kepa',
+        district: 'Kebon Jeruk',
+        city: 'Kota Administrasi Jakarta Barat',
+        province: 'DKI Jakarta',
+        postalCode: '11510',
+      }),
+    ).toEqual([
+      { field: 'street', value: 'Jln Green Ville' },
+      { field: 'houseNumber', value: '10' },
+      { field: 'subdistrict', value: 'Duri Kepa' },
+      { field: 'district', value: 'Kebon Jeruk' },
+      { field: 'city', value: 'Kota Administrasi Jakarta Barat' },
+      { field: 'province', value: 'DKI Jakarta' },
+      { field: 'postalCode', value: '11510' },
+    ]);
+  });
+
+  it('renders address fields safely when an older API returns numeric values', () => {
+    expect(
+      buildAddressDisplayValues({
+        street: 'Jl. Mawar',
+        houseNumber: 21,
+        postalCode: 40135,
+      }),
+    ).toEqual([
+      { field: 'street', value: 'Jl. Mawar' },
+      { field: 'houseNumber', value: '21' },
+      { field: 'postalCode', value: '40135' },
+    ]);
   });
 
   it('does not require a postal code when street and house number are present', () => {
