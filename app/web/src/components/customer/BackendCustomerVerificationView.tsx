@@ -559,8 +559,35 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                 : current,
             );
           } else {
-            await api.changeAddress(token, submittedAddress);
-            await refresh();
+            const changedAddress = await api.changeAddress(token, submittedAddress);
+            setContext((current) =>
+              current
+                ? {
+                    ...current,
+                    session: { ...current.session, status: 'ADDRESS_PROPOSED' },
+                    address: {
+                      ...current.address,
+                      ...submittedAddress,
+                      id: changedAddress.id,
+                      addressType: 'PROPOSED',
+                      requiresCorrection: false,
+                      rawAddress: [
+                        submittedAddress.street,
+                        submittedAddress.houseNumber && `No. ${submittedAddress.houseNumber}`,
+                        submittedAddress.addressDetail,
+                        submittedAddress.subdistrict,
+                        submittedAddress.district,
+                        submittedAddress.city,
+                        submittedAddress.province,
+                        submittedAddress.postalCode,
+                      ]
+                        .filter(Boolean)
+                        .join(', '),
+                    },
+                  }
+                : current,
+            );
+            void refresh().catch(() => undefined);
           }
         },
       });

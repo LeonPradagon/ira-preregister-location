@@ -4,3 +4,7 @@ export function canReplaceAddress(addressType: string | null | undefined, addres
     .toUpperCase();
   return normalizedAddressType !== 'PROPOSED' || addressIncomplete;
 }
+
+export function requiresLocationConsentForAddressStatus(sameAddress: boolean): boolean {
+  return sameAddress;
+}

@@ -36,7 +36,7 @@ import { ValidationConfigService } from '../../config/validation-config.service.
 import { parseVerificationToken, verifyVerificationToken } from './verification-token.js';
 import { applyApprovalPolicy, getCoordinateMatchScore } from './approval-policy.js';
 import { buildVerifiedAddressReference } from './verified-location.js';
-import { canReplaceAddress } from './address-change.policy.js';
+import { canReplaceAddress, requiresLocationConsentForAddressStatus } from './address-change.policy.js';
 const now = () => new Date();
 
 function maskPhone(value: string): string {
@@ -734,7 +734,7 @@ export class VerificationService {
       );
     }
     const nextStatus = sameAddress ? 'GPS_CAPTURING' : 'ADDRESS_EDITING';
-    if (!row.session.consentAt)
+    if (requiresLocationConsentForAddressStatus(sameAddress) && !row.session.consentAt)
       throw new DomainError('Location consent is required before confirming the address', 409, 'CONSENT_REQUIRED');
     assertTransition(row.session.verificationStatus, nextStatus);
     const timestamp = now();
