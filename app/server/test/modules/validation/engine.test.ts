@@ -53,6 +53,10 @@ describe('server validation engine', () => {
     expect(administrativeMatch('Palmerah', ['Pal Merah'])).toBe(true);
   });
 
+  it('matches a district name with the Kecamatan label from Google', () => {
+    expect(administrativeMatch('Tambora', ['Kecamatan Tambora'])).toBe(true);
+  });
+
   it('accepts one-character typos in longer administrative names', () => {
     expect(administrativeMatch('Cengkareng', ['Cengkarengg'])).toBe(true);
     expect(administrativeMatch('Jakarta Barat', ['Jakarta Utara'])).toBe(false);

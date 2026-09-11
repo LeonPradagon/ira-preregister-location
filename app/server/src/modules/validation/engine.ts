@@ -78,7 +78,10 @@ const normalizeAdministrativeArea = (value: string): string =>
   normalizeAddress(value)
     .replace(/\bdaerah khusus ibukota jakarta\b/g, 'jakarta')
     .replace(/\bdki jakarta\b/g, 'jakarta')
-    .replace(/\b(kota administrasi|kabupaten administrasi|kota|kabupaten)\b/g, ' ')
+    .replace(
+      /\b(kota administrasi|kabupaten administrasi|kecamatan|kelurahan|desa|kota|kabupaten)\b/g,
+      ' ',
+    )
     .replace(/\s+/g, ' ')
     .trim();
 
