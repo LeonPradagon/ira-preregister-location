@@ -35,7 +35,7 @@ import { ReadCacheService } from './common/read-cache.service.js';
 import { logEvent } from './common/structured-log.js';
 import { queueNames } from './common/queue-names.js';
 import { getPublicWebOrigin } from './config/public-origin.js';
-import { createGeocodingAdapter } from './integrations/geocoding/geocoding.adapter.factory.js';
+import { createCoordinateAuditGeocodingAdapter } from './integrations/geocoding/geocoding.adapter.factory.js';
 import { auditCoordinateAddress } from './modules/validation/coordinate-audit.js';
 import {
   shouldAuditImportedCoordinate,
@@ -686,7 +686,7 @@ const importWorker = runs('import')
     )
   : null;
 
-const coordinateGeocoder = runs('import') ? createGeocodingAdapter() : null;
+const coordinateGeocoder = runs('import') ? createCoordinateAuditGeocodingAdapter() : null;
 const coordinateAuditWorker = runs('import')
   ? new Worker(
       coordinateAuditQueueName,

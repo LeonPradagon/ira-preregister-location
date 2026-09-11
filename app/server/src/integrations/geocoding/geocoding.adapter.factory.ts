@@ -16,3 +16,11 @@ export function createGeocodingAdapter(): GeocodingPort {
   if (!google) return osm ?? new DisabledGeocodingAdapter();
   return osm ? new FallbackGeocodingAdapter(google, osm) : google;
 }
+
+/**
+ * Coordinate audits must not consume the Google Geocoding quota.
+ * Keep this provider separate from the general verification geocoder.
+ */
+export function createCoordinateAuditGeocodingAdapter(): GeocodingPort {
+  return new OsmGeocodingAdapter();
+}
