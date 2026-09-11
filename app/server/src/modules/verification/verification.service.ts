@@ -355,9 +355,12 @@ export class VerificationService {
     const nextAttemptCount = row.session.attemptCount + 1;
     const attemptLimitReached = nextAttemptCount >= maxLocationAttempts;
     const forceReminder = attemptLimitReached && decision.result !== 'LOCATION_VALID';
+    const reminderLimitReached = row.session.reminderCount >= config.MAX_REMINDERS_PER_SESSION;
     if (forceReminder) decision.reasonCodes = [...decision.reasonCodes, 'GPS_ATTEMPT_LIMIT_REACHED'];
     const nextStatus = forceReminder
-      ? 'REMINDER_REQUIRED'
+      ? reminderLimitReached
+        ? 'REMINDER_LIMIT_REACHED'
+        : 'REMINDER_REQUIRED'
       : decision.result === 'LOCATION_VALID'
         ? 'LOCATION_VALID'
         : decision.result;
@@ -481,7 +484,13 @@ export class VerificationService {
           action: 'GPS_ATTEMPT_LIMIT_REACHED',
           entityType: 'VERIFICATION_SESSION',
           entityId: row.session.id,
-          after: { attemptCount: nextAttemptCount, maxAttempts: maxLocationAttempts, nextAction: 'SELECT_REMINDER' },
+          after: {
+            attemptCount: nextAttemptCount,
+            maxAttempts: maxLocationAttempts,
+            reminderCount: row.session.reminderCount,
+            maxReminders: config.MAX_REMINDERS_PER_SESSION,
+            nextAction: reminderLimitReached ? 'ADMIN_RESTART_OR_REVIEW' : 'SELECT_REMINDER',
+          },
           timestamp,
         });
       if (decision.result === 'LOCATION_VALID') {

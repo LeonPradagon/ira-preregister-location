@@ -2,6 +2,7 @@ import axios, { AxiosRequestConfig } from 'axios';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000/v1').replace(/\/$/, '');
 const API_TIMEOUT_MS = 15_000;
+const LOCATION_SUBMISSION_TIMEOUT_MS = 60_000;
 
 export interface ApiErrorBody {
   error?: { code?: string; message?: string };
@@ -317,6 +318,7 @@ const publicVerificationApi = {
     request<ServerValidationDecision>(`/public/verifications/${encodeURIComponent(token)}/location`, {
       method: 'POST',
       body: JSON.stringify({ samples }),
+      timeout: LOCATION_SUBMISSION_TIMEOUT_MS,
     }),
   waitForHome: (
     token: string,
@@ -469,6 +471,14 @@ const adminApi = {
       `/admin/verifications/${encodeURIComponent(id)}/resend`,
       { method: 'POST' },
     ),
+  restartVerification: (id: string) =>
+    request<{
+      status: string;
+      sessionId: string;
+      verificationLink: string;
+      expiresAt: string;
+      previousSessionId: string;
+    }>(`/admin/verifications/${encodeURIComponent(id)}/restart`, { method: 'POST' }),
   revoke: (id: string) =>
     request<{ status: string }>(`/admin/verifications/${encodeURIComponent(id)}/revoke`, { method: 'POST' }),
   reminder: (id: string) =>

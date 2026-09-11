@@ -1165,6 +1165,56 @@ export class AdminService {
     return { status: 'SENT', verificationLink, expiresAt };
   }
 
+  async restartVerificationCycle(admin: RequestAdmin, id: string) {
+    if (!canManage(admin.role))
+      throw new DomainError('Role cannot restart a verification cycle', 403, 'FORBIDDEN');
+    const detail = await this.verification(id);
+    const config = await this.validationConfig.get();
+    const maxLocationAttempts = Math.min(3, config.MAX_LOCATION_ATTEMPTS);
+    const attemptsExhausted = detail.session.attemptCount >= maxLocationAttempts;
+    const remindersExhausted = detail.session.reminderCount >= config.MAX_REMINDERS_PER_SESSION;
+    const restartableStatuses = ['REMINDER_REQUIRED', 'REMINDER_LIMIT_REACHED', 'EXPIRED'];
+
+    if (!attemptsExhausted || !remindersExhausted || !restartableStatuses.includes(detail.session.verificationStatus))
+      throw new DomainError(
+        'A new verification cycle can only be started after the GPS and reminder limits are exhausted',
+        409,
+        'VERIFICATION_CYCLE_NOT_EXHAUSTED',
+      );
+
+    // Create and send the new session first. If WhatsApp delivery fails, the
+    // exhausted session remains available for review and retry by an admin.
+    const created = await this.createVerification(admin, detail.customer.id, detail.address.id);
+    const restartedAt = timestamp();
+    await db.transaction(async (tx) => {
+      await tx
+        .update(verificationSessions)
+        .set({ revokedAt: restartedAt, verificationStatus: 'EXPIRED', updatedAt: restartedAt })
+        .where(eq(verificationSessions.id, id));
+      await tx
+        .update(reminders)
+        .set({ status: 'CANCELLED', tokenInvalidatedAt: restartedAt })
+        .where(and(eq(reminders.sessionId, id), or(eq(reminders.status, 'SCHEDULED'), isNull(reminders.tokenInvalidatedAt))));
+      await tx.insert(auditLogs).values({
+        actorUserId: admin.id,
+        actorName: admin.name,
+        action: 'VERIFICATION_CYCLE_RESTARTED',
+        entityType: 'VERIFICATION_SESSION',
+        entityId: id,
+        before: {
+          status: detail.session.verificationStatus,
+          attemptCount: detail.session.attemptCount,
+          reminderCount: detail.session.reminderCount,
+        },
+        after: { status: 'EXPIRED', nextSessionId: created.sessionId },
+        reason: 'Siklus verifikasi baru dibuat setelah batas percobaan GPS dan pengingat tercapai.',
+        timestamp: restartedAt,
+      });
+    });
+
+    return { ...created, status: 'RESTARTED' as const, previousSessionId: id };
+  }
+
   async revoke(admin: RequestAdmin, id: string) {
     if (!canManage(admin.role)) throw new DomainError('Role cannot revoke verification', 403, 'FORBIDDEN');
     const detail = await this.verification(id);
@@ -1242,6 +1292,18 @@ export class AdminService {
     if (!['SUPER_ADMIN', 'ADMIN', 'REVIEWER'].includes(admin.role))
       throw new DomainError('Role cannot perform manual review', 403, 'FORBIDDEN');
     const detail = await this.verification(id);
+    if (input.decision === 'REQUEST_RETRY') {
+      const config = await this.validationConfig.get();
+      if (
+        detail.session.attemptCount >= Math.min(3, config.MAX_LOCATION_ATTEMPTS) &&
+        detail.session.reminderCount >= config.MAX_REMINDERS_PER_SESSION
+      )
+        throw new DomainError(
+          'The verification cycle is exhausted. Start a new cycle before requesting another GPS attempt',
+          409,
+          'VERIFICATION_CYCLE_EXHAUSTED',
+        );
+    }
     const nextStatus =
       input.decision === 'APPROVE'
         ? 'LOCATION_VALID'

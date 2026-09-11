@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { campaignRecipientReservationStatuses, selectCampaignTargetIds } from '../../../src/modules/campaigns/campaign-target.policy.js';
+import {
+  campaignRecipientReservationStatuses,
+  campaignNeedsMaterialization,
+  selectCampaignTargetIds,
+  selectMaterializationTargetIds,
+} from '../../../src/modules/campaigns/campaign-target.policy.js';
 
 describe('campaign target policy', () => {
   it('caps select-all targets at the configured daily send limit', () => {
@@ -17,5 +22,17 @@ describe('campaign target policy', () => {
       'DELIVERED',
       'READ',
     ]);
+  });
+
+  it('keeps selected campaign recipients when materialization advances its cursor', () => {
+    expect(selectMaterializationTargetIds(['customer-a', 'customer-b', 'customer-c'], 'customer-a')).toEqual([
+      'customer-b',
+      'customer-c',
+    ]);
+  });
+
+  it('recognizes an incomplete materialization even when its completion flag is stale', () => {
+    expect(campaignNeedsMaterialization(true, 0, 1)).toBe(true);
+    expect(campaignNeedsMaterialization(true, 1, 1)).toBe(false);
   });
 });

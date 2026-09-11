@@ -4,6 +4,7 @@ import {
   shouldAllowAddressChange,
   normalizeOptionalAddressValue,
   getMissingAddressFields,
+  isVerificationCycleExhausted,
   shouldShowLocationRetry,
   shouldShowReminderPending,
   shouldShowReminderPickerOnLink,
@@ -68,6 +69,14 @@ describe('customer verification confirmation flow', () => {
     expect(shouldShowLocationRetry('REMINDER_LIMIT_REACHED', 'CONFIRMED')).toBe(true);
   });
 
+  it('ends the verification cycle when the final reminder link is opened after GPS attempts are exhausted', () => {
+    expect(isVerificationCycleExhausted('REMINDER_LIMIT_REACHED', 0, 3)).toBe(true);
+  });
+
+  it('does not end the cycle when only the reminder limit has been reached', () => {
+    expect(isVerificationCycleExhausted('REMINDER_LIMIT_REACHED', 0, 2)).toBe(false);
+  });
+
   it('does not show the verification button on the original link after a reminder is selected', () => {
     expect(shouldShowReminderResume('WAITING_FOR_HOME', 'CONFIRMED', 1, false, false)).toBe(false);
   });
@@ -85,8 +94,12 @@ describe('customer verification confirmation flow', () => {
     expect(shouldShowReminderPending('LOCATION_MISMATCH', 'CONFIRMED', 2, true, false, false)).toBe(true);
   });
 
-  it('does not show a pending reminder state after the third reminder', () => {
-    expect(shouldShowReminderPending('REMINDER_LIMIT_REACHED', 'CONFIRMED', 3, true, false, false)).toBe(false);
+  it('shows a pending reminder state when the second reminder link already scheduled the third reminder', () => {
+    expect(shouldShowReminderPending('REMINDER_LIMIT_REACHED', 'CONFIRMED', 3, true, false, false)).toBe(true);
+  });
+
+  it('does not show a pending reminder state on the third reminder link itself', () => {
+    expect(shouldShowReminderPending('REMINDER_LIMIT_REACHED', 'CONFIRMED', 3, true, false, true)).toBe(false);
   });
 
   it('shows the verification button only when a unique reminder link is opened', () => {

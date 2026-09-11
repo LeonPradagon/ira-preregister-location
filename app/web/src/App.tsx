@@ -50,7 +50,11 @@ const MainAppContent: React.FC = () => {
   const renderTabContent = () => {
     if (selectedVerificationId)
       return (
-        <VerificationDetailView sessionId={selectedVerificationId} onBack={() => setSelectedVerificationId(null)} />
+        <VerificationDetailView
+          sessionId={selectedVerificationId}
+          onBack={() => setSelectedVerificationId(null)}
+          onRestart={(newSessionId) => setSelectedVerificationId(newSessionId)}
+        />
       );
     if (selectedCustomerId)
       return (

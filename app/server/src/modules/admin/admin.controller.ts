@@ -238,6 +238,12 @@ export class AdminController {
     return this.admin.resend(currentAdmin, id);
   }
 
+  @Post('verifications/:id/restart')
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  restart(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) {
+    return this.admin.restartVerificationCycle(currentAdmin, id);
+  }
+
   @Post('verifications/:id/revoke')
   @Roles('SUPER_ADMIN', 'ADMIN')
   revoke(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) {

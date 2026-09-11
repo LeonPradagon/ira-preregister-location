@@ -64,6 +64,22 @@ export function shouldShowLocationRetry(
   );
 }
 
+export function isVerificationCycleExhausted(
+  status: string | null | undefined,
+  attemptCount: number,
+  reminderCount: number,
+  maxAttempts = 3,
+  maxReminders = 3,
+): boolean {
+  const normalizedStatus = String(status || '')
+    .trim()
+    .toUpperCase();
+  return (
+    reminderCount >= maxReminders &&
+    (attemptCount >= maxAttempts || normalizedStatus === 'REMINDER_LIMIT_REACHED')
+  );
+}
+
 export function shouldShowReminderResume(
   status: string | null | undefined,
   confirmationStatus: string | null | undefined,
@@ -95,7 +111,6 @@ export function shouldShowReminderPending(
   isReminderLink: boolean,
   reminderScheduledNow: boolean,
   canScheduleReminder = true,
-  maxReminders = 3,
 ): boolean {
   const normalizedStatus = String(status || '')
     .trim()
@@ -105,7 +120,7 @@ export function shouldShowReminderPending(
     .toUpperCase();
   return (
     reminderScheduledNow ||
-    (isReminderLink && !canScheduleReminder && reminderCount < maxReminders) ||
+    (isReminderLink && !canScheduleReminder) ||
     (!isReminderLink &&
       normalizedConfirmationStatus === 'CONFIRMED' &&
       reminderCount > 0 &&

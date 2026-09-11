@@ -38,4 +38,12 @@ describe('verification state machine', () => {
   it('allows scheduling the final reminder range directly from a failed GPS result', () => {
     expect(() => assertTransition('LOCATION_MISMATCH', 'REMINDER_LIMIT_REACHED')).not.toThrow();
   });
+
+  it('allows an exhausted cycle to be reviewed or approved by the team', () => {
+    expect(() => assertTransition('GPS_CAPTURING', 'REMINDER_LIMIT_REACHED')).not.toThrow();
+    expect(() => assertTransition('REMINDER_LIMIT_REACHED', 'MANUAL_REVIEW')).not.toThrow();
+    expect(() => assertTransition('REMINDER_LIMIT_REACHED', 'LOCATION_VALID')).not.toThrow();
+    expect(() => assertTransition('REMINDER_LIMIT_REACHED', 'LOCATION_MISMATCH')).not.toThrow();
+    expect(() => assertTransition('REMINDER_LIMIT_REACHED', 'ADDRESS_EDITING')).not.toThrow();
+  });
 });

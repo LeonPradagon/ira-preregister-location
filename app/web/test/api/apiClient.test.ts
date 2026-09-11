@@ -89,4 +89,22 @@ describe('API client', () => {
     const config = adapterMock.mock.calls[0][0];
     expect(config.url).toBe('/admin/customers?addressCompleteness=INCOMPLETE');
   });
+
+  it('allows the location submission to wait for reverse geocoding', async () => {
+    const adapterMock = vi.fn().mockResolvedValue({
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { result: 'LOCATION_VALID' },
+    });
+    apiClient.defaults.adapter = adapterMock;
+
+    await api.submitLocation('verification-token', [
+      { latitude: -6.2, longitude: 106.8, accuracyMeters: 10, capturedAt: '2026-09-11T00:00:00.000Z' },
+    ]);
+
+    const config = adapterMock.mock.calls[0][0];
+    expect(config.url).toBe('/public/verifications/verification-token/location');
+    expect(config.timeout).toBe(60_000);
+  });
 });

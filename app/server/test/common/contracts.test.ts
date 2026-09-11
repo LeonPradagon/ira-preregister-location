@@ -103,6 +103,22 @@ describe('API contracts', () => {
     ).toBe(true);
   });
 
+  it('rejects markup and control characters in customer address input', () => {
+    const baseAddress = {
+      province: 'DKI Jakarta',
+      city: 'Jakarta Barat',
+      district: 'Palmerah',
+      subdistrict: 'Palmerah',
+      postalCode: '11540',
+      street: 'Jl. KH Syahdan',
+      houseNumber: '10',
+    };
+
+    expect(addressChangeSchema.safeParse({ ...baseAddress, street: '<script>alert(1)</script>' }).success).toBe(false);
+    expect(addressChangeSchema.safeParse({ ...baseAddress, addressDetail: 'Blok A\u0000' }).success).toBe(false);
+    expect(addressChangeSchema.safeParse({ ...baseAddress, street: "Jl. O'Connor #12/A" }).success).toBe(true);
+  });
+
   it('accepts a filter campaign without sending customer IDs to the API', () => {
     const result = campaignCreateSchema.safeParse({
       name: 'All unverified',

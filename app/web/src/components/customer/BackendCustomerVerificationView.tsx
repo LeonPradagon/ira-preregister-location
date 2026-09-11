@@ -15,6 +15,7 @@ import {
   requiredAddressFields,
   shouldAllowAddressChange,
   shouldShowCustomerConfirmation,
+  isVerificationCycleExhausted,
   shouldShowLocationRetry,
   shouldShowReminderPending,
   shouldShowReminderPickerOnLink,
@@ -738,8 +739,14 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     reminderScheduledNow,
     context.session.canScheduleReminder,
   );
+  const cycleExhausted = isVerificationCycleExhausted(
+    status,
+    context.session.attemptCount,
+    context.session.reminderCount,
+  );
   const reminderLinkFlow =
     !selectedReminderWaiting &&
+    !cycleExhausted &&
     confirmed &&
     context.session.canScheduleReminder &&
     context.session.reminderCount > 0 &&
@@ -1260,7 +1267,10 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                   {reminderActionAvailable && reminderAction}
                 </div>
               )}
-              {!reminderLinkFlow && shouldShowLocationRetry(status, confirmationStatus) && !selectedReminderWaiting && (
+              {!reminderLinkFlow &&
+                !cycleExhausted &&
+                shouldShowLocationRetry(status, confirmationStatus) &&
+                !selectedReminderWaiting && (
                 <div className="space-y-3">
                   <ResultPanel
                     icon={<Compass className="h-7 w-7 text-blue-600" />}
@@ -1298,8 +1308,8 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                 !showConfirmation && (
                   <ResultPanel
                     icon={<Clock3 className="h-7 w-7 text-amber-600" />}
-                    title={t('customer.reminderLimit')}
-                    text={t('customer.returnToLink')}
+                    title={cycleExhausted ? t('customer.verificationCycleExhaustedTitle') : t('customer.reminderLimit')}
+                    text={cycleExhausted ? t('customer.verificationCycleExhaustedText') : t('customer.returnToLink')}
                   />
                 )}
               {status === 'CUSTOMER_DATA_MISMATCH' && (

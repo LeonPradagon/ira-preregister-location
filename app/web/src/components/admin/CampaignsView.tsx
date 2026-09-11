@@ -188,6 +188,7 @@ export const CampaignsView: React.FC = () => {
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [items, setItems] = useState<Array<Record<string, unknown>>>([]);
   const [itemTotal, setItemTotal] = useState(0);
+  const [itemsLoading, setItemsLoading] = useState(false);
   const [itemPage, setItemPage] = useState(1);
   const [itemPageSize, setItemPageSize] = useState<TablePageSize>(10);
   const [page, setPage] = useState(1);
@@ -365,6 +366,7 @@ export const CampaignsView: React.FC = () => {
       await loadCandidates();
       setMessage(t('campaigns.created', { count: campaign.targetCount.toLocaleString('en-US') }));
       await loadCampaigns();
+      await showItems(campaign.id);
       await showActionSuccess(
         t('campaigns.sentSuccess'),
         t('campaigns.created', { count: campaign.targetCount.toLocaleString('en-US') }),
@@ -397,7 +399,12 @@ export const CampaignsView: React.FC = () => {
     setSelectedCampaignId(campaignId);
     setItemPage(nextPage);
     setItemPageSize(nextPageSize);
-    if (nextPage === 1) setItemCursors({});
+    if (nextPage === 1) {
+      setItemCursors({});
+      setItems([]);
+      setItemTotal(0);
+    }
+    setItemsLoading(true);
     try {
       const response = await api.campaignItems(campaignId, {
         page: nextPage,
@@ -409,6 +416,8 @@ export const CampaignsView: React.FC = () => {
       setItemTotal(response.total);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('campaigns.itemLoadError'));
+    } finally {
+      setItemsLoading(false);
     }
   };
 
@@ -797,7 +806,14 @@ export const CampaignsView: React.FC = () => {
                   </tr>
                 );
               })}
-              {!items.length && (
+              {itemsLoading && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-500">
+                    {t('campaigns.processing')}
+                  </td>
+                </tr>
+              )}
+              {!itemsLoading && !items.length && (
                 <tr>
                   <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-500">
                     {t('campaigns.noItems')}

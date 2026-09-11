@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { mapApiCustomer, mapApiSession, useApp } from '../../context/AppContext';
 import { api } from '../../lib/apiClient';
+import { formatAppDateTime } from '../../lib/dateTime';
 import { Customer, Reminder, ReminderStatus, VerificationSession } from '../../types';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 import { AppLoader } from '../common/AppLoader';
@@ -40,9 +41,6 @@ const StatusIcon: React.FC<{ status: ReminderStatus }> = ({ status }) => {
   if (status === 'CANCELLED' || status === 'LIMIT_REACHED') return <AlertTriangle className="h-3.5 w-3.5" />;
   return <CalendarClock className="h-3.5 w-3.5" />;
 };
-
-const formatDate = (value?: string) =>
-  value ? new Date(value).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 
 export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerification }) => {
   const { validationConfig, dashboardSummary } = useApp();
@@ -243,7 +241,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerificati
                 </div>
               </td>
               <td className="px-4 py-3.5 align-top text-[11px] text-slate-600 dark:text-slate-300">
-                <div className="font-medium">{formatDate(reminder.sentAt || reminder.scheduledAt)}</div>
+                <div className="font-medium">{formatAppDateTime(reminder.sentAt || reminder.scheduledAt)}</div>
                 {reminder.sentAt && (
                   <div className="mt-1 text-[10px] text-emerald-600 dark:text-emerald-300">Sent at this time</div>
                 )}

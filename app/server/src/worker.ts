@@ -5,7 +5,7 @@ import { rm } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { Queue, Worker } from 'bullmq';
-import { and, desc, eq, inArray, isNull, isNotNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, isNotNull, lte, lt, ne, or, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { db, pool } from './db/client.js';
 import {
@@ -31,6 +31,7 @@ import { ValidationConfigService } from './config/validation-config.service.js';
 import { getWhatsAppTemplate } from './integrations/whatsapp/whatsapp.templates.js';
 import { nextAutomaticReminderAt, reminderLinkExpiresAt } from './modules/reminders/reminder.policy.js';
 import { CampaignItemState } from './modules/campaigns/campaign-item-state.js';
+import { campaignNeedsMaterialization } from './modules/campaigns/campaign-target.policy.js';
 import { ReadCacheService } from './common/read-cache.service.js';
 import { logEvent } from './common/structured-log.js';
 import { queueNames } from './common/queue-names.js';
@@ -988,24 +989,46 @@ const enqueueDueCampaignItems = async () => {
 
 const enqueueCampaignMaterialization = async () => {
   const campaignsToMaterialize = await db
-    .select({ id: verificationCampaigns.id, cursor: verificationCampaigns.materializationCursor })
+    .select({
+      id: verificationCampaigns.id,
+      cursor: verificationCampaigns.materializationCursor,
+      materializationComplete: verificationCampaigns.materializationComplete,
+      materializedCount: verificationCampaigns.materializedCount,
+      targetCount: verificationCampaigns.targetCount,
+    })
     .from(verificationCampaigns)
-    .where(and(eq(verificationCampaigns.status, 'RUNNING'), eq(verificationCampaigns.materializationComplete, false)))
+    .where(
+      and(
+        eq(verificationCampaigns.status, 'RUNNING'),
+        or(
+          eq(verificationCampaigns.materializationComplete, false),
+          lt(verificationCampaigns.materializedCount, verificationCampaigns.targetCount),
+        ),
+      ),
+    )
     .orderBy(verificationCampaigns.updatedAt, verificationCampaigns.id)
     .limit(20);
   await Promise.all(
-    campaignsToMaterialize.map((campaign) =>
-      campaignMaterializationQueue.add(
-        'materialize-campaign',
-        { campaignId: campaign.id },
-        {
-          jobId: queueSafeJobId('materialize', campaign.id, campaign.cursor ?? 'start'),
-          attempts: 1,
-          removeOnComplete: true,
-          removeOnFail: true,
-        },
+    campaignsToMaterialize
+      .filter((campaign) =>
+        campaignNeedsMaterialization(
+          campaign.materializationComplete,
+          campaign.materializedCount,
+          campaign.targetCount,
+        ),
+      )
+      .map((campaign) =>
+        campaignMaterializationQueue.add(
+          'materialize-campaign',
+          { campaignId: campaign.id },
+          {
+            jobId: queueSafeJobId('materialize', campaign.id, campaign.cursor ?? 'start'),
+            attempts: 1,
+            removeOnComplete: true,
+            removeOnFail: true,
+          },
+        ),
       ),
-    ),
   );
 };
 

@@ -61,6 +61,7 @@ const auditLabels: Record<string, string> = {
   VERIFICATION_STARTED: 'Verification started',
   VERIFICATION_SIMULATION_CREATED: 'Verification simulation created',
   VERIFICATION_REVOKED: 'Verification revoked',
+  VERIFICATION_CYCLE_RESTARTED: 'Verification cycle restarted',
   LOCATION_CAPTURED: 'Location captured',
   LOCATION_VALID: 'Location matched',
   LOCATION_VALIDATION_COMPLETED: 'Location check completed',

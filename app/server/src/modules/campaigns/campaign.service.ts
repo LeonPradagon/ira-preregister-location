@@ -25,8 +25,10 @@ import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js'
 import { buildVerificationSimulationConfig } from '../verification/simulation-config.js';
 import { getPublicWebOrigin } from '../../config/public-origin.js';
 import {
+  campaignNeedsMaterialization,
   campaignRecipientReservationStatuses,
   selectCampaignTargetIds,
+  selectMaterializationTargetIds,
 } from './campaign-target.policy.js';
 import { campaignEligibleAddressSql } from '../validation/address-completeness.sql.js';
 
@@ -376,15 +378,27 @@ export class CampaignService {
 
   async materializeNext(campaignId: string) {
     const [campaign] = await db.select().from(verificationCampaigns).where(eq(verificationCampaigns.id, campaignId));
-    if (!campaign || campaign.status !== 'RUNNING' || campaign.materializationComplete)
+    if (
+      !campaign ||
+      campaign.status !== 'RUNNING' ||
+      !campaignNeedsMaterialization(campaign.materializationComplete, campaign.materializedCount, campaign.targetCount)
+    )
       return { done: true, inserted: 0 };
     const stored = (
       campaign.targetFilter && typeof campaign.targetFilter === 'object' ? campaign.targetFilter : {}
     ) as StoredTargetFilter;
+    const materializationTargetIds = stored.customerIds?.length
+      ? selectMaterializationTargetIds(stored.customerIds, campaign.materializationCursor)
+      : null;
+    const candidateWhere = materializationTargetIds
+      ? materializationTargetIds.length
+        ? inArray(customers.id, materializationTargetIds)
+        : sql`false`
+      : filtersForTarget(stored, campaign.materializationCursor ?? undefined);
     const candidateRows = await db
       .select()
       .from(customers)
-      .where(filtersForTarget(stored, campaign.materializationCursor ?? undefined))
+      .where(candidateWhere)
       .orderBy(asc(customers.id))
       .limit(campaign.batchSize);
     if (!candidateRows.length) {

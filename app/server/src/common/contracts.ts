@@ -26,6 +26,13 @@ export const reminderSchema = z
 
 export const addressStatusSchema = z.object({ sameAddress: z.boolean() });
 
+const unsafeAddressCharacterPattern = /[\u0000-\u001F\u007F-\u009F<>]/;
+const addressTextSchema = (max: number) =>
+  z.string().trim().max(max).refine((value) => !unsafeAddressCharacterPattern.test(value), {
+    message: 'Alamat mengandung karakter yang tidak diizinkan',
+  });
+const requiredAddressTextSchema = (max: number) => addressTextSchema(max).min(1);
+
 export const campaignTargetFilterSchema = z.object({
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).default('UNVERIFIED'),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
@@ -54,19 +61,15 @@ export const campaignCreateSchema = z
   });
 
 export const addressChangeSchema = z.object({
-  province: z.string().trim().min(1).max(128),
-  city: z.string().trim().min(1).max(128),
-  district: z.string().trim().min(1).max(128),
-  subdistrict: z.string().trim().min(1).max(128),
-  postalCode: z
-    .string()
-    .trim()
+  province: requiredAddressTextSchema(128),
+  city: requiredAddressTextSchema(128),
+  district: requiredAddressTextSchema(128),
+  subdistrict: requiredAddressTextSchema(128),
+  postalCode: addressTextSchema(5)
     .refine((value) => !value || /^\d{5}$/.test(value), 'Kode pos harus terdiri dari 5 digit')
     .default(''),
-  street: z.string().trim().min(1).max(255),
-  houseNumber: z
-    .string()
-    .trim()
+  street: requiredAddressTextSchema(255),
+  houseNumber: addressTextSchema(64)
     .max(64)
     .refine(
       (value) =>
@@ -74,19 +77,19 @@ export const addressChangeSchema = z.object({
       'Nomor rumah harus berupa nomor yang valid jika diisi',
     )
     .default(''),
-  rt: z.string().trim().max(8).optional(),
-  rw: z.string().trim().max(8).optional(),
-  building: z.string().trim().max(255).optional(),
-  block: z.string().trim().max(64).optional(),
-  unit: z.string().trim().max(64).optional(),
-  addressDetail: z.string().trim().max(1000).optional(),
-  landmark: z.string().trim().max(1000).optional(),
+  rt: addressTextSchema(8).optional(),
+  rw: addressTextSchema(8).optional(),
+  building: addressTextSchema(255).optional(),
+  block: addressTextSchema(64).optional(),
+  unit: addressTextSchema(64).optional(),
+  addressDetail: addressTextSchema(1000).optional(),
+  landmark: addressTextSchema(1000).optional(),
 });
 
 export const addressLookupSchema = addressChangeSchema.extend({
-  postalCode: z.string().trim().max(16).optional(),
-  street: z.string().trim().max(255).optional(),
-  houseNumber: z.string().trim().max(64).optional(),
+  postalCode: addressTextSchema(16).optional(),
+  street: addressTextSchema(255).optional(),
+  houseNumber: addressTextSchema(64).optional(),
 });
 
 export const customerCreateSchema = z.object({

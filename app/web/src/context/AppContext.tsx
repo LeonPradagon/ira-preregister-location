@@ -132,6 +132,7 @@ interface AppContextType {
   getCustomerSessions: (customerId: string) => VerificationSession[];
   createVerificationSession: (customerId: string, addressId: string) => Promise<VerificationSession>;
   resendInvitation: (sessionId: string) => Promise<void>;
+  restartVerificationCycle: (sessionId: string) => Promise<{ sessionId: string }>;
   revokeVerificationSession: (sessionId: string) => Promise<void>;
   performManualReview: (
     sessionId: string,
@@ -670,6 +671,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
     await refreshDashboard();
   };
+  const restartVerificationCycle = async (sessionId: string) => {
+    assertCapability(currentAdmin?.role, 'sendVerification');
+    const result = await api.restartVerification(sessionId);
+    const now = new Date().toISOString();
+    setVerificationSessions((prev) =>
+      prev.map((session) =>
+        session.id === sessionId
+          ? { ...session, revokedAt: now, verificationStatus: 'EXPIRED', updatedAt: now }
+          : session,
+      ),
+    );
+    setReminders((prev) =>
+      prev.map((reminder) =>
+        reminder.sessionId === sessionId && reminder.status === 'SCHEDULED'
+          ? { ...reminder, status: 'CANCELLED' }
+          : reminder,
+      ),
+    );
+    await loadVerificationDetail(result.sessionId);
+    await refreshDashboard();
+    return { sessionId: result.sessionId };
+  };
   const revokeVerificationSession = async (sessionId: string) => {
     assertCapability(currentAdmin?.role, 'sendVerification');
     await api.revoke(sessionId);
@@ -840,6 +863,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getCustomerSessions,
         createVerificationSession,
         resendInvitation,
+        restartVerificationCycle,
         revokeVerificationSession,
         performManualReview,
         updateAddressFromGps,

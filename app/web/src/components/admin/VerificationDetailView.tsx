@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ReviewDecision } from '../../types';
+import { formatAppDateTime } from '../../lib/dateTime';
 import { VerificationMap } from '../maps/VerificationMap';
 import {
   calculateGeodesicDistanceMeters,
@@ -38,9 +39,10 @@ const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) 
 interface VerificationDetailViewProps {
   sessionId: string;
   onBack: () => void;
+  onRestart: (sessionId: string) => void;
 }
 
-export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ sessionId, onBack }) => {
+export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ sessionId, onBack, onRestart }) => {
   const {
     verificationSessions,
     customers,
@@ -52,6 +54,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
     performManualReview,
     updateAddressFromGps,
     resendInvitation,
+    restartVerificationCycle,
     sendManualReminder,
     validationConfig,
   } = useApp();
@@ -248,10 +251,32 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
     }
   };
 
+  const handleRestartVerificationCycle = async () => {
+    const confirmed = await confirmAction({
+      title: 'Mulai siklus verifikasi baru?',
+      text: 'Sesi lama akan ditutup sebagai riwayat dan customer akan menerima link verifikasi baru dengan batas percobaan yang baru.',
+      confirmButtonText: 'Ya, buat siklus baru',
+      cancelButtonText: 'Batal',
+    });
+    if (!confirmed) return;
+    try {
+      const result = await restartVerificationCycle(session.id);
+      onRestart(result.sessionId);
+    } catch (cause) {
+      setReminderFeedback({
+        type: 'error',
+        message: cause instanceof Error ? cause.message : 'Siklus verifikasi baru gagal dibuat.',
+      });
+    }
+  };
+
   // RBAC permission check for manual review
   const canPerformReview =
     currentAdmin?.role === 'SUPER_ADMIN' || currentAdmin?.role === 'ADMIN' || currentAdmin?.role === 'REVIEWER';
   const canSendVerification = hasCapability(currentAdmin?.role, 'sendVerification');
+  const cycleExhausted =
+    session.attemptCount >= Math.min(3, validationConfig.MAX_LOCATION_ATTEMPTS) &&
+    session.reminderCount >= validationConfig.MAX_REMINDERS_PER_SESSION;
 
   return (
     <div className="space-y-4">
@@ -286,24 +311,39 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Resend WhatsApp Link */}
-          <button
-            type="button"
-            onClick={() => void handleResendInvitation()}
-            disabled={!canSendVerification}
-            title={
-              !canSendVerification ? 'Role ini tidak dapat mengirim ulang undangan' : 'Kirim ulang undangan WhatsApp'
-            }
-            className="px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
-          >
-            <Send className="w-3.5 h-3.5 text-gray-600 dark:text-gray-400" />
-            <span>Kirim Ulang Undangan</span>
-          </button>
+          {/* A new cycle is separate from ordinary resend: the exhausted
+              session remains available as history. */}
+          {cycleExhausted ? (
+            <button
+              type="button"
+              onClick={() => void handleRestartVerificationCycle()}
+              disabled={!canSendVerification}
+              title={!canSendVerification ? 'Role ini tidak dapat membuat siklus baru' : 'Mulai siklus verifikasi baru'}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Mulai Siklus Baru</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handleResendInvitation()}
+              disabled={!canSendVerification}
+              title={
+                !canSendVerification ? 'Role ini tidak dapat mengirim ulang undangan' : 'Kirim ulang undangan WhatsApp'
+              }
+              className="px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+            >
+              <Send className="w-3.5 h-3.5 text-gray-600 dark:text-gray-400" />
+              <span>Kirim Ulang Undangan</span>
+            </button>
+          )}
 
           {/* Manual Review Button */}
           {canPerformReview &&
             (session.verificationStatus === 'MANUAL_REVIEW' ||
-              session.verificationStatus === 'CUSTOMER_DATA_MISMATCH') && (
+              session.verificationStatus === 'CUSTOMER_DATA_MISMATCH' ||
+              (session.verificationStatus === 'REMINDER_LIMIT_REACHED' && cycleExhausted)) && (
               <button
                 type="button"
                 onClick={() => setReviewModalOpen(true)}
@@ -494,7 +534,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                       </span>
                     </div>
                     <div className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
-                      Jadwal: {new Date(rem.scheduledAt).toLocaleString('id-ID')}
+                      Jadwal: {formatAppDateTime(rem.scheduledAt)}
                     </div>
                   </div>
                 ))}
@@ -1010,28 +1050,30 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                     </div>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReviewDecision('REQUEST_RETRY');
-                      setReviewReasonCode('GPS_RETRY_REQUESTED_BY_OPS');
-                    }}
-                    className={`p-2.5 rounded-lg border text-left transition-all ${
-                      reviewDecision === 'REQUEST_RETRY'
-                        ? 'border-gray-900 dark:border-gray-400 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white font-semibold'
-                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span>Minta pemeriksaan ulang</span>
-                      {reviewDecision === 'REQUEST_RETRY' && (
-                        <RefreshCw className="w-3.5 h-3.5 text-gray-900 dark:text-white" />
-                      )}
-                    </div>
-                    <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                      Minta customer ambil GPS ulang
-                    </div>
-                  </button>
+                  {!cycleExhausted && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReviewDecision('REQUEST_RETRY');
+                        setReviewReasonCode('GPS_RETRY_REQUESTED_BY_OPS');
+                      }}
+                      className={`p-2.5 rounded-lg border text-left transition-all ${
+                        reviewDecision === 'REQUEST_RETRY'
+                          ? 'border-gray-900 dark:border-gray-400 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white font-semibold'
+                          : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span>Minta pemeriksaan ulang</span>
+                        {reviewDecision === 'REQUEST_RETRY' && (
+                          <RefreshCw className="w-3.5 h-3.5 text-gray-900 dark:text-white" />
+                        )}
+                      </div>
+                      <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                        Minta customer ambil GPS ulang
+                      </div>
+                    </button>
+                  )}
 
                   <button
                     type="button"

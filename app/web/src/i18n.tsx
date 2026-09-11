@@ -2010,6 +2010,9 @@ const customerMessages: Record<Language, Record<string, string>> = {
       'Ini adalah pengingat terakhir dari maksimal 3 pengingat. Silakan tunggu jadwal pengingat ini.',
     'customer.reminderLimit': 'Pengingat sudah mencapai batas',
     'customer.returnToLink': 'Buka kembali tautan ini saat sudah berada di alamat pemasangan.',
+    'customer.verificationCycleExhaustedTitle': 'Batas verifikasi sudah tercapai',
+    'customer.verificationCycleExhaustedText':
+      'Batas percobaan GPS sudah 3 kali dan batas pengingat sudah 3 kali. Silakan hubungi Customer Service IRA untuk bantuan selanjutnya.',
     'customer.newAddressSubmitted': 'Alamat baru sudah dikirim',
     'customer.addressWaitingGps': 'Alamat baru menunggu pemeriksaan lokasi.',
     'customer.manualReview': 'Sedang diperiksa tim',
@@ -2090,6 +2093,9 @@ const customerMessages: Record<Language, Record<string, string>> = {
       'This is the last reminder of the maximum 3 reminders. Please wait for this reminder schedule.',
     'customer.reminderLimit': 'The reminder limit has been reached',
     'customer.returnToLink': 'Reopen this link when you are at the installation address.',
+    'customer.verificationCycleExhaustedTitle': 'The verification limit has been reached',
+    'customer.verificationCycleExhaustedText':
+      'The GPS attempt limit of 3 and reminder limit of 3 have been reached. Please contact IRA Customer Service for further assistance.',
     'customer.newAddressSubmitted': 'New address sent',
     'customer.addressWaitingGps': 'The new address is waiting for a location check.',
     'customer.manualReview': 'Our team is checking this',
