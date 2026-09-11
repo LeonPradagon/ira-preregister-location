@@ -7,6 +7,7 @@ import { AppLoader } from '../common/AppLoader';
 import { IntegrationOutboxEvent } from '../../types';
 import { TablePagination, TablePageSize } from '../common/AdminTable';
 import { userFriendlyStatus } from '../../lib/statusLabels';
+import { formatAppDateTime } from '../../lib/dateTime';
 
 export const IntegrationsView: React.FC = () => {
   const { t } = useTranslation();
@@ -196,7 +197,7 @@ export const IntegrationsView: React.FC = () => {
                     </span>
                   </div>
                   <div className="font-mono text-[10px] text-gray-500 dark:text-gray-400">
-                    ID: {evt.id} • {new Date(evt.sentAt || evt.createdAt).toLocaleString('id-ID')}
+                    ID: {evt.id} • {formatAppDateTime(evt.sentAt || evt.createdAt)}
                   </div>
                 </div>
 

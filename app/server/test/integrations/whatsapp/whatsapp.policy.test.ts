@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   hashPhone,
   isOptOutMessage,
+  formatWhatsAppDateTime,
   nextAllowedSendAt,
   nextUtcMidnight,
 } from '../../../src/integrations/whatsapp/whatsapp.policy.js';
@@ -23,5 +24,9 @@ describe('WhatsApp safety policy', () => {
 
   it('moves daily quota retry to the next UTC day', () => {
     expect(nextUtcMidnight(new Date('2026-08-31T10:00:00.000Z')).toISOString()).toBe('2026-09-01T00:00:00.000Z');
+  });
+
+  it('formats cooldown timestamps in Asia/Jakarta with WIB', () => {
+    expect(formatWhatsAppDateTime(new Date('2026-09-11T17:48:02.506Z'))).toBe('12 Sep 2026, 00.48.02 WIB');
   });
 });

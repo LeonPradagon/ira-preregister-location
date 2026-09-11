@@ -86,12 +86,16 @@ describe('customer verification confirmation flow', () => {
     expect(shouldShowLocationMatchDetails('LOCATION_VALID', false)).toBe(false);
   });
 
-  it('ends the verification cycle when the final reminder link is opened after GPS attempts are exhausted', () => {
-    expect(isVerificationCycleExhausted('REMINDER_LIMIT_REACHED', 0, 3)).toBe(true);
+  it('keeps location verification available when only the reminder limit has been reached', () => {
+    expect(isVerificationCycleExhausted('REMINDER_LIMIT_REACHED', 0, 3)).toBe(false);
   });
 
   it('ends the verification cycle from the counters even if the status is still GPS capturing', () => {
     expect(isVerificationCycleExhausted('GPS_CAPTURING', 3, 3)).toBe(true);
+  });
+
+  it('ends the verification cycle only when both limits are exhausted', () => {
+    expect(isVerificationCycleExhausted('REMINDER_LIMIT_REACHED', 3, 3)).toBe(true);
   });
 
   it('does not end the cycle when only the reminder limit has been reached', () => {
@@ -125,6 +129,7 @@ describe('customer verification confirmation flow', () => {
 
   it('shows the verification button only when a unique reminder link is opened', () => {
     expect(shouldShowReminderResume('WAITING_FOR_HOME', 'CONFIRMED', 1, true, false)).toBe(true);
+    expect(shouldShowReminderResume('REMINDER_LIMIT_REACHED', 'CONFIRMED', 3, true, false)).toBe(true);
     expect(shouldShowReminderResume('WAITING_FOR_HOME', 'CONFIRMED', 2, true, false, false)).toBe(false);
   });
 

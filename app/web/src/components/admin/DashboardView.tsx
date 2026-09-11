@@ -22,6 +22,7 @@ import { useApp } from '../../context/AppContext';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
 import { AppLoader } from '../common/AppLoader';
+import { formatAppDateTime } from '../../lib/dateTime';
 
 const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) =>
   props.className?.includes('animate-spin') ? <AppLoader size={18} label="Loading" /> : <RefreshCwIcon {...props} />;
@@ -217,12 +218,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
             </p>
             <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
               {t('dashboard.apiUpdated')}:{' '}
-              {dashboardSummary.generatedAt
-                ? new Date(dashboardSummary.generatedAt).toLocaleString('en-GB', {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  })
-                : t('dashboard.loading')}
+              {dashboardSummary.generatedAt ? formatAppDateTime(dashboardSummary.generatedAt) : t('dashboard.loading')}
             </p>
           </div>
           <button

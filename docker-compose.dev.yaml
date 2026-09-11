@@ -1,4 +1,4 @@
-name: ira-preregister-location
+name: ira-preregister-dev
 
 services:
   postgres:

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ReviewDecision } from '../../types';
-import { formatAppDateTime } from '../../lib/dateTime';
+import { formatAppDate, formatAppDateTime, formatAppTime } from '../../lib/dateTime';
 import { VerificationMap } from '../maps/VerificationMap';
 import {
   calculateGeodesicDistanceMeters,
@@ -305,7 +305,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
             </div>
             <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
               Nomor pemeriksaan: <code className="font-mono text-gray-700 dark:text-gray-300">{session.id}</code> •
-              Dibuat: {new Date(session.createdAt).toLocaleString('id-ID')}
+              Dibuat: {formatAppDateTime(session.createdAt)}
             </div>
           </div>
         </div>
@@ -418,7 +418,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
               <div>
                 <span className="text-gray-500 dark:text-gray-400 block text-[11px]">Masa Berlaku Tautan</span>
                 <span className="text-gray-700 dark:text-gray-300 text-[11px]">
-                  {new Date(session.expiresAt).toLocaleDateString('id-ID')}
+                  {formatAppDate(session.expiresAt)}
                 </span>
               </div>
             </div>
@@ -565,7 +565,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                     </div>
                     <div className="mt-1 text-gray-500 dark:text-gray-400">
                       {capture.latitude.toFixed(6)}, {capture.longitude.toFixed(6)} · ±{capture.accuracyMeters}m ·{' '}
-                      {new Date(capture.serverTimestamp).toLocaleString('id-ID')}
+                      {formatAppDateTime(capture.serverTimestamp)}
                     </div>
                   </div>
                 ))}
@@ -752,7 +752,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                   <div className="bg-gray-50 dark:bg-gray-800/60 p-2 rounded-lg border border-gray-200 dark:border-gray-700">
                     <span className="text-gray-500 dark:text-gray-400 text-[10px] block">Waktu Tangkapan:</span>
                     <span className="font-mono text-gray-600 dark:text-gray-300 text-[10px]">
-                      {new Date(capturedLoc.capturedAt).toLocaleTimeString('id-ID')}
+                      {formatAppTime(capturedLoc.capturedAt)}
                     </span>
                   </div>
                 </div>
@@ -803,7 +803,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                       {Math.round(lastVal.addressScore * 100)}%
                     </span>
                   </p>
-                  <p>Validasi terakhir: {new Date(lastVal.createdAt).toLocaleString('id-ID')}</p>
+                  <p>Validasi terakhir: {formatAppDateTime(lastVal.createdAt)}</p>
                 </div>
               )}
             </div>

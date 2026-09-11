@@ -85,19 +85,13 @@ export function shouldShowLocationMatchDetails(
 }
 
 export function isVerificationCycleExhausted(
-  status: string | null | undefined,
+  _status: string | null | undefined,
   attemptCount: number,
   reminderCount: number,
   maxAttempts = 3,
   maxReminders = 3,
 ): boolean {
-  const normalizedStatus = String(status || '')
-    .trim()
-    .toUpperCase();
-  return (
-    reminderCount >= maxReminders &&
-    (attemptCount >= maxAttempts || normalizedStatus === 'REMINDER_LIMIT_REACHED')
-  );
+  return attemptCount >= maxAttempts && reminderCount >= maxReminders;
 }
 
 export function shouldShowReminderResume(

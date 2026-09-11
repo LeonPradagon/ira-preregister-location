@@ -6,6 +6,7 @@ import { buildGoogleMapsDeepLink, formatAddressForDisplay, isIncompleteAddress }
 import { userFriendlyStatus } from '../../lib/statusLabels';
 import { confirmAction } from '../../lib/swal';
 import { CoordinateAuditStatus } from '../../types';
+import { formatAppDate, formatAppDateTime } from '../../lib/dateTime';
 
 interface CustomerDetailViewProps {
   customerId: string;
@@ -106,7 +107,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
             <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
               WhatsApp:{' '}
               <span className="font-mono text-gray-800 dark:text-gray-200 font-medium">{customer.phoneE164}</span> •
-              Terdaftar sejak: {new Date(customer.createdAt).toLocaleDateString('id-ID')}
+              Terdaftar sejak: {formatAppDate(customer.createdAt)}
             </div>
             <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-gray-500 dark:text-gray-400">
               <span>
@@ -116,7 +117,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
               <span>
                 Source dibuat:{' '}
                 <strong className="text-gray-700 dark:text-gray-300">
-                  {customer.sourceCreatedAt ? new Date(customer.sourceCreatedAt).toLocaleString('id-ID') : '—'}
+                  {customer.sourceCreatedAt ? formatAppDateTime(customer.sourceCreatedAt) : '—'}
                 </strong>
               </span>
               <span>
@@ -266,7 +267,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
                         </span>
                       </div>
                       <span className="text-[10px] text-gray-500 dark:text-gray-400 font-mono">
-                        {new Date(session.createdAt).toLocaleDateString('id-ID')}
+                        {formatAppDate(session.createdAt)}
                       </span>
                     </div>
 

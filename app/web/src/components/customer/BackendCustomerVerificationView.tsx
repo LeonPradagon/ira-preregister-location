@@ -17,6 +17,7 @@ import {
 } from '../../lib/validationEngine';
 import type { AddressDisplayField } from '../../lib/validationEngine';
 import { findRegionOption, regionOptionValue } from '../../lib/regionSelection';
+import { formatAppDateTime, parseAppDateTimeLocalValue, toAppDateTimeLocalValue } from '../../lib/dateTime';
 import {
   getMissingAddressFields,
   normalizeOptionalAddressValue,
@@ -269,11 +270,6 @@ const LocationMatchDetails: React.FC<{
   );
 };
 
-const toDateTimeLocalValue = (date: Date) => {
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
-};
-
 const createSimulationContext = (
   customerName: string,
   customerAddress: string,
@@ -377,7 +373,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   const [gpsRetryAvailable, setGpsRetryAvailable] = useState(false);
   const [locationCaptureError, setLocationCaptureError] = useState(false);
   const [reminderDateTime, setReminderDateTime] = useState(() =>
-    toDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)),
+    toAppDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)),
   );
   const [reminderPickerOpen, setReminderPickerOpen] = useState(false);
   const [reminderScheduledNow, setReminderScheduledNow] = useState(false);
@@ -478,7 +474,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     setGpsPermissionDenied(false);
     setGpsRetryAvailable(false);
     setLocationCaptureError(false);
-    setReminderDateTime(toDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)));
+    setReminderDateTime(toAppDateTimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)));
     setReminderPickerOpen(false);
     setReminderScheduledNow(false);
     setError(null);
@@ -633,7 +629,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   };
 
   const scheduleReminder = () => {
-    const scheduledAt = new Date(reminderDateTime);
+    const scheduledAt = parseAppDateTimeLocalValue(reminderDateTime);
     if (Number.isNaN(scheduledAt.getTime()) || scheduledAt <= new Date()) {
       setError(t('customer.reminderInvalid'));
       return;
@@ -985,7 +981,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   );
   const cycleExhausted = isVerificationCycleExhausted(
     status,
-    context.session.attemptCount,
+    attemptsUsed,
     context.session.reminderCount,
   );
   const reminderLinkFlow =
@@ -1200,7 +1196,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       value={reminderDateTime}
       onChange={setReminderDateTime}
       disabled={busy || context.session.reminderCount >= 3}
-      max={toDateTimeLocalValue(new Date(context.session.expiresAt))}
+      max={toAppDateTimeLocalValue(new Date(context.session.expiresAt))}
       onSubmit={scheduleReminder}
       onCancel={() => setReminderPickerOpen(false)}
     />
@@ -1836,7 +1832,7 @@ const ReminderPicker: React.FC<{
   onCancel: () => void;
 }> = ({ value, onChange, disabled, max, onSubmit, onCancel }) => {
   const { t } = useTranslation();
-  const minimum = toDateTimeLocalValue(new Date(Date.now() + 60_000));
+  const minimum = toAppDateTimeLocalValue(new Date(Date.now() + 60_000));
   return (
     <div className="min-w-0 space-y-3 rounded-lg border border-amber-200 bg-white p-3">
       <div className="flex items-start justify-between gap-3">
@@ -1887,5 +1883,5 @@ function formatLinkExpiry(
 ): string {
   if (!value) return '';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '' : translate('customer.linkExpiresAt', { date: date.toLocaleString() });
+  return Number.isNaN(date.getTime()) ? '' : translate('customer.linkExpiresAt', { date: formatAppDateTime(date) });
 }

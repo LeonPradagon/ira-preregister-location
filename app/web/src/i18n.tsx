@@ -20,7 +20,7 @@ const messages: Record<Language, Record<TranslationKey, string>> = {
       'Lokasi belum cukup akurat atau belum stabil. Pastikan Anda sudah berada di rumah, lalu coba pemeriksaan lokasi lagi.',
     'customer.reminderDateTime': 'Pilih tanggal dan jam pengingat berikutnya',
     'customer.reminderUntilDateTime': 'Reminder terakhir sampai tanggal dan jam',
-    'customer.reminderTimezone': 'Waktu mengikuti zona waktu perangkat Anda.',
+    'customer.reminderTimezone': 'Waktu mengikuti zona Asia/Jakarta (WIB).',
     'customer.reminderRangeHelp':
       'Sistem mengirim satu reminder sesuai pilihan Anda. Jika link tidak dibuka, reminder berikutnya dikirim 2 hari kemudian pada jam yang sama, maksimal 3 kali.',
     'customer.remindersScheduledAutomatically':
@@ -345,7 +345,7 @@ const messages: Record<Language, Record<TranslationKey, string>> = {
       'The location is not accurate or stable enough yet. Make sure you are at home, then retry the location check.',
     'customer.reminderDateTime': 'Choose the next reminder date and time',
     'customer.reminderUntilDateTime': 'Last reminder date and time',
-    'customer.reminderTimezone': 'Time follows your device timezone.',
+    'customer.reminderTimezone': 'Time follows the Asia/Jakarta timezone (WIB).',
     'customer.reminderRangeHelp':
       'The system sends one reminder based on your choice. If the link is not opened, the next reminder is sent 2 days later at the same time, up to 3 times.',
     'customer.remindersScheduledAutomatically':

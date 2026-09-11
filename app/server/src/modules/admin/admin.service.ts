@@ -36,7 +36,7 @@ import { WhatsAppPort } from '../../integrations/whatsapp/whatsapp.port.js';
 import { assertTransition } from '../verification/state-machine.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
 import { getPublicWebOrigin } from '../../config/public-origin.js';
-import { hashPhone, nextAllowedSendAt } from '../../integrations/whatsapp/whatsapp.policy.js';
+import { formatWhatsAppDateTime, hashPhone, nextAllowedSendAt } from '../../integrations/whatsapp/whatsapp.policy.js';
 import { createVerificationToken } from '../verification/verification-token.js';
 import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/whatsapp/whatsapp.templates.js';
 import { ReadCacheService } from '../../common/read-cache.service.js';
@@ -1660,7 +1660,11 @@ export class AdminService {
       .limit(1);
     const retryAt = nextAllowedSendAt(last?.sentAt ?? null, runtimeConfig.WHATSAPP_MIN_INTERVAL_MINUTES);
     if (retryAt)
-      throw new DomainError(`WhatsApp cooldown active until ${retryAt.toISOString()}`, 429, 'WHATSAPP_COOLDOWN');
+      throw new DomainError(
+        `WhatsApp cooldown active until ${formatWhatsAppDateTime(retryAt)}`,
+        429,
+        'WHATSAPP_COOLDOWN',
+      );
     const dayStart = new Date();
     dayStart.setUTCHours(0, 0, 0, 0);
     const [daily] = await db

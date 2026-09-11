@@ -20,6 +20,7 @@ import { AppLoader } from '../common/AppLoader';
 import { TablePagination, TablePageSize } from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
 import { userFriendlyAuditAction, userFriendlyAuditEntity } from '../../lib/statusLabels';
+import { formatAppDateTime } from '../../lib/dateTime';
 
 type AuditOutcome = 'success' | 'failed' | 'review' | 'recorded';
 
@@ -169,9 +170,7 @@ export const AuditLogsView: React.FC = () => {
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/60">
             <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('audit.lastUpdated')}</p>
             <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-              {lastUpdatedAt
-                ? new Date(lastUpdatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
-                : '—'}
+              {lastUpdatedAt ? formatAppDateTime(lastUpdatedAt) : '—'}
             </p>
           </div>
         </div>
@@ -285,7 +284,7 @@ export const AuditLogsView: React.FC = () => {
                         </span>
                         <span className="inline-flex items-center gap-1.5">
                           <Clock3 className="h-3.5 w-3.5" />
-                          {new Date(log.timestamp).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
+                          {formatAppDateTime(log.timestamp)}
                         </span>
                       </div>
                     </div>
