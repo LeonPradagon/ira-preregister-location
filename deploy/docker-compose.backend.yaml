@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-ira_preregist}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     ports:
-      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+      - '${POSTGRES_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432'
     volumes:
       - backend_postgres_data:/var/lib/postgresql/data
     healthcheck:
