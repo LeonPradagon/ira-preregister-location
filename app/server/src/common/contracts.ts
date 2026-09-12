@@ -179,7 +179,7 @@ export const adminListQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
   search: z.string().trim().max(128).default(''),
   status: z.string().trim().max(64).optional(),
-  actor: z.enum(['CUSTOMER', 'SYSTEM', 'ADMIN']).optional(),
+  actor: z.enum(['CUSTOMER', 'SYSTEM', 'ADMIN', 'AUTH']).optional(),
   cursor: z.string().max(255).optional(),
 });
 

@@ -1523,12 +1523,16 @@ export class AdminService {
     if (query.status) filters.push(eq(auditLogs.entityType, query.status as typeof auditLogs.$inferSelect.entityType));
     if (query.actor === 'CUSTOMER') filters.push(inArray(auditLogs.actorUserId, customerAuditActorIds));
     if (query.actor === 'SYSTEM') filters.push(inArray(auditLogs.actorUserId, systemAuditActorIds));
+    if (query.actor === 'AUTH') filters.push(eq(auditLogs.entityType, 'AUTH'));
     if (query.actor === 'ADMIN')
       filters.push(
-        sql`${auditLogs.actorUserId} NOT IN (${sql.join(
+        and(
+          ne(auditLogs.entityType, 'AUTH'),
+          sql`${auditLogs.actorUserId} NOT IN (${sql.join(
           [...customerAuditActorIds, ...systemAuditActorIds].map((actorId) => sql`${actorId}`),
           sql`, `,
-        )})`,
+          )})`,
+        ),
       );
     const where = and(...filters);
     const cachedCount = await this.readCache.count(

@@ -29,7 +29,7 @@ const getAuditOutcome = (action: string): AuditOutcome => {
   if (/(FAILED|REJECTED|MISMATCH|BLOCKED|ERROR)/.test(normalized)) return 'failed';
   if (/(REVIEW|WAITING|PROPOSED|ADDRESS_CHANGE_STARTED|LOW_ACCURACY)/.test(normalized)) return 'review';
   if (
-    /(CREATED|UPDATED|COMPLETED|VALID|APPROVED|SENT|SCHEDULED|STARTED|OPENED|CONFIRMED|GIVEN|MATERIALIZED|RESENT|OPTED_OUT|REVOKED)/.test(
+    /(CREATED|UPDATED|COMPLETED|VALID|APPROVED|SENT|SCHEDULED|STARTED|OPENED|CONFIRMED|GIVEN|MATERIALIZED|RESENT|OPTED_OUT|REVOKED|LOGIN_SUCCESS|LOGOUT)/.test(
       normalized,
     )
   )
@@ -201,6 +201,7 @@ export const AuditLogsView: React.FC = () => {
                 <option value="CUSTOMER">{t('audit.customer')}</option>
                 <option value="SYSTEM">{t('audit.system')}</option>
                 <option value="ADMIN">{t('audit.admin')}</option>
+                <option value="AUTH">{t('audit.auth')}</option>
               </select>
             </label>
             <label className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">

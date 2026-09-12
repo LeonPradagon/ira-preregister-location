@@ -26,6 +26,7 @@ async function bootstrap() {
   app.getHttpAdapter().getInstance().set('trust proxy', config.TRUST_PROXY);
   app.use((request: Request, response: Response, next: NextFunction) => {
     const correlationId = request.header('x-correlation-id') || randomUUID();
+    request.headers['x-correlation-id'] = correlationId;
     response.setHeader('x-correlation-id', correlationId);
     next();
   });

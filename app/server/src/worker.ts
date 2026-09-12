@@ -42,6 +42,7 @@ import {
   shouldAuditImportedCoordinate,
   shouldAutoVerifyCoordinateAudit,
 } from './modules/validation/coordinate-audit.policy.js';
+import { coordinateAuditEnqueueLimit } from './modules/validation/coordinate-audit-queue.policy.js';
 
 const connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null }).on(
   'error',
@@ -71,7 +72,13 @@ const campaignSendQueue = new Queue(campaignSendQueueName, { connection });
 const metricsQueue = new Queue(metricsQueueName, { connection });
 const importQueue = new Queue(importQueueName, { connection });
 const coordinateAuditQueue = new Queue(coordinateAuditQueueName, { connection });
-let pendingCoordinateAuditsEnqueued = false;
+const positiveIntegerEnv = (value: string | undefined, fallback: number) => {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : fallback;
+};
+const coordinateAuditQueueBuffer = positiveIntegerEnv(process.env.COORDINATE_AUDIT_QUEUE_BUFFER, 2000);
+const coordinateAuditBatchSize = positiveIntegerEnv(process.env.COORDINATE_AUDIT_BATCH_SIZE, 500);
+let coordinateAuditEnqueueInFlight = false;
 const whatsappProvider = process.env.WHATSAPP_PROVIDER ?? 'disabled';
 const invitationTemplate = getWhatsAppTemplate('INVITATION');
 const reminderTemplate = getWhatsAppTemplate('REMINDER');
@@ -84,6 +91,40 @@ const whatsapp: WhatsAppPort =
 const campaigns = new CampaignService(new ValidationConfigService(), new ReadCacheService());
 const reminderConfig = new ValidationConfigService();
 const messagingConfig = new ValidationConfigService();
+
+const enqueuePendingCoordinateAudits = async () => {
+  if (!runs('import') || coordinateAuditEnqueueInFlight) return 0;
+  coordinateAuditEnqueueInFlight = true;
+  try {
+    const counts = await coordinateAuditQueue.getJobCounts('waiting', 'active', 'delayed', 'prioritized', 'paused');
+    const enqueueLimit = Math.min(coordinateAuditBatchSize, coordinateAuditEnqueueLimit(counts, coordinateAuditQueueBuffer));
+    if (!enqueueLimit) return 0;
+    const pending = await db
+      .select({ id: customerAddresses.id })
+      .from(customerAddresses)
+      .innerJoin(customers, eq(customers.id, customerAddresses.customerId))
+      .where(
+        and(
+          eq(customerAddresses.referenceSource, 'PREREG_IMPORT'),
+          eq(customerAddresses.coordinateAuditStatus, 'PENDING'),
+          isNotNull(customerAddresses.referenceLocation),
+          ne(customers.status, 'VERIFIED'),
+        ),
+      )
+      .limit(enqueueLimit);
+    if (!pending.length) return 0;
+    await coordinateAuditQueue.addBulk(
+      pending.map(({ id }) => ({
+        name: 'audit-imported-coordinate',
+        data: { addressId: id },
+        opts: { jobId: queueSafeJobId('coordinate-audit', id), removeOnComplete: true, removeOnFail: false },
+      })),
+    );
+    return pending.length;
+  } finally {
+    coordinateAuditEnqueueInFlight = false;
+  }
+};
 
 const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 const whatsappRateLimitKey = `whatsapp:send:rate-limit:${whatsappProvider}`;
@@ -629,27 +670,7 @@ const importWorker = runs('import')
               updatedAt: completedAt,
             })
             .where(eq(importJobs.id, importJobId));
-          const pendingCoordinateAudits = await db
-            .select({ id: customerAddresses.id })
-            .from(customerAddresses)
-            .innerJoin(customers, eq(customers.id, customerAddresses.customerId))
-            .where(
-              and(
-                eq(customerAddresses.referenceSource, 'PREREG_IMPORT'),
-                eq(customerAddresses.coordinateAuditStatus, 'PENDING'),
-                isNotNull(customerAddresses.referenceLocation),
-                ne(customers.status, 'VERIFIED'),
-              ),
-            )
-            .limit(10000);
-          if (pendingCoordinateAudits.length)
-            await coordinateAuditQueue.addBulk(
-              pendingCoordinateAudits.map(({ id }) => ({
-                name: 'audit-imported-coordinate',
-                data: { addressId: id },
-                opts: { jobId: queueSafeJobId('coordinate-audit', id), removeOnComplete: true, removeOnFail: false },
-              })),
-            );
+          const coordinateAuditsQueued = await enqueuePendingCoordinateAudits();
           await db.insert(auditLogs).values({
             actorUserId: 'system',
             actorName: 'Import Worker',
@@ -661,7 +682,7 @@ const importWorker = runs('import')
               customersUpserted: result.customersUpserted,
               addressesInserted: result.addressesInserted,
               addressesUpdated: result.addressesUpdated,
-              coordinateAuditsQueued: pendingCoordinateAudits.length,
+              coordinateAuditsQueued,
             },
             timestamp: completedAt,
           });
@@ -854,32 +875,6 @@ const coordinateAuditWorker = runs('import')
       { connection, concurrency: Number(process.env.COORDINATE_AUDIT_CONCURRENCY ?? 1) },
     )
   : null;
-
-const enqueuePendingCoordinateAudits = async () => {
-  if (pendingCoordinateAuditsEnqueued || !runs('import')) return;
-  const pending = await db
-    .select({ id: customerAddresses.id })
-    .from(customerAddresses)
-    .innerJoin(customers, eq(customers.id, customerAddresses.customerId))
-    .where(
-      and(
-        eq(customerAddresses.referenceSource, 'PREREG_IMPORT'),
-        eq(customerAddresses.coordinateAuditStatus, 'PENDING'),
-        isNotNull(customerAddresses.referenceLocation),
-        ne(customers.status, 'VERIFIED'),
-      ),
-    )
-    .limit(10000);
-  if (pending.length)
-    await coordinateAuditQueue.addBulk(
-      pending.map(({ id }) => ({
-        name: 'audit-imported-coordinate',
-        data: { addressId: id },
-        opts: { jobId: queueSafeJobId('coordinate-audit', id), removeOnComplete: true, removeOnFail: false },
-      })),
-    );
-  pendingCoordinateAuditsEnqueued = true;
-};
 
 const recoveryWorker = runs('maintenance')
   ? new Worker(

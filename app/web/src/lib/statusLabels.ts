@@ -87,7 +87,10 @@ const auditLabels: Record<string, string> = {
   WHATSAPP_OPTED_OUT: 'WhatsApp messages stopped',
   WHATSAPP_SEND_BLOCKED: 'WhatsApp delivery blocked',
   LOGIN: 'Signed in',
+  LOGIN_SUCCESS: 'Signed in',
+  LOGIN_FAILED: 'Sign-in failed',
   LOGOUT: 'Signed out',
+  SESSION_REVOKED: 'Session revoked',
 };
 
 const auditEntityLabels: Record<string, string> = {
