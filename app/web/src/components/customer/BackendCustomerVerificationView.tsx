@@ -87,24 +87,26 @@ const RegisteredAddressDetails: React.FC<{ address: PublicVerificationContextApi
   const values = buildAddressDisplayValues(address);
 
   return (
-    <div className="mt-3 rounded-xl border border-red-100 bg-white/80 p-3 sm:p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-700">
+    <div className="mt-2 rounded-xl border border-[#d71920] bg-white/80 p-2.5 sm:mt-3 sm:p-4">
+      <div className="flex flex-col gap-0.5 sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-3 sm:gap-y-1">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-700 sm:text-xs">
           {t('customer.addressDetailsTitle')}
         </p>
-        <p className="text-[11px] text-slate-500">{t('customer.addressDetailsHelp')}</p>
+        <p className="text-[10px] leading-snug text-slate-500 sm:text-[11px]">{t('customer.addressDetailsHelp')}</p>
       </div>
-      <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+      <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-2 sm:mt-3 sm:grid-cols-2 sm:gap-y-3">
         {values.map(({ field, value }) => (
-          <div key={field} className="min-w-0 border-b border-slate-100 pb-2 last:border-b-0">
-            <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <div key={field} className="min-w-0 border-b border-red-200 pb-1.5 sm:pb-2">
+            <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
               {t(addressDisplayTranslationKeys[field])}
             </dt>
-            <dd className="mt-1 break-words text-sm font-semibold leading-relaxed text-slate-900">{value}</dd>
+            <dd className="mt-0.5 break-words text-[13px] font-semibold leading-snug text-slate-900 sm:mt-1 sm:text-sm sm:leading-relaxed">
+              {value}
+            </dd>
           </div>
         ))}
       </dl>
-      <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-relaxed text-slate-600">
+      <p className="mt-3 rounded-lg bg-red-50/70 px-2.5 py-2 text-[11px] leading-snug text-slate-600 sm:mt-4 sm:px-3 sm:py-2.5 sm:text-xs sm:leading-relaxed">
         {t('customer.addressMatchAfterGps')}
       </p>
     </div>
@@ -1287,15 +1289,15 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
               {t('customer.pageIntro')}
             </p>
           </div>
-          <div className="rounded-2xl border border-red-100 border-l-4 border-l-[#d71920] bg-[#fff8f8] p-4 shadow-sm sm:p-5">
-            <p className="text-xs font-bold uppercase tracking-wide text-[#b8171d]">
+          <div className="rounded-2xl border border-[#d71920] border-l-[#d71920] bg-[#fff8f8] p-3 shadow-sm sm:p-5">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[#b8171d] sm:text-xs">
               {t(context.address.addressType === 'PROPOSED' ? 'customer.proposedAddress' : 'customer.registeredAddress')}
             </p>
             <RegisteredAddressDetails address={context.address} />
-            <p className="mt-3 break-words text-xs leading-relaxed text-slate-500">
+            <p className="mt-2 break-words text-[11px] leading-snug text-slate-500 sm:mt-3 sm:text-xs sm:leading-relaxed">
               {t('customer.addressOriginal')}: {formatAddressForDisplay(context.address.rawAddress)}
             </p>
-            <p className="mt-3 break-words text-xs text-slate-600 sm:text-sm">
+            <p className="mt-2 break-words text-xs text-slate-600 sm:mt-3 sm:text-sm">
               {t('customer.phone')}: <span className="font-semibold text-slate-800">{context.customer.phoneE164}</span>
             </p>
           </div>

@@ -23,7 +23,7 @@ const MainAppContent: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<AdminTab>('dashboard');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedVerificationId, setSelectedVerificationId] = useState<string | null>(null);
-  const tokenMatch = window.location.pathname.match(/^\/v\/([^/]+)$/);
+  const tokenMatch = window.location.pathname.match(/^\/(?:v|s)\/([^/]+)$/);
   const customerToken = tokenMatch ? decodeURIComponent(tokenMatch[1]) : null;
   const simulationRoute = Boolean(customerToken?.startsWith('simulasi-'));
 

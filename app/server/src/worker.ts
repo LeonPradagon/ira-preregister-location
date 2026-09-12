@@ -15,6 +15,7 @@ import {
   importJobs,
   integrationOutbox,
   reminders,
+  verificationShortLinks,
   verificationCampaignItems,
   verificationCampaigns,
   verificationSessions,
@@ -26,6 +27,7 @@ import { DisabledWhatsAppAdapter } from './integrations/whatsapp/disabled-whatsa
 import { WhatsAppPort } from './integrations/whatsapp/whatsapp.port.js';
 import { hashPhone, nextAllowedSendAt, nextUtcMidnight } from './integrations/whatsapp/whatsapp.policy.js';
 import { createVerificationToken } from './modules/verification/verification-token.js';
+import { createShortLinkCode, hashShortLinkCode } from './modules/verification/short-link.js';
 import { CampaignService } from './modules/campaigns/campaign.service.js';
 import { ValidationConfigService } from './config/validation-config.service.js';
 import { getWhatsAppTemplate } from './integrations/whatsapp/whatsapp.templates.js';
@@ -326,7 +328,8 @@ const reminderWorker = runs('messaging')
           const verificationToken = await createVerificationToken();
           const runtimeConfig = await reminderConfig.get();
           const reminderTtlHours = runtimeConfig.REMINDER_LINK_TTL_HOURS;
-          const verificationLink = `${getPublicWebOrigin()}/v/${verificationToken.rawToken}`;
+          const shortLinkCode = createShortLinkCode();
+          const verificationLink = `${getPublicWebOrigin()}/s/${shortLinkCode}`;
           await acquireWhatsAppSendSlot();
           const sent = await whatsapp.send({
             phoneE164: target.customer.phoneE164,
@@ -370,6 +373,13 @@ const reminderWorker = runs('messaging')
                 updatedAt: sentAt,
               })
               .where(eq(verificationSessions.id, target.session.id));
+            await tx.insert(verificationShortLinks).values({
+              sessionId: target.session.id,
+              tokenId: verificationToken.tokenId,
+              codeHash: hashShortLinkCode(shortLinkCode),
+              expiresAt: tokenExpiresAt,
+              createdAt: sentAt,
+            });
             await tx
               .update(reminders)
               .set({
@@ -529,7 +539,8 @@ const campaignWorker = runs('campaign')
         try {
           const verificationToken = await createVerificationToken();
           const expiresAt = new Date(Date.now() + Number(process.env.VERIFICATION_TOKEN_TTL_DAYS ?? 7) * 86400000);
-          const verificationLink = `${getPublicWebOrigin()}/v/${verificationToken.rawToken}`;
+          const shortLinkCode = createShortLinkCode();
+          const verificationLink = `${getPublicWebOrigin()}/s/${shortLinkCode}`;
           await acquireWhatsAppSendSlot();
           const sent = await whatsapp.send({
             phoneE164: target.customer.phoneE164,
@@ -542,6 +553,7 @@ const campaignWorker = runs('campaign')
             idempotencyKey: `campaign-invitation:${itemId}`,
           });
           providerAccepted = true;
+          const sentAt = new Date();
           await db.transaction(async (tx) => {
             await tx
               .update(reminders)
@@ -560,12 +572,19 @@ const campaignWorker = runs('campaign')
                 tokenHash: verificationToken.tokenHash,
                 expiresAt,
                 verificationStatus: 'MESSAGE_SENT',
-                updatedAt: new Date(),
+                updatedAt: sentAt,
               })
               .where(eq(verificationSessions.id, target.session.id));
+            await tx.insert(verificationShortLinks).values({
+              sessionId: target.session.id,
+              tokenId: verificationToken.tokenId,
+              codeHash: hashShortLinkCode(shortLinkCode),
+              expiresAt,
+              createdAt: sentAt,
+            });
           });
           await recordProviderOutcome(true);
-          await CampaignItemState.markSent(itemId, sent.providerMessageId, new Date());
+          await CampaignItemState.markSent(itemId, sent.providerMessageId, sentAt);
           await recordDelivery(
             target.customer.phoneE164,
             'CAMPAIGN_INVITATION',
@@ -583,7 +602,7 @@ const campaignWorker = runs('campaign')
               sessionId: target.item.sessionId,
               providerMessageId: sent.providerMessageId,
             },
-            timestamp: new Date(),
+            timestamp: sentAt,
           });
         } catch (error) {
           await recordProviderOutcome(false);

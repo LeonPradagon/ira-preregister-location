@@ -8,6 +8,7 @@ import {
   integrationOutbox,
   locationCaptures,
   reminders,
+  verificationShortLinks,
   validationResults,
   verificationSessions,
   auditLogs,
@@ -37,6 +38,7 @@ import { parseVerificationToken, verifyVerificationToken } from './verification-
 import { applyApprovalPolicy, getCoordinateMatchScore } from './approval-policy.js';
 import { buildVerifiedAddressReference } from './verified-location.js';
 import { canReplaceAddress, requiresLocationConsentForAddressStatus } from './address-change.policy.js';
+import { hashLegacyShortLinkCode, hashShortLinkCode, isShortLinkCode } from './short-link.js';
 const now = () => new Date();
 
 function maskPhone(value: string): string {
@@ -61,7 +63,28 @@ export class VerificationService {
 
   private async findByToken(token: string) {
     const parsed = parseVerificationToken(token);
-    if (!parsed) throw new NotFoundError('Verification link is invalid or expired');
+    let shortLink: { sessionId: string; tokenId: string } | undefined;
+    if (!parsed) {
+      if (!isShortLinkCode(token)) throw new NotFoundError('Verification link is invalid or expired');
+      [shortLink] = await db
+        .select({ sessionId: verificationShortLinks.sessionId, tokenId: verificationShortLinks.tokenId })
+        .from(verificationShortLinks)
+        .where(
+          and(
+            or(
+              eq(verificationShortLinks.codeHash, hashShortLinkCode(token)),
+              eq(verificationShortLinks.codeHash, hashLegacyShortLinkCode(token)),
+            ),
+            gt(verificationShortLinks.expiresAt, now()),
+          ),
+        )
+        .limit(1);
+      if (!shortLink) throw new NotFoundError('Verification link is invalid or expired');
+    }
+    const tokenId = parsed?.tokenId ?? shortLink!.tokenId;
+    const sessionFilter = shortLink
+      ? and(eq(verificationSessions.id, shortLink.sessionId), eq(verificationSessions.tokenId, tokenId))
+      : eq(verificationSessions.tokenId, tokenId);
     const [row] = await db
       .select({
         session: verificationSessions,
@@ -75,9 +98,9 @@ export class VerificationService {
       .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
       .innerJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
       .leftJoin(reminders, eq(reminders.tokenId, verificationSessions.tokenId))
-      .where(
-        and(
-          eq(verificationSessions.tokenId, parsed.tokenId),
+        .where(
+          and(
+          sessionFilter,
           isNull(verificationSessions.revokedAt),
           gt(verificationSessions.expiresAt, now()),
           isNull(reminders.tokenInvalidatedAt),
@@ -86,7 +109,7 @@ export class VerificationService {
       )
       .limit(1);
     if (!row) throw new NotFoundError('Verification link is invalid or expired');
-    if (!row.session.tokenHash || !(await verifyVerificationToken(token, row.session.tokenHash)))
+    if (!shortLink && (!row.session.tokenHash || !(await verifyVerificationToken(token, row.session.tokenHash))))
       throw new NotFoundError('Verification link is invalid or expired');
     return row;
   }

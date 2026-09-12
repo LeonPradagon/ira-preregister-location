@@ -5,6 +5,7 @@ import {
   integer,
   jsonb,
   numeric,
+  index,
   pgTable,
   text,
   timestamp,
@@ -295,6 +296,21 @@ export const reminders = pgTable('reminders', {
   retryCount: integer('retry_count').notNull().default(0),
   createdAt: createdAt(),
 });
+
+export const verificationShortLinks = pgTable(
+  'verification_short_links',
+  {
+    id: id(),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => verificationSessions.id, { onDelete: 'cascade' }),
+    tokenId: varchar('token_id', { length: 64 }).notNull(),
+    codeHash: varchar('code_hash', { length: 64 }).notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index('verification_short_links_session_token_idx').on(table.sessionId, table.tokenId)],
+);
 
 export const verificationCampaignItems = pgTable('verification_campaign_items', {
   id: id(),

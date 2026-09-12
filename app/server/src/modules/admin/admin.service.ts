@@ -12,6 +12,7 @@ import {
   integrationOutbox,
   locationCaptures,
   reminders,
+  verificationShortLinks,
   validationResults,
   verificationCampaignItems,
   verificationReviews,
@@ -38,6 +39,7 @@ import { ValidationConfigService } from '../../config/validation-config.service.
 import { getPublicWebOrigin } from '../../config/public-origin.js';
 import { formatWhatsAppDateTime, hashPhone, nextAllowedSendAt } from '../../integrations/whatsapp/whatsapp.policy.js';
 import { createVerificationToken } from '../verification/verification-token.js';
+import { createShortLinkCode, hashShortLinkCode } from '../verification/short-link.js';
 import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/whatsapp/whatsapp.templates.js';
 import { ReadCacheService } from '../../common/read-cache.service.js';
 import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js';
@@ -758,6 +760,7 @@ export class AdminService {
     await this.assertManualSendAllowed(customer.phoneE164);
     const verificationToken = await createVerificationToken();
     const created = timestamp();
+    const expiresAt = new Date(Date.now() + config.VERIFICATION_TOKEN_TTL_DAYS * 86400000);
     const [session] = await db
       .insert(verificationSessions)
       .values({
@@ -766,7 +769,7 @@ export class AdminService {
         currentAddressId: addressId,
         tokenId: verificationToken.tokenId,
         tokenHash: verificationToken.tokenHash,
-        expiresAt: new Date(Date.now() + config.VERIFICATION_TOKEN_TTL_DAYS * 86400000),
+        expiresAt,
         verificationStatus: 'CREATED',
         customerConfirmationStatus: 'UNCONFIRMED',
         registeredPhoneSnapshot: customer.phoneE164,
@@ -774,7 +777,8 @@ export class AdminService {
         updatedAt: created,
       })
       .returning();
-    const verificationLink = `${getPublicWebOrigin()}/v/${verificationToken.rawToken}`;
+    const shortLinkCode = createShortLinkCode();
+    const verificationLink = `${getPublicWebOrigin()}/s/${shortLinkCode}`;
     const invitationTemplate = getWhatsAppTemplate('INVITATION');
     let sent;
     try {
@@ -801,10 +805,19 @@ export class AdminService {
       'CAMPAIGN_INVITATION',
       sent.providerMessageId,
     );
-    await db
-      .update(verificationSessions)
-      .set({ verificationStatus: 'MESSAGE_SENT', updatedAt: timestamp() })
-      .where(eq(verificationSessions.id, session.id));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(verificationSessions)
+        .set({ verificationStatus: 'MESSAGE_SENT', updatedAt: timestamp() })
+        .where(eq(verificationSessions.id, session.id));
+      await tx.insert(verificationShortLinks).values({
+        sessionId: session.id,
+        tokenId: verificationToken.tokenId,
+        codeHash: hashShortLinkCode(shortLinkCode),
+        expiresAt,
+        createdAt: created,
+      });
+    });
     await db.insert(auditLogs).values({
       actorUserId: admin.id,
       actorName: admin.name,
@@ -858,8 +871,16 @@ export class AdminService {
         updatedAt: created,
       })
       .returning();
-    const verificationLink = `${getPublicWebOrigin()}/v/${verificationToken.rawToken}`;
+    const shortLinkCode = createShortLinkCode();
+    const verificationLink = `${getPublicWebOrigin()}/s/${shortLinkCode}`;
     const invitationTemplate = getWhatsAppTemplate('INVITATION');
+    await db.insert(verificationShortLinks).values({
+      sessionId: session.id,
+      tokenId: verificationToken.tokenId,
+      codeHash: hashShortLinkCode(shortLinkCode),
+      expiresAt: session.expiresAt,
+      createdAt: created,
+    });
     await db.insert(auditLogs).values({
       actorUserId: admin.id,
       actorName: admin.name,
@@ -1132,7 +1153,8 @@ export class AdminService {
     await this.assertManualSendAllowed(detail.customer.phoneE164);
     const verificationToken = await createVerificationToken();
     const expiresAt = new Date(Date.now() + config.VERIFICATION_TOKEN_TTL_DAYS * 86400000);
-    const verificationLink = `${getPublicWebOrigin()}/v/${verificationToken.rawToken}`;
+    const shortLinkCode = createShortLinkCode();
+    const verificationLink = `${getPublicWebOrigin()}/s/${shortLinkCode}`;
     const idempotencyKey = `invitation-resend:${id}:${verificationToken.tokenId}`;
     const invitationTemplate = getWhatsAppTemplate('INVITATION');
     const sent = await this.whatsapp.send({
@@ -1155,6 +1177,13 @@ export class AdminService {
         .update(verificationSessions)
         .set({ tokenId: verificationToken.tokenId, tokenHash: verificationToken.tokenHash, expiresAt, updatedAt })
         .where(eq(verificationSessions.id, id));
+      await tx.insert(verificationShortLinks).values({
+        sessionId: id,
+        tokenId: verificationToken.tokenId,
+        codeHash: hashShortLinkCode(shortLinkCode),
+        expiresAt,
+        createdAt: updatedAt,
+      });
     });
     await this.recordManualDelivery(
       detail.customer.phoneE164,
