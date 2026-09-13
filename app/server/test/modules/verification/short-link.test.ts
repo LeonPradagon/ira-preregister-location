@@ -18,10 +18,10 @@ describe('verification short links', () => {
     else process.env.SHORT_LINK_HMAC_SECRET = previousHmacSecret;
   });
 
-  it('creates URL-safe 16-character codes', () => {
+  it('creates URL-safe 12-character codes', () => {
     const code = createShortLinkCode();
 
-    expect(code).toHaveLength(16);
+    expect(code).toHaveLength(12);
     expect(isShortLinkCode(code)).toBe(true);
     expect(code).not.toContain('.');
   });
