@@ -780,6 +780,14 @@ const extraMessages: Record<Language, Record<string, string>> = {
     'customer.loadingHint': 'Mohon tunggu sebentar.',
     'customer.addressEditFormHint':
       'Isi semua field bertanda *. Nomor rumah, kode pos, dan detail alamat boleh dikosongkan jika tidak tersedia.',
+    'customer.addressStreetGuideTitle': 'Penting: gunakan nama jalan dari Google Maps',
+    'customer.addressStreetGuideText':
+      'Tulis nama jalan persis seperti yang tercantum di Google Maps agar alamat lebih mudah dicocokkan dengan lokasi Anda.',
+    'customer.addressStreetGuideStep1': 'Buka aplikasi Google Maps di HP Anda.',
+    'customer.addressStreetGuideStep2': 'Cari alamat rumah atau tekan titik biru untuk melihat lokasi Anda.',
+    'customer.addressStreetGuideStep3': 'Ketuk nama jalan yang tampil di peta, lalu catat atau salin namanya.',
+    'customer.addressStreetGuideStep4':
+      'Masukkan nama tersebut pada kolom Nama jalan / perumahan. Jika tidak muncul, gunakan nama jalan terdekat yang tertulis di Google Maps dan tambahkan patokan pada detail alamat.',
   },
   en: {
     'crud.confirm': 'Confirm action',
@@ -886,6 +894,14 @@ const extraMessages: Record<Language, Record<string, string>> = {
     'customer.loadingHint': 'Please wait a moment.',
     'customer.addressEditFormHint':
       'Fill in every field marked *. House number, postal code, and address details may be left blank if unavailable.',
+    'customer.addressStreetGuideTitle': 'Important: use the street name from Google Maps',
+    'customer.addressStreetGuideText':
+      'Enter the street name exactly as shown in Google Maps so the address can be matched more easily to your location.',
+    'customer.addressStreetGuideStep1': 'Open the Google Maps app on your phone.',
+    'customer.addressStreetGuideStep2': 'Search for your home or tap the blue dot to see your current location.',
+    'customer.addressStreetGuideStep3': 'Tap the street name shown on the map, then note or copy the name.',
+    'customer.addressStreetGuideStep4':
+      'Enter that name in the Street / housing name field. If it is not shown, use the nearest street name displayed in Google Maps and add a landmark in the address details.',
   },
 };
 

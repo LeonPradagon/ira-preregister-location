@@ -84,6 +84,7 @@ describe('customer verification confirmation flow', () => {
     expect(shouldShowLocationMatchDetails('LOCATION_VALID', true)).toBe(true);
     expect(shouldShowLocationMatchDetails('LOCATION_MISMATCH', true)).toBe(true);
     expect(shouldShowLocationMatchDetails('LOCATION_VALID', false)).toBe(false);
+    expect(shouldShowLocationMatchDetails('REMINDER_LIMIT_REACHED', true)).toBe(false);
   });
 
   it('keeps location verification available when only the reminder limit has been reached', () => {
@@ -119,8 +120,9 @@ describe('customer verification confirmation flow', () => {
     expect(shouldShowReminderPending('LOCATION_MISMATCH', 'CONFIRMED', 2, true, false, false)).toBe(true);
   });
 
-  it('shows a pending reminder state when the second reminder link already scheduled the third reminder', () => {
-    expect(shouldShowReminderPending('REMINDER_LIMIT_REACHED', 'CONFIRMED', 3, true, false, false)).toBe(true);
+  it('does not show a pending reminder state after the last reminder was selected', () => {
+    expect(shouldShowReminderPending('REMINDER_LIMIT_REACHED', 'CONFIRMED', 3, true, false, false)).toBe(false);
+    expect(shouldShowReminderPending('REMINDER_LIMIT_REACHED', 'CONFIRMED', 3, true, true, false)).toBe(false);
   });
 
   it('does not show a pending reminder state on the third reminder link itself', () => {

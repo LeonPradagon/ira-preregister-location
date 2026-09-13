@@ -13,7 +13,6 @@ const locationMatchDetailStatuses = [
   'LOW_GPS_ACCURACY',
   'WAITING_FOR_HOME',
   'REMINDER_REQUIRED',
-  'REMINDER_LIMIT_REACHED',
   'MANUAL_REVIEW',
 ];
 
@@ -125,6 +124,7 @@ export function shouldShowReminderPending(
   isReminderLink: boolean,
   reminderScheduledNow: boolean,
   canScheduleReminder = true,
+  maxReminders = 3,
 ): boolean {
   const normalizedStatus = String(status || '')
     .trim()
@@ -132,13 +132,15 @@ export function shouldShowReminderPending(
   const normalizedConfirmationStatus = String(confirmationStatus || '')
     .trim()
     .toUpperCase();
+  const reminderLimitReached = reminderCount >= maxReminders;
   return (
-    reminderScheduledNow ||
-    (isReminderLink && !canScheduleReminder) ||
-    (!isReminderLink &&
-      normalizedConfirmationStatus === 'CONFIRMED' &&
-      reminderCount > 0 &&
-      ['WAITING_FOR_HOME', 'REMINDER_LIMIT_REACHED'].includes(normalizedStatus))
+    !reminderLimitReached &&
+    (reminderScheduledNow ||
+      (isReminderLink && !canScheduleReminder) ||
+      (!isReminderLink &&
+        normalizedConfirmationStatus === 'CONFIRMED' &&
+        reminderCount > 0 &&
+        normalizedStatus === 'WAITING_FOR_HOME'))
   );
 }
 

@@ -52,7 +52,7 @@ const fieldLabels: Record<string, string> = {
   postalCode: 'Kode pos',
   street: 'Nama jalan / perumahan',
   houseNumber: 'Nomor rumah',
-  addressDetail: 'Detail alamat & patokan (optional)',
+  addressDetail: 'Detail alamat & patokan',
 };
 const fieldPlaceholders: Record<string, string> = {
   province: 'Contoh: Jawa Barat',
@@ -963,7 +963,8 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   const remainingAttempts = Math.max(0, maxAttempts - attemptsUsed);
   const maxReminders = context.session.maxReminders ?? 3;
   const remainingReminders = Math.max(0, maxReminders - context.session.reminderCount);
-  const showLocationMatchDetails = shouldShowLocationMatchDetails(
+  const reminderLimitReached = status === 'REMINDER_LIMIT_REACHED';
+  const showLocationMatchDetails = !reminderLimitReached && shouldShowLocationMatchDetails(
     status,
     Boolean(validationEvidence?.reverseGeocode),
   );
@@ -980,11 +981,14 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     context.session.isReminderLink,
     reminderScheduledNow,
     context.session.canScheduleReminder,
+    maxReminders,
   );
   const cycleExhausted = isVerificationCycleExhausted(
     status,
     attemptsUsed,
     context.session.reminderCount,
+    maxAttempts,
+    maxReminders,
   );
   const reminderLinkFlow =
     !selectedReminderWaiting &&
@@ -1023,10 +1027,11 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     context.session.reminderCount,
     context.session.isReminderLink,
     busy,
-    3,
+    maxReminders,
     context.session.canScheduleReminder,
   );
-  const reminderActionAvailable = context.session.canScheduleReminder && context.session.reminderCount < 3;
+  const reminderActionAvailable =
+    context.session.canScheduleReminder && context.session.reminderCount < maxReminders;
   const renderAddressField = (field: string) => {
     const regionLevel = regionLevels.includes(field as RegionLevel) ? (field as RegionLevel) : null;
     const parentLevel = regionLevel ? regionLevels[regionLevels.indexOf(regionLevel) - 1] : undefined;
@@ -1145,6 +1150,27 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
           </div>
         )}
         <p className="mt-1 text-xs leading-relaxed text-slate-600">{t('customer.addressEditFormHint')}</p>
+        <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-relaxed text-blue-950">
+          <div className="flex items-start gap-2">
+            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" />
+            <div className="min-w-0">
+              <p className="font-semibold">{t('customer.addressStreetGuideTitle')}</p>
+              <p className="mt-1 text-blue-900">{t('customer.addressStreetGuideText')}</p>
+            </div>
+          </div>
+          <ol className="mt-2 space-y-1.5 pl-6 text-blue-900">
+            {[
+              'customer.addressStreetGuideStep1',
+              'customer.addressStreetGuideStep2',
+              'customer.addressStreetGuideStep3',
+              'customer.addressStreetGuideStep4',
+            ].map((step, index) => (
+              <li key={step} className="pl-1">
+                <span className="font-semibold">{index + 1}.</span> {t(step)}
+              </li>
+            ))}
+          </ol>
+        </div>
         {requiredAddressFields.some((field) => addressFieldErrors[field]) && (
           <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs leading-relaxed text-rose-800" role="alert">
             <p className="font-semibold">{t('customer.requiredAddressFields')}</p>
@@ -1535,6 +1561,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
               {!cycleExhausted &&
                 !reminderLinkFlow &&
                 shouldShowLocationRetry(status, confirmationStatus) &&
+                !reminderLimitReached &&
                 !selectedReminderWaiting &&
                 (status !== 'WAITING_FOR_HOME' || !showLocationMatchDetails) && (
                 <div className="space-y-3">
