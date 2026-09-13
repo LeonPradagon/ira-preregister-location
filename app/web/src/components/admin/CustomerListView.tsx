@@ -386,7 +386,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
     setExporting(exportKey);
     setLoadError('');
     try {
-      const result = await api.exportCustomers({
+      const job = await api.exportCustomers({
         resource,
         format,
         search: searchTerm,
@@ -394,6 +394,17 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
         coordinateAuditStatus: coordinateAuditFilter === 'ALL' ? undefined : coordinateAuditFilter,
         addressCompleteness: addressCompletenessFilter === 'ALL' ? undefined : addressCompletenessFilter,
       });
+      let currentJob = job;
+      const deadline = Date.now() + 30 * 60 * 1000;
+      while (currentJob.status === 'QUEUED' || currentJob.status === 'PROCESSING') {
+        if (Date.now() >= deadline) throw new Error(t('customers.exportTimeout'));
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        currentJob = await api.getCustomerExportJob(job.jobId);
+      }
+      if (currentJob.status !== 'COMPLETED') {
+        throw new Error(currentJob.errorSummary || t('customers.exportError'));
+      }
+      const result = await api.downloadCustomerExport(job.jobId, { resource, format });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(result.blob);
       link.download = result.fileName;

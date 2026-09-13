@@ -67,7 +67,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [openNavGroups, setOpenNavGroups] = useState<Record<string, boolean>>({});
+  // Accordion behavior: undefined follows the active tab, null means all
+  // groups are intentionally collapsed, and a group id is the only open one.
+  const [openNavGroupId, setOpenNavGroupId] = useState<string | null | undefined>(undefined);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const pendingReviewsCount =
@@ -119,10 +121,12 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     onSelectTab(tab);
     if (onSelectCustomer) onSelectCustomer(null);
     if (onSelectVerification) onSelectVerification(null);
+    const parentGroup = navGroups.find((group) => group.items.some((item) => item.id === tab));
+    setOpenNavGroupId(parentGroup?.id ?? null);
     setMobileNavOpen(false);
   };
   const toggleNavGroup = (groupId: string) =>
-    setOpenNavGroups((current) => ({ ...current, [groupId]: !(current[groupId] ?? false) }));
+    setOpenNavGroupId((current) => (current === groupId ? null : groupId));
   const navbarOffsetClass = sidebarOpen ? 'md:left-64' : 'md:left-0';
 
   return (
@@ -328,7 +332,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             </div>
             <nav className="min-h-0 w-full flex-1 space-y-4 overflow-y-auto pt-3">
               {navGroups.map((group) => {
-                const groupOpen = openNavGroups[group.id] ?? group.items.some((item) => currentTab === item.id);
+                const groupOpen =
+                  openNavGroupId === undefined
+                    ? group.items.some((item) => currentTab === item.id)
+                    : openNavGroupId === group.id;
                 return (
                   <div key={group.id} className="space-y-1">
                     <button

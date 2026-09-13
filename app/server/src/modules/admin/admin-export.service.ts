@@ -1,15 +1,19 @@
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
-import { Injectable } from '@nestjs/common';
-import { createReadStream } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { Injectable, NotFoundException, OnModuleDestroy } from '@nestjs/common';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
+import { pipeline } from 'node:stream/promises';
+import { Queue } from 'bullmq';
+import { Redis } from 'ioredis';
 import { and, desc, eq, ilike, inArray, isNull, lt, ne, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '../../db/client.js';
-import { auditLogs, customerAddresses, customers } from '../../db/schema/index.js';
+import { auditLogs, authUsers, customerAddresses, customers, exportJobs } from '../../db/schema/index.js';
 import type { CustomerExportQueryInput } from '../../common/contracts.js';
 import type { RequestAdmin } from '../../common/request-user.js';
+import { queueNames } from '../../common/queue-names.js';
 import { campaignEligibleAddressSql, incompleteAddressSql } from '../validation/address-completeness.sql.js';
 import { campaignRecipientReservationStatuses } from '../campaigns/campaign-target.policy.js';
 
@@ -53,6 +57,28 @@ export type CustomerExportResult = {
   fileName: string;
   cleanup?: () => Promise<void>;
 };
+
+export type ExportJobStatus = 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'EXPIRED';
+
+export type ExportJobResponse = {
+  jobId: string;
+  resource: string;
+  format: string;
+  status: ExportJobStatus;
+  fileName: string | null;
+  totalRows: number;
+  processedRows: number;
+  partCount: number;
+  errorSummary: string | null;
+  createdAt: Date;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  expiresAt: Date;
+};
+
+const exportStorageDirectory = resolve(
+  process.env.EXPORT_STORAGE_DIR ?? resolve(process.cwd(), 'var', 'exports'),
+);
 
 const contentTypes = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -203,8 +229,256 @@ function cursorForAddress(cursor: { updatedAt: Date; id: string } | null): SQL |
 }
 
 @Injectable()
-export class AdminExportService {
-  async export(admin: RequestAdmin, query: CustomerExportQueryInput): Promise<CustomerExportResult> {
+export class AdminExportService implements OnModuleDestroy {
+  private readonly connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+    maxRetriesPerRequest: null,
+  }).on('error', () => undefined);
+  private readonly queue = new Queue(queueNames.exports, { connection: this.connection });
+
+  async onModuleDestroy() {
+    await this.queue.close();
+    await this.connection.quit();
+  }
+
+  async createJob(admin: RequestAdmin, query: CustomerExportQueryInput): Promise<ExportJobResponse> {
+    const expiresAt = new Date(
+      Date.now() + Number(process.env.EXPORT_JOB_TTL_HOURS ?? 24) * 60 * 60 * 1000,
+    );
+    const [job] = await db
+      .insert(exportJobs)
+      .values({
+        resource: query.resource,
+        format: query.format,
+        filters: query,
+        createdBy: admin.id,
+        expiresAt,
+      })
+      .returning();
+
+    await db.insert(auditLogs).values({
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: 'CUSTOMER_EXPORT_QUEUED',
+      entityType: 'CUSTOMER_EXPORT',
+      entityId: job.id,
+      after: { resource: query.resource, format: query.format, filters: query },
+      reason: 'Admin meminta export data customer atau alamat.',
+      timestamp: new Date(),
+    });
+
+    try {
+      await this.queue.add(
+        'process-customer-export',
+        { exportJobId: job.id },
+        {
+          jobId: job.id,
+          attempts: 1,
+          removeOnComplete: true,
+          removeOnFail: { age: 24 * 60 * 60, count: 1000 },
+        },
+      );
+    } catch (error) {
+      await db
+        .update(exportJobs)
+        .set({ status: 'FAILED', errorSummary: 'Export gagal dimasukkan ke antrean.', updatedAt: new Date() })
+        .where(eq(exportJobs.id, job.id));
+      throw error;
+    }
+
+    return this.toJobResponse(job);
+  }
+
+  async getJob(admin: RequestAdmin, id: string): Promise<ExportJobResponse> {
+    const [job] = await db
+      .select()
+      .from(exportJobs)
+      .where(and(eq(exportJobs.id, id), eq(exportJobs.createdBy, admin.id)))
+      .limit(1);
+    if (!job) throw new NotFoundException('Export tidak ditemukan.');
+    return this.toJobResponse(job);
+  }
+
+  async downloadJob(admin: RequestAdmin, id: string) {
+    const [job] = await db
+      .select()
+      .from(exportJobs)
+      .where(and(eq(exportJobs.id, id), eq(exportJobs.createdBy, admin.id)))
+      .limit(1);
+    if (!job) throw new NotFoundException('Export tidak ditemukan.');
+    if (job.status !== 'COMPLETED' || !job.filePath || !job.fileName) {
+      throw new NotFoundException('File export belum siap diunduh.');
+    }
+    if (job.expiresAt <= new Date()) {
+      await this.expireJob(job.id, job.filePath);
+      throw new NotFoundException('File export sudah kedaluwarsa.');
+    }
+
+    const filePath = resolve(exportStorageDirectory, basename(job.filePath));
+    try {
+      await stat(filePath);
+    } catch {
+      await db
+        .update(exportJobs)
+        .set({ status: 'FAILED', errorSummary: 'File export tidak ditemukan di storage.', updatedAt: new Date() })
+        .where(eq(exportJobs.id, job.id));
+      throw new NotFoundException('File export tidak ditemukan di storage.');
+    }
+    return {
+      stream: createReadStream(filePath),
+      fileName: job.fileName,
+      contentType: job.fileName.endsWith('.zip')
+        ? contentTypes.zip
+        : job.format === 'xlsx'
+          ? contentTypes.xlsx
+          : contentTypes.csv,
+    };
+  }
+
+  async processJob(id: string): Promise<void> {
+    const [job] = await db
+      .select({ exportJob: exportJobs, admin: authUsers })
+      .from(exportJobs)
+      .innerJoin(authUsers, eq(authUsers.id, exportJobs.createdBy))
+      .where(eq(exportJobs.id, id))
+      .limit(1);
+    if (!job) return;
+
+    await db
+      .update(exportJobs)
+      .set({ status: 'PROCESSING', startedAt: new Date(), errorSummary: null, updatedAt: new Date() })
+      .where(eq(exportJobs.id, id));
+
+    let outputPath: string | null = null;
+    try {
+      const query = job.exportJob.filters as CustomerExportQueryInput;
+      const result = await this.export(job.admin, query, {
+        recordCompletionAudit: false,
+        onProgress: async (processedRows, partCount) => {
+          await db
+            .update(exportJobs)
+            .set({ processedRows, partCount, updatedAt: new Date() })
+            .where(eq(exportJobs.id, id));
+        },
+      });
+      await mkdir(exportStorageDirectory, { recursive: true });
+      const storedFileName = `${id}-${result.fileName}`;
+      outputPath = join(exportStorageDirectory, storedFileName);
+      if (result.body) await writeFile(outputPath, result.body);
+      else if (result.stream) await pipeline(result.stream, createWriteStream(outputPath));
+      await result.cleanup?.();
+
+      const [completedJob] = await db
+        .update(exportJobs)
+        .set({
+          status: 'COMPLETED',
+          fileName: result.fileName,
+          filePath: storedFileName,
+          totalRows: result.totalRows ?? 0,
+          processedRows: result.totalRows ?? 0,
+          partCount: result.partCount ?? 1,
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(exportJobs.id, id))
+        .returning();
+      await db.insert(auditLogs).values({
+        actorUserId: job.admin.id,
+        actorName: job.admin.name,
+        action: 'CUSTOMER_EXPORT_COMPLETED',
+        entityType: 'CUSTOMER_EXPORT',
+        entityId: id,
+        after: {
+          resource: query.resource,
+          format: query.format,
+          fileName: result.fileName,
+          rows: completedJob.totalRows,
+          parts: completedJob.partCount,
+          split: completedJob.partCount > 1,
+          filters: query,
+        },
+        reason: 'Export selesai diproses oleh worker.',
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      if (outputPath) await unlink(outputPath).catch(() => undefined);
+      const summary = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
+      await db
+        .update(exportJobs)
+        .set({ status: 'FAILED', errorSummary: summary, completedAt: new Date(), updatedAt: new Date() })
+        .where(eq(exportJobs.id, id));
+      await db
+        .insert(auditLogs)
+        .values({
+          actorUserId: job.admin.id,
+          actorName: job.admin.name,
+          action: 'CUSTOMER_EXPORT_FAILED',
+          entityType: 'CUSTOMER_EXPORT',
+          entityId: id,
+          after: { resource: job.exportJob.resource, format: job.exportJob.format, error: summary },
+          reason: 'Worker gagal memproses export.',
+          timestamp: new Date(),
+        })
+        .catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async cleanupExpiredJobs(): Promise<void> {
+    const expired = await db
+      .select({ id: exportJobs.id, filePath: exportJobs.filePath })
+      .from(exportJobs)
+      .where(
+        and(
+          lt(exportJobs.expiresAt, new Date()),
+          inArray(exportJobs.status, ['QUEUED', 'COMPLETED', 'FAILED']),
+        ),
+      )
+      .limit(100);
+    for (const job of expired) {
+      if (job.filePath) {
+        await unlink(resolve(exportStorageDirectory, basename(job.filePath))).catch(() => undefined);
+      }
+      await db
+        .update(exportJobs)
+        .set({ status: 'EXPIRED', filePath: null, updatedAt: new Date() })
+        .where(eq(exportJobs.id, job.id));
+    }
+  }
+
+  private async expireJob(id: string, filePath: string) {
+    await unlink(resolve(exportStorageDirectory, basename(filePath))).catch(() => undefined);
+    await db
+      .update(exportJobs)
+      .set({ status: 'EXPIRED', filePath: null, updatedAt: new Date() })
+      .where(eq(exportJobs.id, id));
+  }
+
+  private toJobResponse(job: typeof exportJobs.$inferSelect): ExportJobResponse {
+    return {
+      jobId: job.id,
+      resource: job.resource,
+      format: job.format,
+      status: job.status as ExportJobStatus,
+      fileName: job.fileName,
+      totalRows: job.totalRows,
+      processedRows: job.processedRows,
+      partCount: job.partCount,
+      errorSummary: job.errorSummary,
+      createdAt: job.createdAt,
+      startedAt: job.startedAt,
+      completedAt: job.completedAt,
+      expiresAt: job.expiresAt,
+    };
+  }
+
+  async export(
+    admin: Pick<RequestAdmin, 'id' | 'name'>,
+    query: CustomerExportQueryInput,
+    options: {
+      onProgress?: (processedRows: number, partCount: number) => Promise<void>;
+      recordCompletionAudit?: boolean;
+    } = {},
+  ): Promise<CustomerExportResult & { totalRows: number; partCount: number }> {
     const temporaryDirectory = await mkdtemp(join(tmpdir(), 'ira-preregist-export-'));
     const files: Array<{ name: string; path: string }> = [];
     const cleanup = () => rm(temporaryDirectory, { recursive: true, force: true });
@@ -229,6 +503,7 @@ export class AdminExportService {
         const path = join(temporaryDirectory, name);
         await writeFile(path, body);
         files.push({ name, path });
+        await options.onProgress?.(totalRows, files.length);
         cursor = result.cursor;
         part += 1;
         if (result.rows.length < EXPORT_MAX_DATA_ROWS) break;
@@ -246,7 +521,7 @@ export class AdminExportService {
         files.length === 1
           ? files[0].name
           : `ira_${query.resource}_export.zip`;
-      await db.insert(auditLogs).values({
+      if (options.recordCompletionAudit !== false) await db.insert(auditLogs).values({
         actorUserId: admin.id,
         actorName: admin.name,
         action: 'CUSTOMER_EXPORT_COMPLETED',
@@ -274,7 +549,7 @@ export class AdminExportService {
       if (files.length === 1) {
         const body = await readFile(files[0].path);
         await cleanup();
-        return { body, contentType: contentTypes[query.format], fileName: files[0].name };
+        return { body, contentType: contentTypes[query.format], fileName: files[0].name, totalRows, partCount: files.length };
       }
 
       const zip = new JSZip();
@@ -284,6 +559,8 @@ export class AdminExportService {
         contentType: contentTypes.zip,
         fileName: `ira_${query.resource}_export.zip`,
         cleanup,
+        totalRows,
+        partCount: files.length,
       };
     } catch (error) {
       await cleanup();

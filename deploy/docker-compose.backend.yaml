@@ -89,6 +89,7 @@ services:
       READ_COUNT_CACHE_TTL_SECONDS: ${READ_COUNT_CACHE_TTL_SECONDS:-30}
       DASHBOARD_CACHE_TTL_SECONDS: ${DASHBOARD_CACHE_TTL_SECONDS:-30}
       IMPORT_STORAGE_DIR: /workspace/app/server/var/imports
+      EXPORT_STORAGE_DIR: /workspace/app/server/var/exports
       IMPORT_BATCH_SIZE: ${IMPORT_BATCH_SIZE:-500}
       IMPORT_WORKER_CONCURRENCY: ${IMPORT_WORKER_CONCURRENCY:-1}
       COUNTER_RECONCILIATION_INTERVAL_SECONDS: ${COUNTER_RECONCILIATION_INTERVAL_SECONDS:-300}
@@ -119,6 +120,7 @@ services:
       - '3000'
     volumes:
       - backend_imports:/workspace/app/server/var/imports
+      - backend_exports:/workspace/app/server/var/exports
     deploy:
       replicas: 3
       update_config:
@@ -162,6 +164,7 @@ services:
     command: ['node', 'dist/worker.js']
     volumes:
       - backend_imports:/workspace/app/server/var/imports
+      - backend_exports:/workspace/app/server/var/exports
     deploy:
       replicas: 2
     restart: unless-stopped
@@ -232,3 +235,4 @@ volumes:
   backend_postgres_data:
   backend_redis_data:
   backend_imports:
+  backend_exports:

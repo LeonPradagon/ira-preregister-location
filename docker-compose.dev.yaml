@@ -39,6 +39,7 @@ services:
     environment:
       NODE_ENV: development
       IMPORT_STORAGE_DIR: /workspace/app/server/var/imports
+      EXPORT_STORAGE_DIR: /workspace/app/server/var/exports
       WORKER_ROLE: all
       DATABASE_URL: postgresql://ira_preregist:ira_preregist@postgres:5432/ira_preregist
       REDIS_URL: redis://redis:6379
@@ -47,6 +48,7 @@ services:
     volumes:
       # Keep host API uploads visible to the Docker worker during local development.
       - ./app/server/var/imports:/workspace/app/server/var/imports
+      - ./app/server/var/exports:/workspace/app/server/var/exports
     command: ['node', 'dist/worker.js']
     restart: unless-stopped
     depends_on:

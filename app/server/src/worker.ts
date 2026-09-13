@@ -45,6 +45,7 @@ import {
   shouldAutoVerifyCoordinateAudit,
 } from './modules/validation/coordinate-audit.policy.js';
 import { coordinateAuditEnqueueLimit } from './modules/validation/coordinate-audit-queue.policy.js';
+import { AdminExportService } from './modules/admin/admin-export.service.js';
 
 const connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null }).on(
   'error',
@@ -64,6 +65,7 @@ const {
   metrics: metricsQueueName,
   imports: importQueueName,
   coordinateAudit: coordinateAuditQueueName,
+  exports: exportQueueName,
 } = queueNames;
 const queueSafeJobId = (...parts: Array<string | number>) =>
   parts.map((part) => String(part).replace(/[^a-zA-Z0-9_-]/g, '-')).join('-');
@@ -74,6 +76,8 @@ const campaignSendQueue = new Queue(campaignSendQueueName, { connection });
 const metricsQueue = new Queue(metricsQueueName, { connection });
 const importQueue = new Queue(importQueueName, { connection });
 const coordinateAuditQueue = new Queue(coordinateAuditQueueName, { connection });
+const exportQueue = new Queue(exportQueueName, { connection });
+const adminExportService = runs('maintenance') ? new AdminExportService() : null;
 const positiveIntegerEnv = (value: string | undefined, fallback: number) => {
   const parsed = Number(value ?? fallback);
   return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : fallback;
@@ -933,6 +937,18 @@ const recoveryWorker = runs('maintenance')
     )
   : null;
 
+const exportWorker = runs('maintenance')
+  ? new Worker(
+      exportQueueName,
+      async (job) => {
+        if (job.name === 'process-customer-export') {
+          await adminExportService!.processJob(String(job.data.exportJobId));
+        }
+      },
+      { connection, concurrency: Number(process.env.EXPORT_WORKER_CONCURRENCY ?? 1) },
+    )
+  : null;
+
 const enqueuePendingOutbox = async () => {
   const pending = await db
     .select({ id: integrationOutbox.id, eventType: integrationOutbox.eventType, payload: integrationOutbox.payload })
@@ -1084,8 +1100,9 @@ const enqueueMaintenance = async () => {
   const analyzeLock = await connection.set('maintenance:analyze', randomUUID(), 'EX', 3500, 'NX');
   if (analyzeLock)
     await db.execute(
-      sql`ANALYZE customers, customer_addresses, verification_sessions, verification_campaign_items, reminders, audit_logs, integration_outbox`,
+      sql`ANALYZE customers, customer_addresses, verification_sessions, verification_campaign_items, reminders, audit_logs, integration_outbox, export_jobs`,
     );
+  await adminExportService?.cleanupExpiredJobs();
 };
 
 const poll = async () => {
@@ -1127,6 +1144,10 @@ coordinateAuditWorker?.on('completed', (job) =>
 coordinateAuditWorker?.on('failed', (job, error) =>
   logEvent('error', 'coordinate_audit.worker_failed', { jobId: job?.id, error: error.message }),
 );
+exportWorker?.on('completed', (job) => logEvent('info', 'export.worker_completed', { jobId: job.id }));
+exportWorker?.on('failed', (job, error) =>
+  logEvent('error', 'export.worker_failed', { jobId: job?.id, error: error.message }),
+);
 
 const shutdown = async () => {
   clearInterval(poller);
@@ -1137,6 +1158,7 @@ const shutdown = async () => {
   await campaignMaterializationWorker?.close();
   await recoveryWorker?.close();
   await coordinateAuditWorker?.close();
+  await exportWorker?.close();
   await outboxQueue.close();
   await reminderQueue.close();
   await campaignMaterializationQueue.close();
@@ -1144,6 +1166,8 @@ const shutdown = async () => {
   await metricsQueue.close();
   await importQueue.close();
   await coordinateAuditQueue.close();
+  await exportQueue.close();
+  await adminExportService?.onModuleDestroy();
   if (coordinateGeocoder && 'onModuleDestroy' in coordinateGeocoder)
     await (coordinateGeocoder as { onModuleDestroy?: () => Promise<void> }).onModuleDestroy?.();
   await connection.quit();

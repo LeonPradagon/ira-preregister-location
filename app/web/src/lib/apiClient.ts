@@ -3,11 +3,27 @@ import axios, { AxiosRequestConfig } from 'axios';
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000/v1').replace(/\/$/, '');
 const API_TIMEOUT_MS = 15_000;
 const PUBLIC_LOCATION_REQUEST_TIMEOUT_MS = 60_000;
-const EXPORT_TIMEOUT_MS = 10 * 60_000;
+const EXPORT_DOWNLOAD_TIMEOUT_MS = 15 * 60_000;
 
 export interface ApiErrorBody {
   error?: { code?: string; message?: string };
   message?: string | string[] | { [key: string]: unknown };
+}
+
+export interface CustomerExportJob {
+  jobId: string;
+  resource: 'customers' | 'addresses';
+  format: 'xlsx' | 'csv';
+  status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'EXPIRED';
+  fileName: string | null;
+  totalRows: number;
+  processedRows: number;
+  partCount: number;
+  errorSummary: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  expiresAt: string;
 }
 
 export class ApiClientError extends Error {
@@ -504,16 +520,24 @@ const adminApi = {
     status?: string;
     coordinateAuditStatus?: 'PENDING' | 'MATCHED' | 'UNCERTAIN' | 'MISMATCH' | 'INVALID';
     addressCompleteness?: 'COMPLETE' | 'INCOMPLETE';
-  }) => {
-    const params = new URLSearchParams({ resource: query.resource, format: query.format });
-    if (query.search) params.set('search', query.search);
-    if (query.status && query.status !== 'ALL') params.set('status', query.status);
-    if (query.coordinateAuditStatus) params.set('coordinateAuditStatus', query.coordinateAuditStatus);
-    if (query.addressCompleteness) params.set('addressCompleteness', query.addressCompleteness);
-    const response = await apiClient.get<ArrayBuffer>(`/admin/exports/customers?${params.toString()}`, {
+  }) =>
+    request<CustomerExportJob>('/admin/exports/customers', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...query,
+        status: query.status && query.status !== 'ALL' ? query.status : undefined,
+      }),
+    }),
+  getCustomerExportJob: (jobId: string) =>
+    request<CustomerExportJob>(`/admin/exports/customers/jobs/${encodeURIComponent(jobId)}`),
+  downloadCustomerExport: async (jobId: string, query: { resource: 'customers' | 'addresses'; format: 'xlsx' | 'csv' }) => {
+    const response = await apiClient.get<ArrayBuffer>(
+      `/admin/exports/customers/jobs/${encodeURIComponent(jobId)}/download`,
+      {
       responseType: 'arraybuffer',
-      timeout: EXPORT_TIMEOUT_MS,
-    });
+        timeout: EXPORT_DOWNLOAD_TIMEOUT_MS,
+      },
+    );
     const disposition = response.headers['content-disposition'];
     const contentType = String(response.headers['content-type'] || 'application/octet-stream');
     const fallbackFileName = contentType.includes('zip')
@@ -523,10 +547,7 @@ const adminApi = {
       typeof disposition === 'string'
         ? disposition.match(/filename="([^"]+)"/)?.[1] || fallbackFileName
         : fallbackFileName;
-    return {
-      blob: new Blob([response.data], { type: contentType }),
-      fileName,
-    };
+    return { blob: new Blob([response.data], { type: contentType }), fileName };
   },
   customer: (id: string) => request<Record<string, unknown>>(`/admin/customers/${encodeURIComponent(id)}`),
   createCustomer: (body: unknown) =>

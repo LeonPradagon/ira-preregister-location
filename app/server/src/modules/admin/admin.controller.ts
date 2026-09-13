@@ -128,28 +128,36 @@ export class AdminController {
     return this.admin.listCustomers(parsed.data);
   }
 
-  @Get('exports/customers')
+  @Post('exports/customers')
+  @HttpCode(202)
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  async exportCustomers(
+  createCustomerExport(
     @CurrentAdmin() currentAdmin: RequestAdmin,
-    @Query() query: unknown,
+    @Body() body: unknown,
+  ) {
+    const parsed = customerExportQuerySchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.adminExport.createJob(currentAdmin, parsed.data);
+  }
+
+  @Get('exports/customers/jobs/:id')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
+  getCustomerExport(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) {
+    return this.adminExport.getJob(currentAdmin, id);
+  }
+
+  @Get('exports/customers/jobs/:id/download')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
+  async downloadCustomerExport(
+    @CurrentAdmin() currentAdmin: RequestAdmin,
+    @Param('id') id: string,
     @Res() response: Response,
   ): Promise<void> {
-    const parsed = customerExportQuerySchema.safeParse(query);
-    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
-    const result = await this.adminExport.export(currentAdmin, parsed.data);
+    const result = await this.adminExport.downloadJob(currentAdmin, id);
     response.setHeader('Content-Type', result.contentType);
     response.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
     response.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type');
-    if (result.stream) {
-      const cleanup = () => void result.cleanup?.();
-      result.stream.once('close', cleanup);
-      result.stream.once('error', cleanup);
-      response.once('close', cleanup);
-      result.stream.pipe(response);
-      return;
-    }
-    response.send(result.body);
+    result.stream.pipe(response);
   }
 
   @Post('customers/import')

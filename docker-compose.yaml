@@ -11,6 +11,7 @@ x-server-environment: &server-environment
   BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL must be set}
   WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN must be set}
   IMPORT_STORAGE_DIR: /workspace/app/server/var/imports
+  EXPORT_STORAGE_DIR: /workspace/app/server/var/exports
   GOOGLE_GEOCODING_API_KEY: ${GOOGLE_GEOCODING_API_KEY:-}
   GOOGLE_GEOCODING_BASE_URL: ${GOOGLE_GEOCODING_BASE_URL:-https://maps.googleapis.com/maps/api/geocode/json}
 
@@ -83,6 +84,7 @@ services:
       - '3000'
     volumes:
       - prod_imports:/workspace/app/server/var/imports
+      - prod_exports:/workspace/app/server/var/exports
     healthcheck:
       test:
         [
@@ -127,6 +129,7 @@ services:
     command: ['node', 'dist/worker.js']
     volumes:
       - prod_imports:/workspace/app/server/var/imports
+      - prod_exports:/workspace/app/server/var/exports
     restart: unless-stopped
     depends_on:
       seed:
@@ -204,3 +207,4 @@ volumes:
   prod_postgres_data:
   prod_redis_data:
   prod_imports:
+  prod_exports:

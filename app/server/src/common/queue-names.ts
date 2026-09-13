@@ -7,4 +7,5 @@ export const queueNames = {
   metrics: 'ira_preregist-metrics',
   imports: 'ira_preregist-imports',
   coordinateAudit: 'ira_preregist-coordinate-audit',
+  exports: 'ira_preregist-exports',
 } as const;

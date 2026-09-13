@@ -427,6 +427,28 @@ export const importJobs = pgTable('import_jobs', {
   updatedAt: updatedAt(),
 });
 
+export const exportJobs = pgTable('export_jobs', {
+  id: id(),
+  resource: varchar('resource', { length: 32 }).notNull(),
+  format: varchar('format', { length: 8 }).notNull(),
+  filters: jsonb('filters').notNull(),
+  status: varchar('status', { length: 32 }).notNull().default('QUEUED'),
+  fileName: varchar('file_name', { length: 255 }),
+  filePath: text('file_path'),
+  totalRows: integer('total_rows').notNull().default(0),
+  processedRows: integer('processed_rows').notNull().default(0),
+  partCount: integer('part_count').notNull().default(0),
+  errorSummary: text('error_summary'),
+  createdBy: text('created_by')
+    .notNull()
+    .references(() => authUsers.id),
+  createdAt: createdAt(),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  updatedAt: updatedAt(),
+});
+
 export const customerRelations = relations(customers, ({ many }) => ({
   addresses: many(customerAddresses),
   sessions: many(verificationSessions),
