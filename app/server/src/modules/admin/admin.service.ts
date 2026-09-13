@@ -281,7 +281,7 @@ export class AdminService {
           })
           .from(verificationSessions);
 
-        const [reminderStats, outboxStats, verificationStatusRows, reminderNumberRows] = await Promise.all([
+        const [reminderStats, outboxStats, verificationStatusRows, reminderNumberRows, coordinateAuditStatusRows] = await Promise.all([
           db
             .select({
               total: sql<number>`count(*)`,
@@ -310,12 +310,20 @@ export class AdminService {
             })
             .from(reminders)
             .groupBy(reminders.reminderNumber),
+          db
+            .select({ status: customerAddresses.coordinateAuditStatus, total: sql<number>`count(*)` })
+            .from(customerAddresses)
+            .where(and(eq(customerAddresses.isActive, true), eq(customerAddresses.referenceSource, 'PREREG_IMPORT')))
+            .groupBy(customerAddresses.coordinateAuditStatus),
         ]);
 
         const toNumber = (value: number | string | null | undefined) => Number(value ?? 0);
         const statusCounts = Object.fromEntries(verificationStatusRows.map((row) => [row.status, toNumber(row.total)]));
         const byNumber = Object.fromEntries(
           reminderNumberRows.map((row) => [String(row.reminderNumber), toNumber(row.total)]),
+        );
+        const coordinateAuditStatusCounts = Object.fromEntries(
+          coordinateAuditStatusRows.map((row) => [row.status, toNumber(row.total)]),
         );
 
         const countAsOf = new Date().toISOString();
@@ -327,6 +335,7 @@ export class AdminService {
             ...Object.fromEntries(Object.entries(verificationStats).map(([key, value]) => [key, toNumber(value)])),
             statusCounts,
           },
+          coordinateAudits: { statusCounts: coordinateAuditStatusCounts },
           reminders: {
             ...Object.fromEntries(Object.entries(reminderStats[0]).map(([key, value]) => [key, toNumber(value)])),
             byNumber,
@@ -362,6 +371,16 @@ export class AdminService {
       filters.push(
         sql`exists (select 1 from customer_addresses campaign_address where campaign_address.customer_id = ${customers.id} and campaign_address.is_active = true and campaign_address.is_verified = true)`,
       );
+    }
+    if (query.coordinateAuditStatus) {
+      filters.push(sql`exists (
+        select 1
+        from customer_addresses coordinate_audit_address
+        where coordinate_audit_address.customer_id = ${customers.id}
+          and coordinate_audit_address.is_active = true
+          and coordinate_audit_address.reference_source = 'PREREG_IMPORT'
+          and coordinate_audit_address.coordinate_audit_status = ${query.coordinateAuditStatus}
+      )`);
     }
     if (query.addressCompleteness === 'INCOMPLETE') {
       filters.push(sql`(
@@ -419,6 +438,7 @@ export class AdminService {
         search: query.search,
         status: query.status,
         locationStatus: query.locationStatus,
+        coordinateAuditStatus: query.coordinateAuditStatus,
         addressCompleteness: query.addressCompleteness,
         campaignAvailable: query.campaignAvailable,
       },

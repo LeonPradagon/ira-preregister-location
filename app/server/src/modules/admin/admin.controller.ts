@@ -25,6 +25,7 @@ import {
   adminUserPasswordSchema,
   adminUserUpdateSchema,
   customerCreateSchema,
+  customerExportQuerySchema,
   customerListQuerySchema,
   customerUpdateSchema,
   reviewSchema,
@@ -35,6 +36,7 @@ import { BetterAuthGuard } from '../../auth/auth.guard.js';
 import { RolesGuard } from '../../auth/roles.guard.js';
 import { Roles } from '../../common/roles.js';
 import { AdminService } from './admin.service.js';
+import { AdminExportService } from './admin-export.service.js';
 import { z } from 'zod';
 import { WhatsAppComplianceService } from '../../integrations/whatsapp/whatsapp-compliance.service.js';
 import { CustomerImportService } from '../imports/customer-import.service.js';
@@ -59,6 +61,7 @@ const createVerificationSchema = z.object({ addressId: z.string().uuid() });
 export class AdminController {
   constructor(
     private readonly admin: AdminService,
+    private readonly adminExport: AdminExportService,
     private readonly whatsappCompliance: WhatsAppComplianceService,
     private readonly customerImport: CustomerImportService,
   ) {}
@@ -123,6 +126,30 @@ export class AdminController {
     const parsed = customerListQuerySchema.safeParse(query);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
     return this.admin.listCustomers(parsed.data);
+  }
+
+  @Get('exports/customers')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
+  async exportCustomers(
+    @CurrentAdmin() currentAdmin: RequestAdmin,
+    @Query() query: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    const parsed = customerExportQuerySchema.safeParse(query);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    const result = await this.adminExport.export(currentAdmin, parsed.data);
+    response.setHeader('Content-Type', result.contentType);
+    response.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+    response.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type');
+    if (result.stream) {
+      const cleanup = () => void result.cleanup?.();
+      result.stream.once('close', cleanup);
+      result.stream.once('error', cleanup);
+      response.once('close', cleanup);
+      result.stream.pipe(response);
+      return;
+    }
+    response.send(result.body);
   }
 
   @Post('customers/import')

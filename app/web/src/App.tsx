@@ -98,7 +98,7 @@ const MainAppContent: React.FC = () => {
 };
 
 export default function App() {
-  const customerRoute = /^\/v\//.test(window.location.pathname);
+  const customerRoute = /^\/(?:v|s)\//.test(window.location.pathname);
   return (
     <I18nProvider defaultLanguage={customerRoute ? 'id' : 'en'}>
       <AppProvider>

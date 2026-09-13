@@ -5,6 +5,7 @@ import { PublicVerificationController } from './modules/verification/public-veri
 import { AdminController } from './modules/admin/admin.controller.js';
 import { VerificationService } from './modules/verification/verification.service.js';
 import { AdminService } from './modules/admin/admin.service.js';
+import { AdminExportService } from './modules/admin/admin-export.service.js';
 import { GeocodingPort } from './integrations/geocoding/geocoding.port.js';
 import { createGeocodingAdapter } from './integrations/geocoding/geocoding.adapter.factory.js';
 import { WhatsAppPort } from './integrations/whatsapp/whatsapp.port.js';
@@ -38,6 +39,7 @@ import { RedisRateLimitMiddleware } from './common/redis-rate-limit.middleware.j
   providers: [
     VerificationService,
     AdminService,
+    AdminExportService,
     CampaignService,
     WhatsAppComplianceService,
     CustomerImportService,

@@ -131,7 +131,10 @@ describe('API contracts', () => {
   it('accepts registered address completeness filters', () => {
     expect(customerListQuerySchema.safeParse({ addressCompleteness: 'INCOMPLETE' }).success).toBe(true);
     expect(customerListQuerySchema.safeParse({ addressCompleteness: 'COMPLETE' }).success).toBe(true);
+    expect(customerListQuerySchema.safeParse({ coordinateAuditStatus: 'MISMATCH' }).success).toBe(true);
+    expect(customerListQuerySchema.safeParse({ coordinateAuditStatus: 'UNCERTAIN' }).success).toBe(true);
     expect(customerListQuerySchema.safeParse({ addressCompleteness: 'UNKNOWN' }).success).toBe(false);
+    expect(customerListQuerySchema.safeParse({ coordinateAuditStatus: 'UNKNOWN' }).success).toBe(false);
   });
 
   it('requires exactly one campaign target source', () => {

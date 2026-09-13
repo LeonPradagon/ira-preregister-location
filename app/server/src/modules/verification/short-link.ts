@@ -1,7 +1,9 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 
-const SHORT_LINK_CODE_BYTES = 12;
-const shortLinkCodePattern = /^[A-Za-z0-9_-]{16}$/;
+// 9 bytes encode to exactly 12 URL-safe Base64 characters (~72 bits).
+// Keep accepting 16-character codes so links issued before this change remain valid.
+const SHORT_LINK_CODE_BYTES = 9;
+const shortLinkCodePattern = /^(?:[A-Za-z0-9_-]{12}|[A-Za-z0-9_-]{16})$/;
 const shortLinkHashContext = 'ira-preregister:verification-short-link:v1:';
 
 export function createShortLinkCode(): string {

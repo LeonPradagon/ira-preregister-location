@@ -247,6 +247,9 @@ export interface DashboardSummary {
     locationValid: number;
     statusCounts: Record<string, number>;
   };
+  coordinateAudits: {
+    statusCounts: Record<string, number>;
+  };
   reminders: {
     total: number;
     scheduled: number;

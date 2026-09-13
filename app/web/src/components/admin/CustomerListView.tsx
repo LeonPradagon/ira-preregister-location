@@ -1,8 +1,27 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Clock, Eye, Filter, Pencil, Plus, RefreshCw, Search, Upload, Trash2, Users } from 'lucide-react';
+import {
+  AlertTriangle,
+  Ban,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
+  Download,
+  Eye,
+  Filter,
+  MapPin,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Upload,
+  Trash2,
+  Users,
+  XCircle,
+  type LucideIcon,
+} from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../lib/apiClient';
-import { Customer, CustomerStatus } from '../../types';
+import { CoordinateAuditStatus, Customer, CustomerStatus } from '../../types';
 import { hasCapability } from '../../lib/accessControl';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 import { CustomerImportModal } from './CustomerImportModal';
@@ -23,6 +42,53 @@ const CUSTOMER_STATUS_LABEL: Record<CustomerStatus, string> = {
   VERIFIED: 'customers.statusLabel.VERIFIED',
 };
 type AddressCompletenessFilter = 'ALL' | 'COMPLETE' | 'INCOMPLETE';
+type CoordinateAuditFilter = 'ALL' | CoordinateAuditStatus;
+
+const COORDINATE_AUDIT_STATUS_LABEL: Record<CoordinateAuditStatus, string> = {
+  PENDING: 'customers.coordinateAuditPending',
+  MATCHED: 'customers.coordinateAuditMatched',
+  UNCERTAIN: 'customers.coordinateAuditUncertain',
+  MISMATCH: 'customers.coordinateAuditMismatch',
+  INVALID: 'customers.coordinateAuditInvalid',
+};
+
+const COORDINATE_AUDIT_CARDS: Array<{
+  status: CoordinateAuditStatus;
+  icon: LucideIcon;
+  className: string;
+  iconClassName: string;
+}> = [
+  {
+    status: 'PENDING',
+    icon: Clock,
+    className: 'border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900',
+    iconClassName: 'text-slate-600 dark:text-slate-300',
+  },
+  {
+    status: 'MATCHED',
+    icon: CheckCircle2,
+    className: 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20',
+    iconClassName: 'text-emerald-700 dark:text-emerald-300',
+  },
+  {
+    status: 'MISMATCH',
+    icon: XCircle,
+    className: 'border-rose-200 bg-rose-50/60 dark:border-rose-900 dark:bg-rose-950/20',
+    iconClassName: 'text-rose-700 dark:text-rose-300',
+  },
+  {
+    status: 'UNCERTAIN',
+    icon: AlertTriangle,
+    className: 'border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20',
+    iconClassName: 'text-amber-700 dark:text-amber-300',
+  },
+  {
+    status: 'INVALID',
+    icon: Ban,
+    className: 'border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/20',
+    iconClassName: 'text-violet-700 dark:text-violet-300',
+  },
+];
 
 const CUSTOMER_CHECK_STATUS_LABEL: Record<string, string> = {
   CREATED: 'customers.checkStatus.CREATED',
@@ -83,13 +149,21 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
   } = useApp();
   const { t } = useTranslation();
   const canManageCustomers = hasCapability(currentAdmin?.role, 'manageCustomers');
+  const coordinateAuditCounts = dashboardSummary.coordinateAudits.statusCounts;
+  const coordinateAuditTotal = COORDINATE_AUDIT_CARDS.reduce(
+    (total, card) => total + Number(coordinateAuditCounts[card.status] ?? 0),
+    0,
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [addressCompletenessFilter, setAddressCompletenessFilter] =
     useState<AddressCompletenessFilter>('ALL');
+  const [coordinateAuditFilter, setCoordinateAuditFilter] = useState<CoordinateAuditFilter>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [exporting, setExporting] = useState<string | null>(null);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
   // New Customer Form State
   const [newCustName, setNewCustName] = useState('');
@@ -295,6 +369,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           statusFilter as CustomerStatus | 'ALL',
           customerPage.pageSize,
           addressCompletenessFilter,
+          coordinateAuditFilter,
         ),
         refreshDashboard(),
       ]);
@@ -306,19 +381,46 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
     }
   };
 
+  const handleExport = async (resource: 'customers' | 'addresses', format: 'xlsx' | 'csv') => {
+    const exportKey = `${resource}-${format}`;
+    setExporting(exportKey);
+    setLoadError('');
+    try {
+      const result = await api.exportCustomers({
+        resource,
+        format,
+        search: searchTerm,
+        status: statusFilter,
+        coordinateAuditStatus: coordinateAuditFilter === 'ALL' ? undefined : coordinateAuditFilter,
+        addressCompleteness: addressCompletenessFilter === 'ALL' ? undefined : addressCompletenessFilter,
+      });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(result.blob);
+      link.download = result.fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    } catch (error: unknown) {
+      setLoadError(error instanceof Error ? error.message : t('customers.exportError'));
+    } finally {
+      setExporting(null);
+    }
+  };
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void refreshCustomerData(true, 1);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [searchTerm, statusFilter, addressCompletenessFilter, t]);
+  }, [searchTerm, statusFilter, addressCompletenessFilter, coordinateAuditFilter, t]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
       void refreshCustomerData(false);
     }, 10000);
     return () => window.clearInterval(timer);
-  }, [searchTerm, statusFilter, addressCompletenessFilter, customerPage.page, customerPage.pageSize, t]);
+  }, [searchTerm, statusFilter, addressCompletenessFilter, coordinateAuditFilter, customerPage.page, customerPage.pageSize, t]);
 
   const handleCreateCustomerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -411,6 +513,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           statusFilter as CustomerStatus | 'ALL',
           customerPage.pageSize,
           addressCompletenessFilter,
+          coordinateAuditFilter,
         );
       }
       setIsAddModalOpen(false);
@@ -479,7 +582,44 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('customers.description')}</p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsExportMenuOpen((current) => !current)}
+              disabled={Boolean(exporting)}
+              title={t('customers.export')}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-indigo-600 bg-gradient-to-r from-indigo-600 to-violet-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-indigo-500/25 transition-all hover:from-indigo-700 hover:to-violet-700 hover:shadow-md hover:shadow-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-500 dark:from-indigo-500 dark:to-violet-500 dark:hover:from-indigo-400 dark:hover:to-violet-400"
+            >
+              <Download className="h-4 w-4" />
+              <span>{exporting ? '...' : t('customers.export')}</span>
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {isExportMenuOpen && !exporting && (
+              <div className="absolute right-0 z-20 mt-1.5 min-w-44 rounded-lg border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExportMenuOpen(false);
+                    void handleExport('customers', 'xlsx');
+                  }}
+                  className="flex w-full items-center rounded-md px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  {t('customers.exportCustomersXlsx')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExportMenuOpen(false);
+                    void handleExport('customers', 'csv');
+                  }}
+                  className="flex w-full items-center rounded-md px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  {t('customers.exportCustomersCsv')}
+                </button>
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => setIsImportModalOpen(true)}
@@ -513,89 +653,152 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
         </div>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-            <Users className="h-4 w-4" />
-            {t('customers.total')}
+      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('customers.summary')}</h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+              <Users className="h-4 w-4" />
+              {t('customers.total')}
+            </div>
+            <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
+              {dashboardSummary.customers.total.toLocaleString('en-US')}
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{t('customers.totalHelp')}</p>
           </div>
-          <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
-            {dashboardSummary.customers.total.toLocaleString('en-US')}
-          </p>
-          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{t('customers.totalHelp')}</p>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/20">
+            <div className="flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2 className="h-4 w-4" />
+              {t('customers.verifiedCount')}
+            </div>
+            <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-300">
+              {dashboardSummary.customers.verified.toLocaleString('en-US')}
+            </p>
+            <p className="mt-1 text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
+              {t('customers.verifiedCountHelp')}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/20">
+            <div className="flex items-center gap-2 text-xs font-medium text-indigo-700 dark:text-indigo-300">
+              <Clock className="h-4 w-4" />
+              {t('customers.activeCount')}
+            </div>
+            <p className="mt-2 text-2xl font-bold text-indigo-700 dark:text-indigo-300">
+              {dashboardSummary.customers.active.toLocaleString('en-US')}
+            </p>
+            <p className="mt-1 text-[11px] text-indigo-700/80 dark:text-indigo-300/80">
+              {t('customers.activeCountHelp')}
+            </p>
+          </div>
         </div>
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/20">
-          <div className="flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-            <CheckCircle2 className="h-4 w-4" />
-            {t('customers.verifiedCount')}
+
+        <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+              {t('customers.coordinateAuditSummary')}
+            </h2>
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              {t('customers.coordinateAuditTotalHelp')}
+            </p>
           </div>
-          <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-300">
-            {dashboardSummary.customers.verified.toLocaleString('en-US')}
-          </p>
-          <p className="mt-1 text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
-            {t('customers.verifiedCountHelp')}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/20">
-          <div className="flex items-center gap-2 text-xs font-medium text-indigo-700 dark:text-indigo-300">
-            <Clock className="h-4 w-4" />
-            {t('customers.activeCount')}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3">
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 dark:border-indigo-900 dark:bg-indigo-950/20">
+              <div className="flex items-center gap-2 text-xs font-medium text-indigo-700 dark:text-indigo-300">
+                <MapPin className="h-4 w-4" />
+                {t('customers.coordinateAuditTotal')}
+              </div>
+              <p className="mt-2 text-xl font-bold text-indigo-700 dark:text-indigo-300">
+                {coordinateAuditTotal.toLocaleString('en-US')}
+              </p>
+            </div>
+            {COORDINATE_AUDIT_CARDS.map((card) => {
+              const Icon = card.icon;
+              return (
+                <div key={card.status} className={`rounded-xl border p-3 ${card.className}`}>
+                  <div className={`flex items-center gap-2 text-xs font-medium ${card.iconClassName}`}>
+                    <Icon className="h-4 w-4" />
+                    <span className="truncate">{t(COORDINATE_AUDIT_STATUS_LABEL[card.status])}</span>
+                  </div>
+                  <p className={`mt-2 text-xl font-bold ${card.iconClassName}`}>
+                    {Number(coordinateAuditCounts[card.status] ?? 0).toLocaleString('en-US')}
+                  </p>
+                </div>
+              );
+            })}
           </div>
-          <p className="mt-2 text-2xl font-bold text-indigo-700 dark:text-indigo-300">
-            {dashboardSummary.customers.active.toLocaleString('en-US')}
-          </p>
-          <p className="mt-1 text-[11px] text-indigo-700/80 dark:text-indigo-300/80">
-            {t('customers.activeCountHelp')}
-          </p>
         </div>
       </section>
 
       {/* Filter & Search Controls */}
-      <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3.5 text-xs shadow-xs dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:w-96">
-          <Search className="w-4 h-4 text-gray-400 dark:text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={t('customers.search')}
-            className="w-full pl-9 pr-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400 placeholder:text-gray-400 dark:placeholder:text-gray-500"
-          />
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="mb-3 flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            <Filter className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('customers.filtersTitle')}</h2>
+            <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{t('customers.filtersHelp')}</p>
+          </div>
         </div>
 
-        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
-          <Filter className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-          <label htmlFor="customer-status-filter" className="text-gray-600 dark:text-gray-300 font-medium">
-            {t('customers.status')}:
+        <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+          <div className="relative min-w-0 sm:col-span-2 lg:col-span-3">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t('customers.search')}
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-gray-900 placeholder:text-gray-400 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-gray-400 dark:focus:ring-gray-400"
+            />
+          </div>
+
+          <label htmlFor="customer-status-filter" className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300">
+            <span className="font-medium text-slate-500 dark:text-slate-400">{t('customers.status')}</span>
+            <select
+              id="customer-status-filter"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
+            >
+              <option value="ALL">{t('customers.allStatuses')}</option>
+              <option value="PENDING_INSTALLATION">{t('customers.waitingInstallation')}</option>
+              <option value="VERIFIED">{t('customers.verified')}</option>
+              <option value="ACTIVE">{t('customers.active')}</option>
+              <option value="SUSPENDED">{t('customers.suspended')}</option>
+            </select>
           </label>
-          <select
-            id="customer-status-filter"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="min-w-0 max-w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400 sm:flex-none"
-          >
-            <option value="ALL">{t('customers.allStatuses')}</option>
-            <option value="PENDING_INSTALLATION">{t('customers.waitingInstallation')}</option>
-            <option value="VERIFIED">{t('customers.verified')}</option>
-            <option value="ACTIVE">{t('customers.active')}</option>
-            <option value="SUSPENDED">{t('customers.suspended')}</option>
-          </select>
-          <label htmlFor="customer-address-completeness-filter" className="text-gray-600 dark:text-gray-300 font-medium">
-            {t('customers.addressFilter')}:
+          <label htmlFor="customer-address-completeness-filter" className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300">
+            <span className="font-medium text-slate-500 dark:text-slate-400">{t('customers.addressFilter')}</span>
+            <select
+              id="customer-address-completeness-filter"
+              value={addressCompletenessFilter}
+              onChange={(e) => setAddressCompletenessFilter(e.target.value as AddressCompletenessFilter)}
+              className="h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
+            >
+              <option value="ALL">{t('customers.addressFilterAll')}</option>
+              <option value="INCOMPLETE">{t('customers.addressFilterIncomplete')}</option>
+              <option value="COMPLETE">{t('customers.addressFilterComplete')}</option>
+            </select>
           </label>
-          <select
-            id="customer-address-completeness-filter"
-            value={addressCompletenessFilter}
-            onChange={(e) => setAddressCompletenessFilter(e.target.value as AddressCompletenessFilter)}
-            className="min-w-0 max-w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400 sm:flex-none"
-          >
-            <option value="ALL">{t('customers.addressFilterAll')}</option>
-            <option value="INCOMPLETE">{t('customers.addressFilterIncomplete')}</option>
-            <option value="COMPLETE">{t('customers.addressFilterComplete')}</option>
-          </select>
+          <label htmlFor="customer-coordinate-audit-filter" className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300">
+            <span className="font-medium text-slate-500 dark:text-slate-400">{t('customers.coordinateAuditFilter')}</span>
+            <select
+              id="customer-coordinate-audit-filter"
+              value={coordinateAuditFilter}
+              onChange={(e) => setCoordinateAuditFilter(e.target.value as CoordinateAuditFilter)}
+              className="h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
+            >
+              <option value="ALL">{t('customers.coordinateAuditAll')}</option>
+              {(Object.keys(COORDINATE_AUDIT_STATUS_LABEL) as CoordinateAuditStatus[]).map((status) => (
+                <option key={status} value={status}>
+                  {t(COORDINATE_AUDIT_STATUS_LABEL[status])}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-        <p className="text-[11px] text-gray-500 dark:text-gray-400">{t('customers.filterHelp')}</p>
-      </div>
+      </section>
 
       {/* Customers Table */}
       <AdminTable
@@ -613,6 +816,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 statusFilter as CustomerStatus | 'ALL',
                 customerPage.pageSize,
                 addressCompletenessFilter,
+                coordinateAuditFilter,
               )
             }
             onPageSizeChange={(pageSize: TablePageSize) =>
@@ -622,6 +826,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 statusFilter as CustomerStatus | 'ALL',
                 pageSize,
                 addressCompletenessFilter,
+                coordinateAuditFilter,
               )
             }
           />
@@ -1054,6 +1259,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 statusFilter as CustomerStatus | 'ALL',
                 customerPage.pageSize,
                 addressCompletenessFilter,
+                coordinateAuditFilter,
               ),
               refreshDashboard(),
             ]);

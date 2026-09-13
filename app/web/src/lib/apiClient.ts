@@ -3,6 +3,7 @@ import axios, { AxiosRequestConfig } from 'axios';
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000/v1').replace(/\/$/, '');
 const API_TIMEOUT_MS = 15_000;
 const PUBLIC_LOCATION_REQUEST_TIMEOUT_MS = 60_000;
+const EXPORT_TIMEOUT_MS = 10 * 60_000;
 
 export interface ApiErrorBody {
   error?: { code?: string; message?: string };
@@ -280,6 +281,9 @@ export interface AdminDashboardApi {
     locationValid: ApiNumeric;
     statusCounts: Record<string, ApiNumeric>;
   };
+  coordinateAudits: {
+    statusCounts: Record<string, ApiNumeric>;
+  };
   reminders: {
     total: ApiNumeric;
     scheduled: ApiNumeric;
@@ -465,6 +469,7 @@ const adminApi = {
       search?: string;
       status?: string;
       locationStatus?: 'UNVERIFIED' | 'VERIFIED';
+      coordinateAuditStatus?: 'PENDING' | 'MATCHED' | 'UNCERTAIN' | 'MISMATCH' | 'INVALID';
       addressCompleteness?: 'COMPLETE' | 'INCOMPLETE';
       campaignAvailable?: boolean;
       cursor?: string;
@@ -476,6 +481,7 @@ const adminApi = {
     if (query.search) params.set('search', query.search);
     if (query.status && query.status !== 'ALL') params.set('status', query.status);
     if (query.locationStatus) params.set('locationStatus', query.locationStatus);
+    if (query.coordinateAuditStatus) params.set('coordinateAuditStatus', query.coordinateAuditStatus);
     if (query.addressCompleteness) params.set('addressCompleteness', query.addressCompleteness);
     if (query.campaignAvailable) params.set('campaignAvailable', 'true');
     if (query.cursor) params.set('cursor', query.cursor);
@@ -490,6 +496,37 @@ const adminApi = {
       hasMore: boolean;
       countAsOf: string;
     }>(`/admin/customers${suffix}`);
+  },
+  exportCustomers: async (query: {
+    resource: 'customers' | 'addresses';
+    format: 'xlsx' | 'csv';
+    search?: string;
+    status?: string;
+    coordinateAuditStatus?: 'PENDING' | 'MATCHED' | 'UNCERTAIN' | 'MISMATCH' | 'INVALID';
+    addressCompleteness?: 'COMPLETE' | 'INCOMPLETE';
+  }) => {
+    const params = new URLSearchParams({ resource: query.resource, format: query.format });
+    if (query.search) params.set('search', query.search);
+    if (query.status && query.status !== 'ALL') params.set('status', query.status);
+    if (query.coordinateAuditStatus) params.set('coordinateAuditStatus', query.coordinateAuditStatus);
+    if (query.addressCompleteness) params.set('addressCompleteness', query.addressCompleteness);
+    const response = await apiClient.get<ArrayBuffer>(`/admin/exports/customers?${params.toString()}`, {
+      responseType: 'arraybuffer',
+      timeout: EXPORT_TIMEOUT_MS,
+    });
+    const disposition = response.headers['content-disposition'];
+    const contentType = String(response.headers['content-type'] || 'application/octet-stream');
+    const fallbackFileName = contentType.includes('zip')
+      ? `ira_${query.resource}_export.zip`
+      : `ira_${query.resource}_part_001.${query.format}`;
+    const fileName =
+      typeof disposition === 'string'
+        ? disposition.match(/filename="([^"]+)"/)?.[1] || fallbackFileName
+        : fallbackFileName;
+    return {
+      blob: new Blob([response.data], { type: contentType }),
+      fileName,
+    };
   },
   customer: (id: string) => request<Record<string, unknown>>(`/admin/customers/${encodeURIComponent(id)}`),
   createCustomer: (body: unknown) =>

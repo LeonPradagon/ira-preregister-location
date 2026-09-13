@@ -6,6 +6,7 @@ import {
   CustomerAddress,
   CustomerPage,
   CustomerStatus,
+  CoordinateAuditStatus,
   DashboardSummary,
   IntegrationConfigs,
   IntegrationOutboxEvent,
@@ -88,6 +89,7 @@ const EMPTY_DASHBOARD_SUMMARY: DashboardSummary = {
     locationValid: 0,
     statusCounts: {},
   },
+  coordinateAudits: { statusCounts: {} },
   reminders: { total: 0, scheduled: 0, sent: 0, failed: 0, cancelled: 0, byNumber: {} },
   outbox: { total: 0, pending: 0, published: 0, failed: 0 },
 };
@@ -106,6 +108,7 @@ interface AppContextType {
     status?: CustomerStatus | 'ALL',
     pageSize?: number,
     addressCompleteness?: 'ALL' | 'COMPLETE' | 'INCOMPLETE',
+    coordinateAuditStatus?: 'ALL' | CoordinateAuditStatus,
   ) => Promise<CustomerPage>;
   loadCustomerDetail: (
     customerId: string,
@@ -207,6 +210,9 @@ function mapApiDashboard(raw: AdminDashboardApi): DashboardSummary {
       manualReview: number(raw.verifications.manualReview),
       locationValid: number(raw.verifications.locationValid),
       statusCounts: numberMap(raw.verifications.statusCounts),
+    },
+    coordinateAudits: {
+      statusCounts: numberMap(raw.coordinateAudits?.statusCounts),
     },
     reminders: {
       total: number(raw.reminders.total),
@@ -489,6 +495,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     status: CustomerStatus | 'ALL' = 'ALL',
     pageSize = customerPage.pageSize || 25,
     addressCompleteness: 'ALL' | 'COMPLETE' | 'INCOMPLETE' = 'ALL',
+    coordinateAuditStatus: 'ALL' | CoordinateAuditStatus = 'ALL',
   ): Promise<CustomerPage> => {
     const raw = await api.customers({
       page,
@@ -496,6 +503,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       search,
       status,
       addressCompleteness: addressCompleteness === 'ALL' ? undefined : addressCompleteness,
+      coordinateAuditStatus: coordinateAuditStatus === 'ALL' ? undefined : coordinateAuditStatus,
       cursor: page === 1 ? undefined : customerCursors[page],
     });
     if (page === 1) setCustomerCursors({});

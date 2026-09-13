@@ -169,9 +169,21 @@ export const customerListQuerySchema = z.object({
   search: z.string().trim().max(128).default(''),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
+  coordinateAuditStatus: z.enum(['PENDING', 'MATCHED', 'UNCERTAIN', 'MISMATCH', 'INVALID']).optional(),
   addressCompleteness: z.enum(['COMPLETE', 'INCOMPLETE']).optional(),
   campaignAvailable: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
   cursor: z.string().max(255).optional(),
+});
+
+export const customerExportQuerySchema = z.object({
+  resource: z.enum(['customers', 'addresses']).default('customers'),
+  format: z.enum(['xlsx', 'csv']).default('xlsx'),
+  search: z.string().trim().max(128).default(''),
+  status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
+  locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
+  coordinateAuditStatus: z.enum(['PENDING', 'MATCHED', 'UNCERTAIN', 'MISMATCH', 'INVALID']).optional(),
+  addressCompleteness: z.enum(['COMPLETE', 'INCOMPLETE']).optional(),
+  campaignAvailable: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
 });
 
 export const adminListQuerySchema = z.object({
@@ -252,6 +264,7 @@ export type AddressLookupInput = z.infer<typeof addressLookupSchema>;
 export type CustomerCreateInput = z.infer<typeof customerCreateSchema>;
 export type CustomerUpdateInput = z.infer<typeof customerUpdateSchema>;
 export type CustomerListQueryInput = z.infer<typeof customerListQuerySchema>;
+export type CustomerExportQueryInput = z.infer<typeof customerExportQuerySchema>;
 export type AdminListQueryInput = z.infer<typeof adminListQuerySchema>;
 export type ReviewInput = z.infer<typeof reviewSchema>;
 export type ValidationConfigInput = z.infer<typeof validationConfigSchema>;
