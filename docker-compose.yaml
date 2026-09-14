@@ -59,6 +59,11 @@ services:
 
   migrate:
     <<: *server-defaults
+    environment:
+      <<: *server-environment
+      # Keep the longer timeout isolated to this one-shot service.
+      DATABASE_STATEMENT_TIMEOUT_MS: ${MIGRATION_STATEMENT_TIMEOUT_MS:-600000}
+      DATABASE_QUERY_TIMEOUT_MS: ${MIGRATION_QUERY_TIMEOUT_MS:-660000}
     command: ['node', 'dist/db/migrate.js']
     restart: 'no'
     depends_on:

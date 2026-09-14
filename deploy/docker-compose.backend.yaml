@@ -107,7 +107,13 @@ services:
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:?SEED_ADMIN_EMAIL must be set}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?SEED_ADMIN_PASSWORD must be set}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Production Super Admin}
-    command: ['node', 'dist/db/migrate.js']
+    command:
+      - sh
+      - -c
+      - >-
+        DATABASE_STATEMENT_TIMEOUT_MS=${MIGRATION_STATEMENT_TIMEOUT_MS:-600000}
+        DATABASE_QUERY_TIMEOUT_MS=${MIGRATION_QUERY_TIMEOUT_MS:-660000}
+        node dist/db/migrate.js
     restart: 'no'
     depends_on:
       postgres:
