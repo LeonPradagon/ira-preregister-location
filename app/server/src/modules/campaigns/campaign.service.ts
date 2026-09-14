@@ -425,6 +425,36 @@ export class CampaignService {
         linkOpenedAt: verificationSessions.openedAt,
         confirmationStatus: verificationSessions.customerConfirmationStatus,
         reminderCount: verificationSessions.reminderCount,
+        reminderSentCount: sql<number>`(
+          select count(*)
+          from reminders recipient_reminder
+          where recipient_reminder.session_id = ${verificationSessions.id}
+            and recipient_reminder.status = 'SENT'
+        )`,
+        reminderLastSentAt: sql<Date | null>`(
+          select max(recipient_reminder.sent_at)
+          from reminders recipient_reminder
+          where recipient_reminder.session_id = ${verificationSessions.id}
+            and recipient_reminder.status = 'SENT'
+        )`,
+        currentAddressId: verificationSessions.currentAddressId,
+        currentAddress: {
+          rawAddress: customerAddresses.rawAddress,
+          street: customerAddresses.street,
+          houseNumber: customerAddresses.houseNumber,
+          rt: customerAddresses.rt,
+          rw: customerAddresses.rw,
+          building: customerAddresses.building,
+          block: customerAddresses.block,
+          unit: customerAddresses.unit,
+          subdistrict: customerAddresses.subdistrict,
+          district: customerAddresses.district,
+          city: customerAddresses.city,
+          province: customerAddresses.province,
+          postalCode: customerAddresses.postalCode,
+          addressDetail: customerAddresses.addressDetail,
+          landmark: customerAddresses.landmark,
+        },
         gpsReceived: sql<boolean>`exists (
           select 1 from ${locationCaptures}
           where ${locationCaptures.sessionId} = ${verificationSessions.id}
@@ -443,6 +473,7 @@ export class CampaignService {
       .from(verificationCampaignItems)
       .innerJoin(customers, eq(customers.id, verificationCampaignItems.customerId))
       .innerJoin(verificationSessions, eq(verificationSessions.id, verificationCampaignItems.sessionId))
+      .leftJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
       .where(cursorWhere ? and(...itemFilters, cursorWhere) : and(...itemFilters))
       .orderBy(desc(verificationCampaignItems.createdAt), desc(verificationCampaignItems.id))
       .offset(cursor ? 0 : (query.page - 1) * query.pageSize)

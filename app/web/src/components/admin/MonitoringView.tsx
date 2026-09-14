@@ -34,6 +34,27 @@ const campaignStatusClassName = (status: string) => {
 
 const value = (metric: number) => numberFormat.format(metric);
 
+const addressValue = (address: Record<string, unknown> | null | undefined) => {
+  if (!address) return '';
+  const parts = [
+    address.street,
+    address.houseNumber && `No. ${address.houseNumber}`,
+    address.rt && `RT ${address.rt}`,
+    address.rw && `RW ${address.rw}`,
+    address.building,
+    address.block && `Blok ${address.block}`,
+    address.unit && `Unit ${address.unit}`,
+    address.subdistrict,
+    address.district,
+    address.city,
+    address.province,
+    address.postalCode,
+  ]
+    .map((part) => String(part ?? '').trim())
+    .filter(Boolean);
+  return parts.join(', ') || String(address.rawAddress ?? '').trim();
+};
+
 export const MonitoringView: React.FC = () => {
   const { t } = useTranslation();
   const [data, setData] = useState<AdminMonitoringApi | null>(null);
@@ -270,6 +291,12 @@ export const MonitoringView: React.FC = () => {
                   const yes = (field: unknown) => field === true || field === 'true';
                   const opened = Boolean(row.linkOpenedAt);
                   const sessionStatus = String(row.sessionStatus ?? 'CREATED');
+                  const reminderSentCount = Number(row.reminderSentCount ?? 0);
+                  const reminderLastSentAt = row.reminderLastSentAt ? String(row.reminderLastSentAt) : '';
+                  const currentAddressId = String(row.currentAddressId ?? '');
+                  const originalAddressId = String(item.addressId ?? '');
+                  const addressWasReplaced = Boolean(currentAddressId && originalAddressId && currentAddressId !== originalAddressId);
+                  const changedAddress = addressValue(row.currentAddress as Record<string, unknown> | null);
                   return (
                     <tr key={String(item.id)} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
                       <td className="max-w-[260px] whitespace-normal break-words px-4 py-3">
@@ -281,11 +308,32 @@ export const MonitoringView: React.FC = () => {
                         <span className={opened ? 'font-semibold text-emerald-600 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400'}>{opened ? t('monitoring.opened') : t('monitoring.notOpened')}</span>
                         {opened && <div className="mt-1 text-[10px] text-slate-400">{formatAppDateTime(String(row.linkOpenedAt))}</div>}
                       </td>
-                      <td className="whitespace-normal px-3 py-3">{yes(row.addressChanged) ? t('monitoring.yes') : '—'}</td>
+                      <td className="max-w-[280px] whitespace-normal px-3 py-3">
+                        {yes(row.addressChanged) ? (
+                          <>
+                            <div className="font-semibold text-amber-600 dark:text-amber-300">{t('monitoring.yes')}</div>
+                            {addressWasReplaced && changedAddress && (
+                              <div className="mt-1 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                <span className="font-semibold">{t('monitoring.changedAddressDetail')}:</span> {changedAddress}
+                              </div>
+                            )}
+                          </>
+                        ) : '—'}
+                      </td>
                       <td className="whitespace-normal px-3 py-3">{yes(row.gpsReceived) ? t('monitoring.yes') : '—'}</td>
                       <td className="whitespace-normal px-3 py-3 font-semibold text-emerald-600 dark:text-emerald-300">{yes(row.locationValid) ? t('monitoring.yes') : '—'}</td>
                       <td className="whitespace-normal px-3 py-3">{String(row.confirmationStatus ?? 'UNCONFIRMED') === 'CONFIRMED' ? t('monitoring.yes') : '—'}</td>
-                      <td className="whitespace-normal px-3 py-3">{String(row.reminderCount ?? 0)} <span className="text-[10px] text-slate-400">({t(`monitoring.status.${sessionStatus}`)})</span></td>
+                      <td className="max-w-[220px] whitespace-normal px-3 py-3">
+                        <div className={reminderSentCount > 0 ? 'font-semibold text-orange-600 dark:text-orange-300' : 'text-slate-500 dark:text-slate-400'}>
+                          {reminderSentCount > 0 ? `${reminderSentCount}x` : t('monitoring.noReminder')}
+                        </div>
+                        {reminderLastSentAt && (
+                          <div className="mt-1 text-[10px] text-slate-400">
+                            {t('monitoring.reminderSentAt')}: {formatAppDateTime(reminderLastSentAt)}
+                          </div>
+                        )}
+                        <div className="mt-1 text-[10px] text-slate-400">{t(`monitoring.status.${sessionStatus}`)}</div>
+                      </td>
                     </tr>
                   );
                 })}
