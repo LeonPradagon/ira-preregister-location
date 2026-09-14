@@ -69,6 +69,7 @@ export const MonitoringView: React.FC = () => {
   const [recipientPageSize, setRecipientPageSize] = useState<TablePageSize>(25);
   const [recipientCursors, setRecipientCursors] = useState<Record<number, string>>({});
   const [recipientSearch, setRecipientSearch] = useState('');
+  const [debouncedRecipientSearch, setDebouncedRecipientSearch] = useState('');
   const [recipientLoading, setRecipientLoading] = useState(false);
 
   const load = async () => {
@@ -88,6 +89,13 @@ export const MonitoringView: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedRecipientSearch(recipientSearch.trim());
+    }, 400);
+    return () => window.clearTimeout(timeout);
+  }, [recipientSearch]);
+
+  useEffect(() => {
     if (!selectedCampaign) return;
     const loadRecipients = async () => {
       setRecipientLoading(true);
@@ -95,7 +103,7 @@ export const MonitoringView: React.FC = () => {
         const response = await api.campaignItems(selectedCampaign.id, {
           page: recipientPage,
           pageSize: recipientPageSize,
-          search: recipientSearch,
+          search: debouncedRecipientSearch,
           cursor: recipientPage === 1 ? undefined : recipientCursors[recipientPage],
         });
         if (response.nextCursor)
@@ -109,7 +117,7 @@ export const MonitoringView: React.FC = () => {
       }
     };
     void loadRecipients();
-  }, [selectedCampaign, recipientPage, recipientPageSize, recipientSearch]);
+  }, [selectedCampaign, recipientPage, recipientPageSize, debouncedRecipientSearch]);
 
   const rows = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
