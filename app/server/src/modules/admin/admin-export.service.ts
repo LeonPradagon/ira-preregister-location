@@ -35,10 +35,18 @@ export const EXPORT_HEADERS = [
   'is_cover_bts',
   'bts_name',
   'coverage_status',
+  'SiteID',
+  'Site Name TP',
+  'Site ID Surge',
+  'Site Status',
+  'Status Coverage FWA',
+  'Mitra',
+  'Staus Coverage FTTH',
+  'Review',
 ] as const;
 
-const COLUMN_WIDTHS = [14.71, 24.71, 20.71, 48.71, 34.71, 16.71, 16.71, 20.71, 22.71, 22.71, 22.71, 23.71, 14.71, 26.71, 22.71];
-const TEXT_COLUMNS = new Set([1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 14, 15]);
+const COLUMN_WIDTHS = [14.71, 24.71, 20.71, 48.71, 34.71, 16.71, 16.71, 20.71, 22.71, 22.71, 22.71, 23.71, 14.71, 26.71, 22.71, 26.71, 28.71, 24.71, 22.71, 30.71, 22.71, 30.71, 22.71];
+const TEXT_COLUMNS = new Set([1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]);
 
 type ExportValue = string | number | boolean | null;
 type ExportRow = ExportValue[];
@@ -110,6 +118,13 @@ function coordinateValue(value: number | null | undefined): number | null {
   return value == null || !Number.isFinite(Number(value)) ? null : Number(value);
 }
 
+function metadataValue(customer: CustomerRow, key: string): string {
+  const metadata = customer.sourceMetadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return '';
+  const value = (metadata as Record<string, unknown>)[key];
+  return value == null ? '' : String(value);
+}
+
 function rowFor(customer: CustomerRow, address: ExportAddress): ExportRow {
   const latitude = coordinateValue(address.referenceLatitude);
   const longitude = coordinateValue(address.referenceLongitude);
@@ -130,6 +145,14 @@ function rowFor(customer: CustomerRow, address: ExportAddress): ExportRow {
     Boolean(customer.isCoverBts),
     customer.btsName || '',
     customer.coverageStatus || '',
+    metadataValue(customer, 'siteId'),
+    metadataValue(customer, 'siteNameTp'),
+    metadataValue(customer, 'siteIdSurge'),
+    metadataValue(customer, 'siteStatus'),
+    customer.coverageFwaStatus || '',
+    metadataValue(customer, 'mitra'),
+    customer.coverageFtthStatus || '',
+    metadataValue(customer, 'review'),
   ];
 }
 
@@ -148,6 +171,8 @@ function buildCustomerFilters(query: CustomerExportQueryInput): SQL[] {
   }
   if (query.status) filters.push(eq(customers.status, query.status));
   if (query.whatsappStatus) filters.push(eq(customers.whatsappStatus, query.whatsappStatus));
+  if (query.coverageFwaStatus) filters.push(eq(customers.coverageFwaStatus, query.coverageFwaStatus));
+  if (query.coverageFtthStatus) filters.push(eq(customers.coverageFtthStatus, query.coverageFtthStatus));
   if (query.locationStatus === 'UNVERIFIED') {
     filters.push(
       ne(customers.status, 'SUSPENDED'),
@@ -539,6 +564,8 @@ export class AdminExportService implements OnModuleDestroy {
             search: query.search || null,
             status: query.status || null,
             whatsappStatus: query.whatsappStatus || null,
+            coverageFwaStatus: query.coverageFwaStatus || null,
+            coverageFtthStatus: query.coverageFtthStatus || null,
             locationStatus: query.locationStatus || null,
             coordinateAuditStatus: query.coordinateAuditStatus || null,
             addressCompleteness: query.addressCompleteness || null,

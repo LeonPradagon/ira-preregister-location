@@ -208,6 +208,8 @@ export const CampaignsView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [customerSearchInput, setCustomerSearchInput] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
+  const [coverageFwaFilter, setCoverageFwaFilter] = useState('Not Coverage');
+  const [coverageFtthFilter, setCoverageFtthFilter] = useState('Not Coverage');
   const [candidateCustomers, setCandidateCustomers] = useState<Customer[]>([]);
   const [candidatePage, setCandidatePage] = useState(1);
   const [candidatePageSize, setCandidatePageSize] = useState<TablePageSize>(25);
@@ -264,6 +266,8 @@ export const CampaignsView: React.FC = () => {
         search: customerSearch,
         locationStatus: 'UNVERIFIED',
         campaignAvailable: true,
+        coverageFwaStatus: coverageFwaFilter === 'ALL' ? undefined : coverageFwaFilter,
+        coverageFtthStatus: coverageFtthFilter === 'ALL' ? undefined : coverageFtthFilter,
         cursor: candidatePage === 1 ? undefined : candidateCursors[candidatePage],
       });
       if (response.nextCursor)
@@ -279,7 +283,7 @@ export const CampaignsView: React.FC = () => {
 
   useEffect(() => {
     void loadCandidates();
-  }, [candidatePage, candidatePageSize, customerSearch]);
+  }, [candidatePage, candidatePageSize, customerSearch, coverageFwaFilter, coverageFtthFilter]);
 
   const toggleAll = () => {
     if (allSelected) {
@@ -365,7 +369,15 @@ export const CampaignsView: React.FC = () => {
         selectAllEligible ? [] : selected,
         undefined,
         selectAllEligible
-          ? { targetFilter: { locationStatus: 'UNVERIFIED', search: customerSearch }, dailySendLimit }
+          ? {
+              targetFilter: {
+                locationStatus: 'UNVERIFIED',
+                search: customerSearch,
+                ...(coverageFwaFilter !== 'ALL' ? { coverageFwaStatus: coverageFwaFilter } : {}),
+                ...(coverageFtthFilter !== 'ALL' ? { coverageFtthStatus: coverageFtthFilter } : {}),
+              },
+              dailySendLimit,
+            }
           : { dailySendLimit },
       );
       await startCampaign(campaign.id);
@@ -480,6 +492,40 @@ export const CampaignsView: React.FC = () => {
           >
             {t('campaigns.findCustomer')}
           </button>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+            {t('campaigns.coverageFwa')}
+            <select
+              value={coverageFwaFilter}
+              onChange={(event) => {
+                setCoverageFwaFilter(event.target.value);
+                setCandidatePage(1);
+                setCandidateCursors({});
+              }}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+            >
+              <option value="ALL">{t('campaigns.coverageAll')}</option>
+              <option value="Coverage FWA ON Air & Integreted">{t('campaigns.coverageFwaCovered')}</option>
+              <option value="Not Coverage">{t('campaigns.coverageNotAvailable')}</option>
+            </select>
+          </label>
+          <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+            {t('campaigns.coverageFtth')}
+            <select
+              value={coverageFtthFilter}
+              onChange={(event) => {
+                setCoverageFtthFilter(event.target.value);
+                setCandidatePage(1);
+                setCandidateCursors({});
+              }}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+            >
+              <option value="ALL">{t('campaigns.coverageAll')}</option>
+              <option value="Coverage FTTH">{t('campaigns.coverageFtthCovered')}</option>
+              <option value="Not Coverage">{t('campaigns.coverageNotAvailable')}</option>
+            </select>
+          </label>
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-4 text-xs font-medium text-slate-700 dark:text-slate-200">

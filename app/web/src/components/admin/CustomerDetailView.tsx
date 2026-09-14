@@ -124,6 +124,12 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
                 Coverage: <strong className="text-gray-700 dark:text-gray-300">{customer.coverageStatus || '—'}</strong>
               </span>
               <span>
+                FWA: <strong className="text-gray-700 dark:text-gray-300">{customer.coverageFwaStatus || '—'}</strong>
+              </span>
+              <span>
+                FTTH: <strong className="text-gray-700 dark:text-gray-300">{customer.coverageFtthStatus || '—'}</strong>
+              </span>
+              <span>
                 BTS:{' '}
                 <strong className="text-gray-700 dark:text-gray-300">
                   {customer.btsName || '—'}

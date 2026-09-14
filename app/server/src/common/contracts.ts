@@ -37,6 +37,8 @@ export const campaignTargetFilterSchema = z.object({
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).default('UNVERIFIED'),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
   search: z.string().trim().max(128).default(''),
+  coverageFwaStatus: z.string().trim().max(64).optional(),
+  coverageFtthStatus: z.string().trim().max(64).optional(),
 });
 
 export const campaignCreateSchema = z
@@ -180,6 +182,8 @@ export const customerListQuerySchema = z.object({
       'NOT_ON_WHATSAPP',
     ])
     .optional(),
+  coverageFwaStatus: z.string().trim().max(64).optional(),
+  coverageFtthStatus: z.string().trim().max(64).optional(),
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
   coordinateAuditStatus: z.enum(['PENDING', 'MATCHED', 'UNCERTAIN', 'MISMATCH', 'INVALID']).optional(),
   addressCompleteness: z.enum(['COMPLETE', 'INCOMPLETE']).optional(),
@@ -204,6 +208,8 @@ export const customerExportQuerySchema = z.object({
       'NOT_ON_WHATSAPP',
     ])
     .optional(),
+  coverageFwaStatus: z.string().trim().max(64).optional(),
+  coverageFtthStatus: z.string().trim().max(64).optional(),
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
   coordinateAuditStatus: z.enum(['PENDING', 'MATCHED', 'UNCERTAIN', 'MISMATCH', 'INVALID']).optional(),
   addressCompleteness: z.enum(['COMPLETE', 'INCOMPLETE']).optional(),

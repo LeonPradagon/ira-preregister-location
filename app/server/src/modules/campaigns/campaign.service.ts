@@ -57,6 +57,8 @@ function filtersForTarget(target: StoredTargetFilter, cursor?: string) {
     );
   }
   if (target.status) filters.push(eq(customers.status, target.status));
+  if (target.coverageFwaStatus) filters.push(eq(customers.coverageFwaStatus, target.coverageFwaStatus));
+  if (target.coverageFtthStatus) filters.push(eq(customers.coverageFtthStatus, target.coverageFtthStatus));
   filters.push(ne(customers.status, 'SUSPENDED'), isNull(customers.whatsappOptOutAt));
   if (target.locationStatus === 'VERIFIED') {
     filters.push(

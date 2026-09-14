@@ -96,10 +96,16 @@ export const customers = pgTable('customers', {
   isCoverBts: boolean('is_cover_bts'),
   btsName: varchar('bts_name', { length: 255 }),
   coverageStatus: varchar('coverage_status', { length: 64 }),
+  coverageFwaStatus: varchar('coverage_fwa_status', { length: 64 }),
+  coverageFtthStatus: varchar('coverage_ftth_status', { length: 64 }),
   sourceMetadata: jsonb('source_metadata'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, (table) => [index('customers_whatsapp_status_idx').on(table.whatsappStatus)]);
+}, (table) => [
+  index('customers_whatsapp_status_idx').on(table.whatsappStatus),
+  index('customers_coverage_fwa_status_idx').on(table.coverageFwaStatus),
+  index('customers_coverage_ftth_status_idx').on(table.coverageFtthStatus),
+]);
 
 export const administrativeRegions = pgTable('administrative_regions', {
   code: varchar('code', { length: 13 }).primaryKey(),

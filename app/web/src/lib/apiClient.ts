@@ -531,6 +531,8 @@ const adminApi = {
       locationStatus?: 'UNVERIFIED' | 'VERIFIED';
       coordinateAuditStatus?: 'PENDING' | 'MATCHED' | 'UNCERTAIN' | 'MISMATCH' | 'INVALID';
       addressCompleteness?: 'COMPLETE' | 'INCOMPLETE';
+      coverageFwaStatus?: string;
+      coverageFtthStatus?: string;
       campaignAvailable?: boolean;
       cursor?: string;
     } = {},
@@ -544,6 +546,8 @@ const adminApi = {
     if (query.locationStatus) params.set('locationStatus', query.locationStatus);
     if (query.coordinateAuditStatus) params.set('coordinateAuditStatus', query.coordinateAuditStatus);
     if (query.addressCompleteness) params.set('addressCompleteness', query.addressCompleteness);
+    if (query.coverageFwaStatus && query.coverageFwaStatus !== 'ALL') params.set('coverageFwaStatus', query.coverageFwaStatus);
+    if (query.coverageFtthStatus && query.coverageFtthStatus !== 'ALL') params.set('coverageFtthStatus', query.coverageFtthStatus);
     if (query.campaignAvailable) params.set('campaignAvailable', 'true');
     if (query.cursor) params.set('cursor', query.cursor);
     const suffix = params.toString() ? `?${params.toString()}` : '';
@@ -566,12 +570,16 @@ const adminApi = {
     whatsappStatus?: 'VALID_FORMAT' | 'FORMAT_INVALID' | 'NOT_CHECKED' | 'ACCEPTED' | 'DELIVERED' | 'READ' | 'FAILED' | 'NOT_ON_WHATSAPP';
     coordinateAuditStatus?: 'PENDING' | 'MATCHED' | 'UNCERTAIN' | 'MISMATCH' | 'INVALID';
     addressCompleteness?: 'COMPLETE' | 'INCOMPLETE';
+    coverageFwaStatus?: string;
+    coverageFtthStatus?: string;
   }) =>
     request<CustomerExportJob>('/admin/exports/customers', {
       method: 'POST',
       body: JSON.stringify({
         ...query,
         status: query.status && query.status !== 'ALL' ? query.status : undefined,
+        coverageFwaStatus: query.coverageFwaStatus && query.coverageFwaStatus !== 'ALL' ? query.coverageFwaStatus : undefined,
+        coverageFtthStatus: query.coverageFtthStatus && query.coverageFtthStatus !== 'ALL' ? query.coverageFtthStatus : undefined,
       }),
     }),
   getCustomerExportJob: (jobId: string) =>

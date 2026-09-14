@@ -113,6 +113,8 @@ interface AppContextType {
     addressCompleteness?: 'ALL' | 'COMPLETE' | 'INCOMPLETE',
     coordinateAuditStatus?: 'ALL' | CoordinateAuditStatus,
     whatsappStatus?: 'ALL' | WhatsappStatus,
+    coverageFwaStatus?: string,
+    coverageFtthStatus?: string,
   ) => Promise<CustomerPage>;
   loadCustomerDetail: (
     customerId: string,
@@ -251,6 +253,8 @@ export function mapApiCustomer(raw: Record<string, unknown>): Customer {
     isCoverBts: typeof raw.isCoverBts === 'boolean' ? raw.isCoverBts : undefined,
     btsName: raw.btsName ? String(raw.btsName) : undefined,
     coverageStatus: raw.coverageStatus ? String(raw.coverageStatus) : undefined,
+    coverageFwaStatus: raw.coverageFwaStatus ? String(raw.coverageFwaStatus) : undefined,
+    coverageFtthStatus: raw.coverageFtthStatus ? String(raw.coverageFtthStatus) : undefined,
     sourceMetadata:
       raw.sourceMetadata && typeof raw.sourceMetadata === 'object'
         ? (raw.sourceMetadata as Record<string, unknown>)
@@ -502,6 +506,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addressCompleteness: 'ALL' | 'COMPLETE' | 'INCOMPLETE' = 'ALL',
     coordinateAuditStatus: 'ALL' | CoordinateAuditStatus = 'ALL',
     whatsappStatus: 'ALL' | WhatsappStatus = 'ALL',
+    coverageFwaStatus = 'ALL',
+    coverageFtthStatus = 'ALL',
   ): Promise<CustomerPage> => {
     const raw = await api.customers({
       page,
@@ -511,6 +517,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addressCompleteness: addressCompleteness === 'ALL' ? undefined : addressCompleteness,
       coordinateAuditStatus: coordinateAuditStatus === 'ALL' ? undefined : coordinateAuditStatus,
       whatsappStatus: whatsappStatus === 'ALL' ? undefined : whatsappStatus,
+      coverageFwaStatus: coverageFwaStatus === 'ALL' ? undefined : coverageFwaStatus,
+      coverageFtthStatus: coverageFtthStatus === 'ALL' ? undefined : coverageFtthStatus,
       cursor: page === 1 ? undefined : customerCursors[page],
     });
     if (page === 1) setCustomerCursors({});
@@ -755,7 +763,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     customerIds: string[] = [],
     scheduledAt?: string,
     options?: {
-      targetFilter?: { locationStatus: 'UNVERIFIED' | 'VERIFIED'; status?: CustomerStatus; search?: string };
+      targetFilter?: {
+        locationStatus: 'UNVERIFIED' | 'VERIFIED';
+        status?: CustomerStatus;
+        search?: string;
+        coverageFwaStatus?: string;
+        coverageFtthStatus?: string;
+      };
       batchSize?: number;
       dailySendLimit?: number;
       sendWindowDays?: number;

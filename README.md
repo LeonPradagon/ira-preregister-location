@@ -99,8 +99,8 @@ Migration SQL bernomor dijalankan berurutan dan dicatat di `app_migrations`. Bas
 
 ## Alur bisnis dan konfigurasi
 
-- **Customer dan alamat:** import `.xlsx`/`.csv` dari menu pelanggan, maksimal 50 MB/file. Import menormalisasi nomor ke E.164, meng-upsert source ID, dan menyimpan metadata BTS/coverage. Pekerjaan besar diproses import worker.
-- **Campaign:** pilih customer eligible atau filter seluruh customer; worker mematerialisasi target per batch dan mengirim sesuai jadwal. Batas harian, rate pesan per detik, dan cooldown nomor dapat diatur dari menu Check Rules. Batas harian tetap maksimal 10.000.
+- **Customer dan alamat:** import `.xlsx`/`.csv` dari menu pelanggan, maksimal 50 MB/file. Import menormalisasi nomor ke E.164, meng-upsert source ID, dan menyimpan coverage BTS, FWA, FTTH, serta kolom site/provider dari template terbaru. Workbook multi-sheet akan memilih sheet yang memiliki header prereg yang wajib. Pekerjaan besar diproses import worker.
+- **Campaign:** pilih customer eligible atau filter seluruh customer. Filter FWA dan FTTH pada form blasting secara default mengutamakan customer dengan `Not Coverage` pada keduanya; kombinasi lain tetap dapat dipilih. Worker mematerialisasi target per batch dan mengirim sesuai jadwal. Batas harian, rate pesan per detik, dan cooldown nomor dapat diatur dari menu Check Rules. Batas harian tetap maksimal 10.000.
 - **Verifikasi:** link `/v/:token` berisi opaque token. Customer mengonfirmasi data, memberi izin lokasi, dan mengirim sampel GPS. Server menjalankan validation engine dan menentukan status; alamat baru berstatus `PROPOSED` sampai validasi selesai.
 - **Reminder:** customer memilih tanggal/jam. Worker mengikuti `REMINDER_TIMEZONE`, batas percobaan, dan masa berlaku link; link baru menggantikan link sebelumnya.
 - **Akses:** Better Auth dan role `SUPER_ADMIN`, `ADMIN`, `REVIEWER`, `VIEWER`. Pengelolaan pengguna tersedia bagi super admin.
@@ -120,6 +120,6 @@ Semua endpoint menggunakan prefix `/v1`:
 - Admin: `/admin/customers`, `/admin/import-jobs`, `/admin/campaigns`, `/admin/verifications`, `/admin/reminders`, `/admin/users`, `/admin/audit-logs`.
 - Customer: `/public/verifications/:token`, beserta `/customer-confirmation`, `/consent`, `/location`, `/address-status`, `/address-change`, `/wait-for-home`.
 
-Importer CLI: `npm --workspace app/server run import:prereg -- /path/to/file.xlsx`.
+Importer CLI: `npm --workspace app/server run import:prereg -- /path/to/file.xlsx`. Import berikutnya melakukan upsert berdasarkan source ID, sehingga status coverage dapat diperbarui tanpa membuat customer duplikat.
 
 Lihat [PRD](PRD_IRA_Preregist_v0.6.md), [PRD_COMPLIANCE.md](PRD_COMPLIANCE.md), dan [IMPLEMENTATION_TASKS.md](IMPLEMENTATION_TASKS.md) untuk requirement dan pekerjaan lanjutan. Dokumen PRD adalah referensi rancangan; perintah deployment aktif mengikuti README ini.

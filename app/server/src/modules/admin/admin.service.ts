@@ -524,6 +524,8 @@ export class AdminService {
     }
     if (query.status) filters.push(eq(customers.status, query.status));
     if (query.whatsappStatus) filters.push(eq(customers.whatsappStatus, query.whatsappStatus));
+    if (query.coverageFwaStatus) filters.push(eq(customers.coverageFwaStatus, query.coverageFwaStatus));
+    if (query.coverageFtthStatus) filters.push(eq(customers.coverageFtthStatus, query.coverageFtthStatus));
     if (query.locationStatus === 'UNVERIFIED') {
       filters.push(
         ne(customers.status, 'SUSPENDED'),
@@ -601,6 +603,8 @@ export class AdminService {
         search: query.search,
         status: query.status,
         whatsappStatus: query.whatsappStatus,
+        coverageFwaStatus: query.coverageFwaStatus,
+        coverageFtthStatus: query.coverageFtthStatus,
         locationStatus: query.locationStatus,
         coordinateAuditStatus: query.coordinateAuditStatus,
         addressCompleteness: query.addressCompleteness,

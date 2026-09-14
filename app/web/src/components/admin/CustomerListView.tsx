@@ -181,6 +181,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
     useState<AddressCompletenessFilter>('ALL');
   const [coordinateAuditFilter, setCoordinateAuditFilter] = useState<CoordinateAuditFilter>('ALL');
   const [whatsappStatusFilter, setWhatsappStatusFilter] = useState<WhatsappStatusFilter>('ALL');
+  const [coverageFwaFilter, setCoverageFwaFilter] = useState('ALL');
+  const [coverageFtthFilter, setCoverageFtthFilter] = useState('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -393,6 +395,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           addressCompletenessFilter,
           coordinateAuditFilter,
           whatsappStatusFilter,
+          coverageFwaFilter,
+          coverageFtthFilter,
         ),
         refreshDashboard(),
       ]);
@@ -417,6 +421,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
         coordinateAuditStatus: coordinateAuditFilter === 'ALL' ? undefined : coordinateAuditFilter,
         addressCompleteness: addressCompletenessFilter === 'ALL' ? undefined : addressCompletenessFilter,
         whatsappStatus: whatsappStatusFilter === 'ALL' ? undefined : whatsappStatusFilter,
+        coverageFwaStatus: coverageFwaFilter === 'ALL' ? undefined : coverageFwaFilter,
+        coverageFtthStatus: coverageFtthFilter === 'ALL' ? undefined : coverageFtthFilter,
       });
       let currentJob = job;
       const deadline = Date.now() + 30 * 60 * 1000;
@@ -448,7 +454,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
       void refreshCustomerData(true, 1);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [searchTerm, statusFilter, addressCompletenessFilter, coordinateAuditFilter, whatsappStatusFilter, t]);
+  }, [searchTerm, statusFilter, addressCompletenessFilter, coordinateAuditFilter, whatsappStatusFilter, coverageFwaFilter, coverageFtthFilter, t]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -461,6 +467,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
     addressCompletenessFilter,
     coordinateAuditFilter,
     whatsappStatusFilter,
+    coverageFwaFilter,
+    coverageFtthFilter,
     customerPage.page,
     customerPage.pageSize,
     t,
@@ -565,6 +573,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           addressCompletenessFilter,
           coordinateAuditFilter,
           whatsappStatusFilter,
+          coverageFwaFilter,
+          coverageFtthFilter,
         );
       }
       setIsAddModalOpen(false);
@@ -864,6 +874,32 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
               ))}
             </select>
           </label>
+          <label htmlFor="customer-fwa-coverage-filter" className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300">
+            <span className="font-medium text-slate-500 dark:text-slate-400">{t('customers.coverageFwaFilter')}</span>
+            <select
+              id="customer-fwa-coverage-filter"
+              value={coverageFwaFilter}
+              onChange={(e) => setCoverageFwaFilter(e.target.value)}
+              className="h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
+            >
+              <option value="ALL">{t('customers.coverageAll')}</option>
+              <option value="Coverage FWA ON Air & Integreted">{t('customers.coverageFwaCovered')}</option>
+              <option value="Not Coverage">{t('customers.coverageNotAvailable')}</option>
+            </select>
+          </label>
+          <label htmlFor="customer-ftth-coverage-filter" className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300">
+            <span className="font-medium text-slate-500 dark:text-slate-400">{t('customers.coverageFtthFilter')}</span>
+            <select
+              id="customer-ftth-coverage-filter"
+              value={coverageFtthFilter}
+              onChange={(e) => setCoverageFtthFilter(e.target.value)}
+              className="h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
+            >
+              <option value="ALL">{t('customers.coverageAll')}</option>
+              <option value="Coverage FTTH">{t('customers.coverageFtthCovered')}</option>
+              <option value="Not Coverage">{t('customers.coverageNotAvailable')}</option>
+            </select>
+          </label>
         </div>
       </section>
 
@@ -885,6 +921,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 addressCompletenessFilter,
                 coordinateAuditFilter,
                 whatsappStatusFilter,
+                coverageFwaFilter,
+                coverageFtthFilter,
               )
             }
             onPageSizeChange={(pageSize: TablePageSize) =>
@@ -896,6 +934,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 addressCompletenessFilter,
                 coordinateAuditFilter,
                 whatsappStatusFilter,
+                coverageFwaFilter,
+                coverageFtthFilter,
               )
             }
           />
@@ -1026,6 +1066,14 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                     </div>
                     <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 break-words whitespace-normal leading-4">
                       {cust.btsName || (cust.isCoverBts ? t('customers.btsAvailable') : t('customers.btsNameMissing'))}
+                    </div>
+                    <div className="mt-1 space-y-0.5 text-[10px] text-gray-500 dark:text-gray-400 break-words whitespace-normal leading-4">
+                      <div>
+                        <span className="font-semibold">FWA:</span> {cust.coverageFwaStatus || '—'}
+                      </div>
+                      <div>
+                        <span className="font-semibold">FTTH:</span> {cust.coverageFtthStatus || '—'}
+                      </div>
                     </div>
                   </td>
 
@@ -1330,6 +1378,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 addressCompletenessFilter,
                 coordinateAuditFilter,
                 whatsappStatusFilter,
+                coverageFwaFilter,
+                coverageFtthFilter,
               ),
               refreshDashboard(),
             ]);

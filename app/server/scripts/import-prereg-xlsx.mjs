@@ -36,6 +36,20 @@ const headerAliases = {
   is_cover_bts: ['is_cover_bts', 'cover_bts', 'covered_bts'],
   bts_name: ['bts_name', 'bts', 'nama_bts'],
   coverage_status: ['coverage_status', 'coverage', 'status_coverage'],
+  coverage_fwa_status: ['coverage_fwa_status', 'status_coverage_fwa', 'fwa_coverage_status', 'fwa_status'],
+  coverage_ftth_status: [
+    'coverage_ftth_status',
+    'status_coverage_ftth',
+    'staus_coverage_ftth',
+    'ftth_coverage_status',
+    'ftth_status',
+  ],
+  site_id: ['site_id', 'siteid'],
+  site_name_tp: ['site_name_tp', 'site_name'],
+  site_id_surge: ['site_id_surge'],
+  site_status: ['site_status'],
+  mitra: ['mitra', 'partner'],
+  review: ['review', 'review_status'],
 };
 
 const requiredHeaders = ['id', 'full_name', 'effective_phone_number'];
@@ -180,6 +194,8 @@ const createStats = () => ({
   missingCoordinates: 0,
   incompleteAddresses: 0,
   coverage: new Map(),
+  coverageFwa: new Map(),
+  coverageFtth: new Map(),
   coveredBts: 0,
 });
 
@@ -223,6 +239,10 @@ const parseDataRow = (
     stats.incompleteAddresses += 1;
   const coverageStatus = values.coverage_status || 'UNKNOWN';
   stats.coverage.set(coverageStatus, (stats.coverage.get(coverageStatus) ?? 0) + 1);
+  const coverageFwaStatus = values.coverage_fwa_status || 'UNKNOWN';
+  const coverageFtthStatus = values.coverage_ftth_status || 'UNKNOWN';
+  stats.coverageFwa.set(coverageFwaStatus, (stats.coverageFwa.get(coverageFwaStatus) ?? 0) + 1);
+  stats.coverageFtth.set(coverageFtthStatus, (stats.coverageFtth.get(coverageFtthStatus) ?? 0) + 1);
   if (parseBoolean(values.is_cover_bts)) stats.coveredBts += 1;
   const sourceCreatedAt = values.created_at ? new Date(values.created_at) : null;
   if (sourceCreatedAt && Number.isNaN(sourceCreatedAt.getTime()))
@@ -246,6 +266,14 @@ const parseDataRow = (
     houseNumber,
     sourceCreatedAt,
     coverageStatus,
+    coverageFwaStatus: values.coverage_fwa_status || null,
+    coverageFtthStatus: values.coverage_ftth_status || null,
+    siteId: values.site_id || null,
+    siteNameTp: values.site_name_tp || null,
+    siteIdSurge: values.site_id_surge || null,
+    siteStatus: values.site_status || null,
+    mitra: values.mitra || null,
+    review: values.review || null,
     isCoverBts: parseBoolean(values.is_cover_bts),
     btsName: values.bts_name || null,
   };
@@ -305,20 +333,31 @@ const streamXlsxRows = async function* (stats) {
   });
   const seenIds = new Set();
   const seenPhones = new Set();
+  let selectedWorksheet = false;
   for await (const worksheet of workbook) {
     let headers = null;
+    let headerMap = null;
     for await (const row of worksheet) {
       const values = Array.isArray(row.values) ? row.values.slice(1) : [];
       const rowNumber = row.number;
       if (!headers) {
         headers = values.map((value) => text(value).replace(/^\uFEFF/, ''));
+        try {
+          headerMap = buildHeaderMap(headers, rowNumber);
+        } catch {
+          headers = null;
+          continue;
+        }
+        selectedWorksheet = true;
         continue;
       }
+      if (!selectedWorksheet) continue;
       if (values.every((value) => text(value) === '')) continue;
-      yield parseDataRow(headers, values, rowNumber, seenIds, seenPhones, stats);
+      yield parseDataRow(headers, values, rowNumber, seenIds, seenPhones, stats, headerMap);
     }
-    break;
+    if (selectedWorksheet) break;
   }
+  if (!selectedWorksheet) throw new Error('Workbook tidak memiliki sheet dengan header prereg yang wajib.');
 };
 
 const parseRows = (matrix) => {
@@ -339,7 +378,15 @@ const readRepairedXlsxRows = async function* (stats, originalError) {
   } catch (error) {
     throw originalError ?? error;
   }
-  const worksheet = workbook.worksheets[0];
+  const worksheet = workbook.worksheets.find((candidate) => {
+    const headers = candidate.getRow(1).values.slice(1).map((value) => text(value).replace(/^\uFEFF/, ''));
+    try {
+      buildHeaderMap(headers, 1);
+      return true;
+    } catch {
+      return false;
+    }
+  });
   if (!worksheet) throw new Error('Workbook has no worksheet');
   const matrix = [];
   for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1)
@@ -393,6 +440,14 @@ const stageColumns = [
   'house_number',
   'source_created_at',
   'coverage_status',
+  'coverage_fwa_status',
+  'coverage_ftth_status',
+  'site_id',
+  'site_name_tp',
+  'site_id_surge',
+  'site_status',
+  'mitra',
+  'review',
   'is_cover_bts',
   'bts_name',
 ];
@@ -419,6 +474,14 @@ const insertStageBatch = async (client, rows) => {
       row.houseNumber,
       row.sourceCreatedAt,
       row.coverageStatus,
+      row.coverageFwaStatus,
+      row.coverageFtthStatus,
+      row.siteId,
+      row.siteNameTp,
+      row.siteIdSurge,
+      row.siteStatus,
+      row.mitra,
+      row.review,
       row.isCoverBts,
       row.btsName,
     );
@@ -459,6 +522,14 @@ const importRows = async ({ rows, stats }) => {
       house_number varchar(64) NOT NULL,
       source_created_at timestamptz,
       coverage_status text,
+      coverage_fwa_status text,
+      coverage_ftth_status text,
+      site_id text,
+      site_name_tp text,
+      site_id_surge text,
+      site_status text,
+      mitra text,
+      review text,
       is_cover_bts boolean NOT NULL,
       bts_name text
     ) ON COMMIT DROP`);
@@ -474,10 +545,10 @@ const importRows = async ({ rows, stats }) => {
 
     const customerResult = await client.query(
       `
-      INSERT INTO customers (external_id, name, phone_e164, whatsapp_status, status, source_record_id, source_created_at, is_cover_bts, bts_name, coverage_status, source_metadata, created_at, updated_at)
+      INSERT INTO customers (external_id, name, phone_e164, whatsapp_status, status, source_record_id, source_created_at, is_cover_bts, bts_name, coverage_status, coverage_fwa_status, coverage_ftth_status, source_metadata, created_at, updated_at)
       SELECT external_id, full_name, phone_e164, 'VALID_FORMAT', 'PENDING_INSTALLATION',
-        source_id, source_created_at, is_cover_bts, bts_name, coverage_status,
-        jsonb_build_object('source', 'prereg_non_customer', 'sourceId', source_id, 'addressReference', landmark, 'isCoverBts', is_cover_bts, 'btsName', bts_name, 'coverageStatus', coverage_status),
+        source_id, source_created_at, is_cover_bts, bts_name, coverage_status, coverage_fwa_status, coverage_ftth_status,
+        jsonb_build_object('source', 'prereg_non_customer', 'sourceId', source_id, 'addressReference', landmark, 'isCoverBts', is_cover_bts, 'btsName', bts_name, 'coverageStatus', coverage_status, 'coverageFwaStatus', coverage_fwa_status, 'coverageFtthStatus', coverage_ftth_status, 'siteId', site_id, 'siteNameTp', site_name_tp, 'siteIdSurge', site_id_surge, 'siteStatus', site_status, 'mitra', mitra, 'review', review),
         COALESCE(source_created_at, $1), $1
       FROM prereg_import_stage
       ON CONFLICT (external_id) DO UPDATE SET
@@ -489,6 +560,8 @@ const importRows = async ({ rows, stats }) => {
         is_cover_bts = EXCLUDED.is_cover_bts,
         bts_name = EXCLUDED.bts_name,
         coverage_status = EXCLUDED.coverage_status,
+        coverage_fwa_status = EXCLUDED.coverage_fwa_status,
+        coverage_ftth_status = EXCLUDED.coverage_ftth_status,
         source_metadata = EXCLUDED.source_metadata,
         status = CASE WHEN customers.status = 'VERIFIED' THEN customers.status ELSE 'PENDING_INSTALLATION' END,
         updated_at = EXCLUDED.updated_at
@@ -588,6 +661,8 @@ console.info(
       incompleteAddressRows: stats.incompleteAddresses,
       coveredBtsRows: stats.coveredBts,
       coverageStatusCounts: Object.fromEntries(stats.coverage),
+      coverageFwaStatusCounts: Object.fromEntries(stats.coverageFwa),
+      coverageFtthStatusCounts: Object.fromEntries(stats.coverageFtth),
       whatsappOptIn: 'not set; explicit opt-in import is required before campaign blast',
       referencePrecision: 'STREET',
       importedAt: result.importedAt.toISOString(),

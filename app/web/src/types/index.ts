@@ -35,6 +35,8 @@ export interface Customer {
   isCoverBts?: boolean;
   btsName?: string;
   coverageStatus?: string;
+  coverageFwaStatus?: string;
+  coverageFtthStatus?: string;
   sourceMetadata?: Record<string, unknown>;
   activeAddress?: CustomerAddress | null;
   latestVerification?: VerificationSession | null;
