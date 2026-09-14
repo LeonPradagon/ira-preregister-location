@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, apiClient, isUsableServerValidationDecision } from '../../src/lib/apiClient';
+import { deliveryWording } from '../../src/i18n';
 
 describe('API client', () => {
   beforeEach(() => {
@@ -164,5 +165,31 @@ describe('API client', () => {
     await api.lookupAddress('verification-token', { city: 'Jakarta Barat' });
 
     expect(adapterMock.mock.calls[0][0].timeout).toBe(60_000);
+  });
+
+  it('has a translated monitoring label for every verification status', () => {
+    const statuses = [
+      'CREATED',
+      'MESSAGE_SENT',
+      'LINK_OPENED',
+      'CONSENTED',
+      'CUSTOMER_DATA_MISMATCH',
+      'GPS_CAPTURING',
+      'LOW_GPS_ACCURACY',
+      'LOCATION_MISMATCH',
+      'WAITING_FOR_HOME',
+      'REMINDER_REQUIRED',
+      'REMINDER_LIMIT_REACHED',
+      'ADDRESS_EDITING',
+      'ADDRESS_PROPOSED',
+      'MANUAL_REVIEW',
+      'LOCATION_VALID',
+      'EXPIRED',
+    ];
+
+    for (const status of statuses) {
+      expect(deliveryWording.id[`monitoring.status.${status}`]).toBeTruthy();
+      expect(deliveryWording.en[`monitoring.status.${status}`]).toBeTruthy();
+    }
   });
 });

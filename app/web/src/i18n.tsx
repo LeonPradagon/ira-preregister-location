@@ -1868,7 +1868,7 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
 // internal status names and operations vocabulary out of the mobile flow.
 // The data model and API still use the internal "campaign" name, but the
 // admin UI describes this feature as WhatsApp message delivery.
-const deliveryWording: Record<Language, Record<string, string>> = {
+export const deliveryWording: Record<Language, Record<string, string>> = {
   id: {
     'nav.campaigns': 'Pengiriman WhatsApp',
     'nav.monitoring': 'Monitoring Blasting',
@@ -2032,6 +2032,21 @@ const deliveryWording: Record<Language, Record<string, string>> = {
     'monitoring.recipientsEmpty': 'Belum ada penerima yang sesuai.',
     'monitoring.recipientsLoadError': 'Daftar penerima gagal dimuat.',
     'monitoring.status.CREATED': 'Belum mulai',
+    'monitoring.status.MESSAGE_SENT': 'Undangan terkirim',
+    'monitoring.status.LINK_OPENED': 'Tautan dibuka',
+    'monitoring.status.CONSENTED': 'Menunggu izin lokasi',
+    'monitoring.status.CUSTOMER_DATA_MISMATCH': 'Data customer tidak sesuai',
+    'monitoring.status.GPS_CAPTURING': 'Sedang mengambil lokasi',
+    'monitoring.status.LOW_GPS_ACCURACY': 'Akurasi lokasi rendah',
+    'monitoring.status.LOCATION_MISMATCH': 'Lokasi tidak sesuai',
+    'monitoring.status.WAITING_FOR_HOME': 'Menunggu customer di alamat',
+    'monitoring.status.REMINDER_REQUIRED': 'Menunggu reminder',
+    'monitoring.status.REMINDER_LIMIT_REACHED': 'Batas reminder tercapai',
+    'monitoring.status.ADDRESS_EDITING': 'Sedang mengubah alamat',
+    'monitoring.status.ADDRESS_PROPOSED': 'Alamat baru diajukan',
+    'monitoring.status.MANUAL_REVIEW': 'Perlu diperiksa tim',
+    'monitoring.status.LOCATION_VALID': 'Lokasi sesuai',
+    'monitoring.status.EXPIRED': 'Tautan kedaluwarsa',
   },
   en: {
     'nav.campaigns': 'WhatsApp Delivery',
@@ -2219,6 +2234,21 @@ const deliveryWording: Record<Language, Record<string, string>> = {
     'monitoring.recipientsEmpty': 'No matching recipients yet.',
     'monitoring.recipientsLoadError': 'Recipient list could not be loaded.',
     'monitoring.status.CREATED': 'Not started',
+    'monitoring.status.MESSAGE_SENT': 'Invitation sent',
+    'monitoring.status.LINK_OPENED': 'Link opened',
+    'monitoring.status.CONSENTED': 'Waiting for location permission',
+    'monitoring.status.CUSTOMER_DATA_MISMATCH': 'Customer data does not match',
+    'monitoring.status.GPS_CAPTURING': 'Capturing location',
+    'monitoring.status.LOW_GPS_ACCURACY': 'Low location accuracy',
+    'monitoring.status.LOCATION_MISMATCH': 'Location does not match',
+    'monitoring.status.WAITING_FOR_HOME': 'Waiting for customer at address',
+    'monitoring.status.REMINDER_REQUIRED': 'Waiting for reminder',
+    'monitoring.status.REMINDER_LIMIT_REACHED': 'Reminder limit reached',
+    'monitoring.status.ADDRESS_EDITING': 'Editing address',
+    'monitoring.status.ADDRESS_PROPOSED': 'New address proposed',
+    'monitoring.status.MANUAL_REVIEW': 'Needs team review',
+    'monitoring.status.LOCATION_VALID': 'Location matched',
+    'monitoring.status.EXPIRED': 'Link expired',
   },
 };
 

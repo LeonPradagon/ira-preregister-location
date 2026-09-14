@@ -139,7 +139,7 @@ const whatsappStatusBadgeClass = (status: WhatsappStatus) => {
 type RegionLevel = 'province' | 'city' | 'district' | 'subdistrict';
 const regionLevels: RegionLevel[] = ['province', 'city', 'district', 'subdistrict'];
 
-const generateCustomerExternalId = () => `PREREREG-NON-CUSTOMER-${Math.floor(Math.random() * 900000 + 100000)}`;
+const generateCustomerExternalId = () => `PREREG-NON-CUSTOMER-${Math.floor(Math.random() * 900000 + 100000)}`;
 const getPhoneNationalPart = (phone: string) => {
   const digits = phone.replace(/\D/g, '');
   return digits.startsWith('62') ? digits.slice(2) : digits.startsWith('0') ? digits.slice(1) : digits;
