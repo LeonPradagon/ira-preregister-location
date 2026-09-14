@@ -15,6 +15,7 @@ import {
   verificationShortLinks,
   validationResults,
   verificationCampaignItems,
+  verificationCampaigns,
   verificationReviews,
   verificationSessions,
   whatsappDeliveryLogs,
@@ -346,6 +347,166 @@ export class AdminService {
       },
     );
     return cached;
+  }
+
+  async monitoring() {
+    const [campaignRows, reminderRows, reminderNumberRows] = await Promise.all([
+      db
+        .select({
+          id: verificationCampaigns.id,
+          name: verificationCampaigns.name,
+          status: verificationCampaigns.status,
+          scheduledAt: verificationCampaigns.scheduledAt,
+          createdAt: verificationCampaigns.createdAt,
+          target: sql<number>`count(${verificationCampaignItems.id})`,
+          pending: sql<number>`count(${verificationCampaignItems.id}) filter (where ${verificationCampaignItems.status} in ('PENDING', 'PROCESSING'))`,
+          sent: sql<number>`count(${verificationCampaignItems.id}) filter (where ${verificationCampaignItems.status} in ('SENT', 'DELIVERED', 'READ'))`,
+          delivered: sql<number>`count(${verificationCampaignItems.id}) filter (where ${verificationCampaignItems.status} in ('DELIVERED', 'READ'))`,
+          read: sql<number>`count(${verificationCampaignItems.id}) filter (where ${verificationCampaignItems.status} = 'READ')`,
+          failed: sql<number>`count(${verificationCampaignItems.id}) filter (where ${verificationCampaignItems.status} in ('FAILED', 'PROVIDER_UNAVAILABLE', 'OPTED_OUT'))`,
+          linksOpened: sql<number>`count(${verificationCampaignItems.id}) filter (where ${verificationSessions.openedAt} is not null)`,
+          confirmed: sql<number>`count(${verificationCampaignItems.id}) filter (where ${verificationSessions.customerConfirmationStatus} = 'CONFIRMED')`,
+          gpsReceived: sql<number>`count(${verificationCampaignItems.id}) filter (where exists (
+            select 1 from ${locationCaptures}
+            where ${locationCaptures.sessionId} = ${verificationSessions.id}
+          ))`,
+          addressChanged: sql<number>`count(${verificationCampaignItems.id}) filter (
+            where ${verificationSessions.verificationStatus} in ('ADDRESS_EDITING', 'ADDRESS_PROPOSED')
+              or exists (
+                select 1 from ${auditLogs}
+                where ${auditLogs.action} = 'ADDRESS_PROPOSED'
+                  and ${auditLogs.entityType} = 'ADDRESS'
+                  and (${auditLogs.after} ->> 'sessionId') = (${verificationSessions.id}::text)
+              )
+          )`,
+          locationValid: sql<number>`count(${verificationCampaignItems.id}) filter (where ${verificationSessions.verificationStatus} = 'LOCATION_VALID')`,
+          manualReview: sql<number>`count(${verificationCampaignItems.id}) filter (where ${verificationSessions.verificationStatus} = 'MANUAL_REVIEW')`,
+          waitingForHome: sql<number>`count(${verificationCampaignItems.id}) filter (where ${verificationSessions.verificationStatus} = 'WAITING_FOR_HOME')`,
+        })
+        .from(verificationCampaigns)
+        .leftJoin(verificationCampaignItems, eq(verificationCampaignItems.campaignId, verificationCampaigns.id))
+        .leftJoin(verificationSessions, eq(verificationSessions.id, verificationCampaignItems.sessionId))
+        .groupBy(
+          verificationCampaigns.id,
+          verificationCampaigns.name,
+          verificationCampaigns.status,
+          verificationCampaigns.scheduledAt,
+          verificationCampaigns.createdAt,
+        )
+        .orderBy(desc(verificationCampaigns.createdAt), desc(verificationCampaigns.id)),
+      db
+        .select({
+          campaignId: verificationCampaignItems.campaignId,
+          total: sql<number>`count(*)`,
+          scheduled: sql<number>`count(*) filter (where ${reminders.status} = 'SCHEDULED')`,
+          sent: sql<number>`count(*) filter (where ${reminders.status} = 'SENT')`,
+          failed: sql<number>`count(*) filter (where ${reminders.status} = 'FAILED')`,
+          cancelled: sql<number>`count(*) filter (where ${reminders.status} = 'CANCELLED')`,
+          opened: sql<number>`count(*) filter (where ${reminders.openedAt} is not null)`,
+        })
+        .from(reminders)
+        .innerJoin(verificationSessions, eq(verificationSessions.id, reminders.sessionId))
+        .innerJoin(verificationCampaignItems, eq(verificationCampaignItems.sessionId, verificationSessions.id))
+        .groupBy(verificationCampaignItems.campaignId),
+      db
+        .select({
+          campaignId: verificationCampaignItems.campaignId,
+          reminderNumber: reminders.reminderNumber,
+          total: sql<number>`count(*)`,
+        })
+        .from(reminders)
+        .innerJoin(verificationSessions, eq(verificationSessions.id, reminders.sessionId))
+        .innerJoin(verificationCampaignItems, eq(verificationCampaignItems.sessionId, verificationSessions.id))
+        .groupBy(verificationCampaignItems.campaignId, reminders.reminderNumber),
+    ]);
+
+    const toNumber = (value: number | string | null | undefined) => Number(value ?? 0);
+    const emptyReminders = () => ({ total: 0, scheduled: 0, sent: 0, failed: 0, cancelled: 0, opened: 0, byNumber: {} as Record<string, number> });
+    const reminderByCampaign = new Map(
+      reminderRows.map((row) => [
+        row.campaignId,
+        {
+          total: toNumber(row.total),
+          scheduled: toNumber(row.scheduled),
+          sent: toNumber(row.sent),
+          failed: toNumber(row.failed),
+          cancelled: toNumber(row.cancelled),
+          opened: toNumber(row.opened),
+          byNumber: {} as Record<string, number>,
+        },
+      ]),
+    );
+    for (const row of reminderNumberRows) {
+      const remindersForCampaign = reminderByCampaign.get(row.campaignId) ?? emptyReminders();
+      remindersForCampaign.byNumber[String(row.reminderNumber)] = toNumber(row.total);
+      reminderByCampaign.set(row.campaignId, remindersForCampaign);
+    }
+
+    const campaigns = campaignRows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      status: row.status,
+      scheduledAt: row.scheduledAt,
+      ...Object.fromEntries(
+        Object.entries(row)
+          .filter(([key]) => !['id', 'name', 'status', 'scheduledAt', 'createdAt'].includes(key))
+          .map(([key, value]) => [key, toNumber(value as number | string | null | undefined)]),
+      ),
+      reminders: reminderByCampaign.get(row.id) ?? emptyReminders(),
+    }));
+    const monitoringMetricKeys = [
+      'target',
+      'pending',
+      'sent',
+      'delivered',
+      'read',
+      'failed',
+      'linksOpened',
+      'confirmed',
+      'gpsReceived',
+      'addressChanged',
+      'locationValid',
+      'manualReview',
+      'waitingForHome',
+    ] as const;
+    type MonitoringMetricKey = (typeof monitoringMetricKeys)[number];
+    type MonitoringTotals = Record<MonitoringMetricKey, number> & { reminders: ReturnType<typeof emptyReminders> };
+    const summary = campaigns.reduce<MonitoringTotals>(
+      (total, campaign) => {
+        const campaignMetrics = campaign as unknown as Record<MonitoringMetricKey, number> & {
+          reminders: ReturnType<typeof emptyReminders>;
+        };
+        for (const key of monitoringMetricKeys) {
+          total[key] += campaignMetrics[key];
+        }
+        total.reminders.total += campaignMetrics.reminders.total;
+        total.reminders.scheduled += campaignMetrics.reminders.scheduled;
+        total.reminders.sent += campaignMetrics.reminders.sent;
+        total.reminders.failed += campaignMetrics.reminders.failed;
+        total.reminders.cancelled += campaignMetrics.reminders.cancelled;
+        total.reminders.opened += campaignMetrics.reminders.opened;
+        for (const [number, count] of Object.entries(campaignMetrics.reminders.byNumber))
+          total.reminders.byNumber[number] = (total.reminders.byNumber[number] ?? 0) + count;
+        return total;
+      },
+      {
+        target: 0,
+        pending: 0,
+        sent: 0,
+        delivered: 0,
+        read: 0,
+        failed: 0,
+        linksOpened: 0,
+        confirmed: 0,
+        gpsReceived: 0,
+        addressChanged: 0,
+        locationValid: 0,
+        manualReview: 0,
+        waitingForHome: 0,
+        reminders: emptyReminders(),
+      },
+    );
+    return { generatedAt: new Date().toISOString(), summary: { campaigns: campaigns.length, ...summary }, campaigns };
   }
 
   async listCustomers(query: CustomerListQueryInput) {

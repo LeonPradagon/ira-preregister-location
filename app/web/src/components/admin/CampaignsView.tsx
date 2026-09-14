@@ -11,7 +11,7 @@ import {
   Smartphone,
 } from 'lucide-react';
 import { mapApiCustomer, useApp } from '../../context/AppContext';
-import { api } from '../../lib/apiClient';
+import { api, type CampaignMonitoringSummary } from '../../lib/apiClient';
 import { Customer, VerificationCampaign } from '../../types';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 import { AppLoader } from '../common/AppLoader';
@@ -116,6 +116,13 @@ const PendingCountdown: React.FC<{ scheduledAt?: unknown }> = ({ scheduledAt }) 
   );
 };
 
+const MonitoringMetric: React.FC<{ label: string; value: number }> = ({ label, value }) => (
+  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/70">
+    <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{label}</p>
+    <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{value.toLocaleString('id-ID')}</p>
+  </div>
+);
+
 const MobileLandingPreviewCard: React.FC<{ preview: WhatsAppPreview; onOpen: () => void }> = ({ preview, onOpen }) => (
   <section className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/20">
     <div className="flex items-start gap-3">
@@ -186,6 +193,7 @@ export const CampaignsView: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [monitoring, setMonitoring] = useState<CampaignMonitoringSummary | null>(null);
   const [items, setItems] = useState<Array<Record<string, unknown>>>([]);
   const [itemTotal, setItemTotal] = useState(0);
   const [itemsLoading, setItemsLoading] = useState(false);
@@ -403,6 +411,7 @@ export const CampaignsView: React.FC = () => {
       setItemCursors({});
       setItems([]);
       setItemTotal(0);
+      setMonitoring(null);
     }
     setItemsLoading(true);
     try {
@@ -412,6 +421,7 @@ export const CampaignsView: React.FC = () => {
         cursor: nextPage === 1 ? undefined : itemCursors[nextPage],
       });
       if (response.nextCursor) setItemCursors((previous) => ({ ...previous, [nextPage + 1]: response.nextCursor! }));
+      setMonitoring(response.monitoring);
       setItems(response.items);
       setItemTotal(response.total);
     } catch (error) {
@@ -757,6 +767,53 @@ export const CampaignsView: React.FC = () => {
             <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('campaigns.deliveryTitle')}</h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('campaigns.itemsDescription')}</p>
           </div>
+          {monitoring && (
+            <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t('campaigns.monitoringTitle')}</h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('campaigns.monitoringDescription')}</p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+                <MonitoringMetric label={t('campaigns.monitoringTarget')} value={monitoring.target} />
+                <MonitoringMetric label={t('campaigns.monitoringPending')} value={monitoring.pending} />
+                <MonitoringMetric label={t('campaigns.monitoringSent')} value={monitoring.sent} />
+                <MonitoringMetric label={t('campaigns.monitoringDelivered')} value={monitoring.delivered} />
+                <MonitoringMetric label={t('campaigns.monitoringRead')} value={monitoring.read} />
+                <MonitoringMetric label={t('campaigns.monitoringFailed')} value={monitoring.failed} />
+                <MonitoringMetric label={t('campaigns.monitoringLinksOpened')} value={monitoring.linksOpened} />
+                <MonitoringMetric label={t('campaigns.monitoringConfirmed')} value={monitoring.confirmed} />
+                <MonitoringMetric label={t('campaigns.monitoringGps')} value={monitoring.gpsReceived} />
+                <MonitoringMetric label={t('campaigns.monitoringAddressChanged')} value={monitoring.addressChanged} />
+                <MonitoringMetric label={t('campaigns.monitoringLocationValid')} value={monitoring.locationValid} />
+                <MonitoringMetric label={t('campaigns.monitoringManualReview')} value={monitoring.manualReview} />
+                <MonitoringMetric label={t('campaigns.monitoringWaitingForHome')} value={monitoring.waitingForHome} />
+              </div>
+              <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/70 dark:bg-amber-950/20">
+                <h4 className="text-xs font-semibold text-amber-950 dark:text-amber-100">
+                  {t('campaigns.monitoringRemindersTitle')}
+                </h4>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                  <MonitoringMetric label={t('campaigns.monitoringRemindersTotal')} value={monitoring.reminders.total} />
+                  <MonitoringMetric
+                    label={t('campaigns.monitoringRemindersScheduled')}
+                    value={monitoring.reminders.scheduled}
+                  />
+                  <MonitoringMetric label={t('campaigns.monitoringRemindersSent')} value={monitoring.reminders.sent} />
+                  <MonitoringMetric
+                    label={t('campaigns.monitoringRemindersOpened')}
+                    value={monitoring.reminders.opened}
+                  />
+                  <MonitoringMetric label={t('campaigns.monitoringRemindersFailed')} value={monitoring.reminders.failed} />
+                  <MonitoringMetric
+                    label={t('campaigns.monitoringRemindersCancelled')}
+                    value={monitoring.reminders.cancelled}
+                  />
+                </div>
+                <p className="mt-3 text-xs text-amber-900 dark:text-amber-200">
+                  {t('campaigns.monitoringRemindersByNumber')}: #1 {monitoring.reminders.byNumber['1'] ?? 0} · #2{' '}
+                  {monitoring.reminders.byNumber['2'] ?? 0} · #3 {monitoring.reminders.byNumber['3'] ?? 0}
+                </p>
+              </div>
+            </div>
+          )}
           <AdminTable
             minWidthClass="min-w-[720px]"
             footer={

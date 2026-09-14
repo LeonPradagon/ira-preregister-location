@@ -169,7 +169,16 @@ export const customerListQuerySchema = z.object({
   search: z.string().trim().max(128).default(''),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
   whatsappStatus: z
-    .enum(['VALID_FORMAT', 'FORMAT_INVALID', 'NOT_CHECKED', 'ACCEPTED', 'DELIVERED', 'READ', 'FAILED'])
+    .enum([
+      'VALID_FORMAT',
+      'FORMAT_INVALID',
+      'NOT_CHECKED',
+      'ACCEPTED',
+      'DELIVERED',
+      'READ',
+      'FAILED',
+      'NOT_ON_WHATSAPP',
+    ])
     .optional(),
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
   coordinateAuditStatus: z.enum(['PENDING', 'MATCHED', 'UNCERTAIN', 'MISMATCH', 'INVALID']).optional(),
@@ -184,7 +193,16 @@ export const customerExportQuerySchema = z.object({
   search: z.string().trim().max(128).default(''),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
   whatsappStatus: z
-    .enum(['VALID_FORMAT', 'FORMAT_INVALID', 'NOT_CHECKED', 'ACCEPTED', 'DELIVERED', 'READ', 'FAILED'])
+    .enum([
+      'VALID_FORMAT',
+      'FORMAT_INVALID',
+      'NOT_CHECKED',
+      'ACCEPTED',
+      'DELIVERED',
+      'READ',
+      'FAILED',
+      'NOT_ON_WHATSAPP',
+    ])
     .optional(),
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
   coordinateAuditStatus: z.enum(['PENDING', 'MATCHED', 'UNCERTAIN', 'MISMATCH', 'INVALID']).optional(),
@@ -205,6 +223,7 @@ export const whatsappDeliveryStatusSchema = z.object({
   providerMessageId: z.string().trim().min(1).max(255),
   status: z.enum(['SENT', 'DELIVERED', 'READ', 'FAILED']),
   error: z.string().trim().max(500).optional(),
+  errorCode: z.union([z.string(), z.number()]).transform(String).optional(),
   occurredAt: z.string().datetime().optional(),
 });
 

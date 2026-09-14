@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Bell,
+  BarChart3,
   CheckCircle2,
   ChevronDown,
   Compass,
@@ -24,6 +25,7 @@ export type AdminTab =
   | 'dashboard'
   | 'customers'
   | 'campaigns'
+  | 'monitoring'
   | 'verifications'
   | 'reminders'
   | 'audit-logs'
@@ -100,6 +102,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
       id: 'messaging',
       label: t('nav.groupMessaging'),
       items: [
+        { id: 'monitoring', label: t('nav.monitoring'), icon: BarChart3 },
         { id: 'campaigns', label: t('nav.campaigns'), icon: Megaphone },
         { id: 'reminders', label: t('nav.reminders'), icon: Bell },
       ],

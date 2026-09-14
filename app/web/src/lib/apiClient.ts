@@ -316,6 +316,48 @@ export interface AdminDashboardApi {
   };
 }
 
+export interface CampaignMonitoringSummary {
+  target: number;
+  pending: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+  linksOpened: number;
+  confirmed: number;
+  gpsReceived: number;
+  addressChanged: number;
+  locationValid: number;
+  manualReview: number;
+  waitingForHome: number;
+  reminders: {
+    total: number;
+    scheduled: number;
+    sent: number;
+    failed: number;
+    cancelled: number;
+    opened: number;
+    byNumber: Record<string, number>;
+  };
+}
+
+export interface AdminMonitoringCampaign extends CampaignMonitoringSummary {
+  id: string;
+  name: string;
+  status: string;
+  scheduledAt: string;
+}
+
+export interface AdminMonitoringSummary extends CampaignMonitoringSummary {
+  campaigns: number;
+}
+
+export interface AdminMonitoringApi {
+  generatedAt: string;
+  summary: AdminMonitoringSummary;
+  campaigns: AdminMonitoringCampaign[];
+}
+
 export interface CustomerImportApiResult {
   jobId?: string;
   fileName: string;
@@ -478,13 +520,14 @@ const adminApi = {
       { method: 'POST' },
     ),
   dashboard: () => request<AdminDashboardApi>('/admin/dashboard'),
+  monitoring: () => request<AdminMonitoringApi>('/admin/monitoring'),
   customers: (
     query: {
       page?: number;
       pageSize?: number;
       search?: string;
       status?: string;
-      whatsappStatus?: 'ALL' | 'VALID_FORMAT' | 'FORMAT_INVALID' | 'NOT_CHECKED' | 'ACCEPTED' | 'DELIVERED' | 'READ' | 'FAILED';
+      whatsappStatus?: 'ALL' | 'VALID_FORMAT' | 'FORMAT_INVALID' | 'NOT_CHECKED' | 'ACCEPTED' | 'DELIVERED' | 'READ' | 'FAILED' | 'NOT_ON_WHATSAPP';
       locationStatus?: 'UNVERIFIED' | 'VERIFIED';
       coordinateAuditStatus?: 'PENDING' | 'MATCHED' | 'UNCERTAIN' | 'MISMATCH' | 'INVALID';
       addressCompleteness?: 'COMPLETE' | 'INCOMPLETE';
@@ -520,7 +563,7 @@ const adminApi = {
     format: 'xlsx' | 'csv';
     search?: string;
     status?: string;
-    whatsappStatus?: 'VALID_FORMAT' | 'FORMAT_INVALID' | 'NOT_CHECKED' | 'ACCEPTED' | 'DELIVERED' | 'READ' | 'FAILED';
+    whatsappStatus?: 'VALID_FORMAT' | 'FORMAT_INVALID' | 'NOT_CHECKED' | 'ACCEPTED' | 'DELIVERED' | 'READ' | 'FAILED' | 'NOT_ON_WHATSAPP';
     coordinateAuditStatus?: 'PENDING' | 'MATCHED' | 'UNCERTAIN' | 'MISMATCH' | 'INVALID';
     addressCompleteness?: 'COMPLETE' | 'INCOMPLETE';
   }) =>
@@ -648,7 +691,7 @@ const adminApi = {
     request<AdminPageApi<Record<string, unknown>>>(`/admin/campaigns${queryString(query)}`),
   campaign: (id: string) => request<Record<string, unknown>>(`/admin/campaigns/${encodeURIComponent(id)}`),
   campaignItems: (id: string, query: AdminListQuery = {}) =>
-    request<AdminPageApi<Record<string, unknown>>>(
+    request<AdminPageApi<Record<string, unknown>> & { monitoring: CampaignMonitoringSummary }>(
       `/admin/campaigns/${encodeURIComponent(id)}/items${queryString(query)}`,
     ),
   createCampaign: (body: unknown) =>

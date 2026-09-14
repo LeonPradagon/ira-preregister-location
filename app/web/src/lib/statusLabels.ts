@@ -86,6 +86,7 @@ const auditLabels: Record<string, string> = {
   INVITATION_RESENT: 'Invitation resent',
   WHATSAPP_OPTED_OUT: 'WhatsApp messages stopped',
   WHATSAPP_SEND_BLOCKED: 'WhatsApp delivery blocked',
+  WHATSAPP_NOT_ON_WHATSAPP: 'WhatsApp number not registered',
   LOGIN: 'Signed in',
   LOGIN_SUCCESS: 'Signed in',
   LOGIN_FAILED: 'Sign-in failed',

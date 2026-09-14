@@ -17,7 +17,8 @@ export type WhatsappStatus =
   | 'ACCEPTED'
   | 'DELIVERED'
   | 'READ'
-  | 'FAILED';
+  | 'FAILED'
+  | 'NOT_ON_WHATSAPP';
 
 export interface Customer {
   id: string;

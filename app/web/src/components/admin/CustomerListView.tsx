@@ -53,6 +53,7 @@ const WHATSAPP_STATUS_LABEL: Record<WhatsappStatus, string> = {
   DELIVERED: 'customers.whatsappStatus.DELIVERED',
   READ: 'customers.whatsappStatus.READ',
   FAILED: 'customers.whatsappStatus.FAILED',
+  NOT_ON_WHATSAPP: 'customers.whatsappStatus.NOT_ON_WHATSAPP',
 };
 
 const COORDINATE_AUDIT_STATUS_LABEL: Record<CoordinateAuditStatus, string> = {
@@ -129,7 +130,7 @@ const statusBadgeClass = (status: CustomerStatus) => {
 const whatsappStatusBadgeClass = (status: WhatsappStatus) => {
   if (status === 'READ' || status === 'DELIVERED')
     return 'text-emerald-700 dark:text-emerald-300';
-  if (status === 'FAILED' || status === 'FORMAT_INVALID')
+  if (status === 'FAILED' || status === 'FORMAT_INVALID' || status === 'NOT_ON_WHATSAPP')
     return 'text-rose-700 dark:text-rose-300';
   if (status === 'ACCEPTED') return 'text-blue-700 dark:text-blue-300';
   return 'text-slate-500 dark:text-slate-400';

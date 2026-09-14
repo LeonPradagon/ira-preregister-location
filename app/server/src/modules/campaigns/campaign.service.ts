@@ -6,6 +6,8 @@ import {
   auditLogs,
   customerAddresses,
   customers,
+  locationCaptures,
+  reminders,
   verificationCampaignItems,
   verificationCampaigns,
   verificationSessions,
@@ -320,6 +322,63 @@ export class CampaignService {
       .from(verificationCampaigns)
       .where(eq(verificationCampaigns.id, campaignId));
     if (!campaign) throw new NotFoundError('Campaign not found');
+    const campaignSessionFilter = sql`${reminders.sessionId} in (
+      select ${verificationCampaignItems.sessionId}
+      from ${verificationCampaignItems}
+      where ${verificationCampaignItems.campaignId} = ${campaignId}
+    )`;
+    const [[monitoring], [reminderMonitoring], reminderNumberRows] = await Promise.all([
+      db
+        .select({
+          target: sql<number>`count(*)`,
+          pending: sql<number>`count(*) filter (where ${verificationCampaignItems.status} in ('PENDING', 'PROCESSING'))`,
+          sent: sql<number>`count(*) filter (where ${verificationCampaignItems.status} in ('SENT', 'DELIVERED', 'READ'))`,
+          delivered: sql<number>`count(*) filter (where ${verificationCampaignItems.status} in ('DELIVERED', 'READ'))`,
+          read: sql<number>`count(*) filter (where ${verificationCampaignItems.status} = 'READ')`,
+          failed: sql<number>`count(*) filter (where ${verificationCampaignItems.status} in ('FAILED', 'PROVIDER_UNAVAILABLE', 'OPTED_OUT'))`,
+          linksOpened: sql<number>`count(*) filter (where ${verificationSessions.openedAt} is not null)`,
+          confirmed: sql<number>`count(*) filter (where ${verificationSessions.customerConfirmationStatus} = 'CONFIRMED')`,
+          gpsReceived: sql<number>`count(*) filter (where exists (
+            select 1 from ${locationCaptures}
+            where ${locationCaptures.sessionId} = ${verificationSessions.id}
+          ))`,
+          addressChanged: sql<number>`count(*) filter (
+            where ${verificationSessions.verificationStatus} in ('ADDRESS_EDITING', 'ADDRESS_PROPOSED')
+              or exists (
+                select 1
+                from ${auditLogs}
+                where ${auditLogs.action} = 'ADDRESS_PROPOSED'
+                  and ${auditLogs.entityType} = 'ADDRESS'
+                  and (${auditLogs.after} ->> 'sessionId') = (${verificationSessions.id}::text)
+              )
+          )`,
+          locationValid: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} = 'LOCATION_VALID')`,
+          manualReview: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} = 'MANUAL_REVIEW')`,
+          waitingForHome: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} = 'WAITING_FOR_HOME')`,
+        })
+        .from(verificationCampaignItems)
+        .innerJoin(verificationSessions, eq(verificationSessions.id, verificationCampaignItems.sessionId))
+        .where(eq(verificationCampaignItems.campaignId, campaignId)),
+      db
+        .select({
+          total: sql<number>`count(*)`,
+          scheduled: sql<number>`count(*) filter (where ${reminders.status} = 'SCHEDULED')`,
+          sent: sql<number>`count(*) filter (where ${reminders.status} = 'SENT')`,
+          failed: sql<number>`count(*) filter (where ${reminders.status} = 'FAILED')`,
+          cancelled: sql<number>`count(*) filter (where ${reminders.status} = 'CANCELLED')`,
+          opened: sql<number>`count(*) filter (where ${reminders.openedAt} is not null)`,
+        })
+        .from(reminders)
+        .where(campaignSessionFilter),
+      db
+        .select({ reminderNumber: reminders.reminderNumber, total: sql<number>`count(*)` })
+        .from(reminders)
+        .where(campaignSessionFilter)
+        .groupBy(reminders.reminderNumber),
+    ]);
+    const reminderByNumber = Object.fromEntries(
+      reminderNumberRows.map((row) => [String(row.reminderNumber), Number(row.total ?? 0)]),
+    );
     const itemFilters = [eq(verificationCampaignItems.campaignId, campaignId)];
     if (query.search) {
       const pattern = `%${query.search}%`;
@@ -354,6 +413,23 @@ export class CampaignService {
         item: verificationCampaignItems,
         customer: customers,
         sessionStatus: verificationSessions.verificationStatus,
+        linkOpenedAt: verificationSessions.openedAt,
+        confirmationStatus: verificationSessions.customerConfirmationStatus,
+        reminderCount: verificationSessions.reminderCount,
+        gpsReceived: sql<boolean>`exists (
+          select 1 from ${locationCaptures}
+          where ${locationCaptures.sessionId} = ${verificationSessions.id}
+        )`,
+        addressChanged: sql<boolean>`
+          ${verificationSessions.verificationStatus} in ('ADDRESS_EDITING', 'ADDRESS_PROPOSED')
+          or exists (
+            select 1 from ${auditLogs}
+            where ${auditLogs.action} = 'ADDRESS_PROPOSED'
+              and ${auditLogs.entityType} = 'ADDRESS'
+              and (${auditLogs.after} ->> 'sessionId') = (${verificationSessions.id}::text)
+          )`,
+        locationValid: sql<boolean>`${verificationSessions.verificationStatus} = 'LOCATION_VALID'`,
+        manualReview: sql<boolean>`${verificationSessions.verificationStatus} = 'MANUAL_REVIEW'`,
       })
       .from(verificationCampaignItems)
       .innerJoin(customers, eq(customers.id, verificationCampaignItems.customerId))
@@ -364,6 +440,15 @@ export class CampaignService {
       .limit(query.pageSize);
     return {
       items,
+      monitoring: {
+        ...Object.fromEntries(Object.entries(monitoring ?? {}).map(([key, value]) => [key, Number(value ?? 0)])),
+        reminders: {
+          ...Object.fromEntries(
+            Object.entries(reminderMonitoring ?? {}).map(([key, value]) => [key, Number(value ?? 0)]),
+          ),
+          byNumber: reminderByNumber,
+        },
+      },
       page: query.page,
       pageSize: query.pageSize,
       total: cachedCount.total,

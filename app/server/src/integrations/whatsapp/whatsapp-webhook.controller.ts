@@ -34,7 +34,8 @@ function normalizeDeliveryPayload(body: unknown): Record<string, unknown> {
     return {
       providerMessageId: payload.providerMessageId ?? payload.messageId,
       status: normalizeStatus(payload.status),
-      error: payload.error,
+      error: formatWebhookError(payload.error, payload.errorCode ?? payload.code),
+      errorCode: normalizeErrorCode(payload.errorCode ?? payload.code),
       occurredAt: payload.occurredAt,
     };
   }
@@ -51,17 +52,34 @@ function normalizeDeliveryPayload(body: unknown): Record<string, unknown> {
   return {
     providerMessageId: status.id,
     status: normalizeStatus(status.status),
-    error:
-      typeof status.errors === 'string'
-        ? status.errors
-        : typeof firstError?.title === 'string'
-          ? firstError.title
-          : undefined,
+    error: formatWebhookError(firstError ?? status.errors, firstError?.code ?? status.code),
+    errorCode: normalizeErrorCode(firstError?.code ?? status.code),
     occurredAt:
       typeof status.timestamp === 'string' && /^\d+$/.test(status.timestamp)
         ? new Date(Number(status.timestamp) * 1000).toISOString()
         : undefined,
   };
+}
+
+function normalizeErrorCode(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 64);
+  return undefined;
+}
+
+function formatWebhookError(value: unknown, code: unknown): string | undefined {
+  const errorCode = normalizeErrorCode(code);
+  if (typeof value === 'string' && value.trim()) {
+    return errorCode && !value.includes(errorCode) ? `[${errorCode}] ${value.trim()}`.slice(0, 500) : value.trim();
+  }
+  if (!value || typeof value !== 'object') return errorCode ? `[${errorCode}]` : undefined;
+  const error = value as Record<string, unknown>;
+  const text = [error.title, error.message, error.details]
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    .map((item) => item.trim())
+    .join(' | ');
+  if (text) return errorCode ? `[${errorCode}] ${text}`.slice(0, 500) : text.slice(0, 500);
+  return errorCode ? `[${errorCode}]` : JSON.stringify(value).slice(0, 500);
 }
 
 function normalizeStatus(value: unknown): 'SENT' | 'DELIVERED' | 'READ' | 'FAILED' | undefined {

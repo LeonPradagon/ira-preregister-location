@@ -11,6 +11,7 @@ import {
 } from '../../db/schema/index.js';
 import { NotFoundError } from '../../common/errors.js';
 import { hashPhone, isOptOutMessage } from './whatsapp.policy.js';
+import { classifyWhatsAppFailure, formatWhatsAppProviderError } from './whatsapp-status.js';
 import { CampaignItemState } from '../../modules/campaigns/campaign-item-state.js';
 
 @Injectable()
@@ -19,10 +20,14 @@ export class WhatsAppComplianceService {
     providerMessageId: string;
     status: 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
     error?: string;
+    errorCode?: string;
     occurredAt?: string;
   }) {
     const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date();
     if (Number.isNaN(occurredAt.getTime())) return { accepted: false, reason: 'INVALID_TIMESTAMP' };
+    const customerStatus =
+      input.status === 'FAILED' ? classifyWhatsAppFailure(input) : input.status === 'SENT' ? 'ACCEPTED' : input.status;
+    const providerError = input.status === 'FAILED' ? formatWhatsAppProviderError(input) : null;
     const [delivery] = await db
       .update(whatsappDeliveryLogs)
       .set({
@@ -30,7 +35,8 @@ export class WhatsAppComplianceService {
         deliveredAt: input.status === 'DELIVERED' ? occurredAt : undefined,
         readAt: input.status === 'READ' ? occurredAt : undefined,
         failedAt: input.status === 'FAILED' ? occurredAt : undefined,
-        lastError: input.status === 'FAILED' ? (input.error ?? 'PROVIDER_REPORTED_FAILURE') : null,
+        providerErrorCode: input.errorCode ?? null,
+        lastError: providerError,
       })
       .where(eq(whatsappDeliveryLogs.providerMessageId, input.providerMessageId))
       .returning({ id: whatsappDeliveryLogs.id, customerId: whatsappDeliveryLogs.customerId });
@@ -38,7 +44,7 @@ export class WhatsAppComplianceService {
       await db
         .update(customers)
         .set({
-          whatsappStatus: input.status === 'SENT' ? 'ACCEPTED' : input.status,
+          whatsappStatus: customerStatus,
           updatedAt: occurredAt,
         })
         .where(eq(customers.id, delivery.customerId));
@@ -53,13 +59,15 @@ export class WhatsAppComplianceService {
       await db.insert(auditLogs).values({
         actorUserId: 'whatsapp-webhook',
         actorName: 'WhatsApp Provider',
-        action: `WHATSAPP_${input.status}`,
+        action: `WHATSAPP_${customerStatus}`,
         entityType: campaignItem ? 'CAMPAIGN_ITEM' : reminder ? 'REMINDER' : 'DELIVERY',
         entityId: campaignItem?.id ?? reminder?.id ?? delivery?.id ?? input.providerMessageId,
         after: {
           providerMessageId: input.providerMessageId,
           status: input.status,
-          error: input.status === 'FAILED' ? input.error : undefined,
+          customerStatus,
+          errorCode: input.errorCode,
+          error: providerError,
         },
         timestamp: occurredAt,
       });

@@ -140,6 +140,7 @@ describe('API contracts', () => {
 
   it('accepts WhatsApp delivery status filters for customers and address exports', () => {
     expect(customerListQuerySchema.safeParse({ whatsappStatus: 'DELIVERED' }).success).toBe(true);
+    expect(customerListQuerySchema.safeParse({ whatsappStatus: 'NOT_ON_WHATSAPP' }).success).toBe(true);
     expect(customerExportQuerySchema.safeParse({ resource: 'addresses', whatsappStatus: 'FAILED' }).success).toBe(true);
     expect(customerListQuerySchema.safeParse({ whatsappStatus: 'UNKNOWN' }).success).toBe(false);
   });

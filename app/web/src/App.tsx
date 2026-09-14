@@ -13,6 +13,7 @@ import { RemindersView } from './components/admin/RemindersView';
 import { IntegrationsView } from './components/admin/IntegrationsView';
 import { BackendCustomerVerificationView } from './components/customer/BackendCustomerVerificationView';
 import { CampaignsView } from './components/admin/CampaignsView';
+import { MonitoringView } from './components/admin/MonitoringView';
 import { UserManagementView } from './components/admin/UserManagementView';
 import { I18nProvider, useTranslation } from './i18n';
 import { showActionError } from './lib/swal';
@@ -73,6 +74,7 @@ const MainAppContent: React.FC = () => {
         />
       );
     if (currentTab === 'campaigns') return <CampaignsView />;
+    if (currentTab === 'monitoring') return <MonitoringView />;
     if (currentTab === 'verifications')
       return <VerificationListView onSelectVerification={setSelectedVerificationId} />;
     if (currentTab === 'reminders') return <RemindersView onSelectVerification={setSelectedVerificationId} />;

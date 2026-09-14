@@ -120,6 +120,12 @@ export class AdminController {
     return this.admin.dashboard();
   }
 
+  @Get('monitoring')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
+  monitoring() {
+    return this.admin.monitoring();
+  }
+
   @Get('customers')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
   customers(@Query() query: unknown) {

@@ -353,6 +353,7 @@ export const whatsappDeliveryLogs = pgTable('whatsapp_delivery_logs', {
   deliveredAt: timestamp('delivered_at', { withTimezone: true }),
   readAt: timestamp('read_at', { withTimezone: true }),
   failedAt: timestamp('failed_at', { withTimezone: true }),
+  providerErrorCode: varchar('provider_error_code', { length: 64 }),
   lastError: text('last_error'),
   sentAt: timestamp('sent_at', { withTimezone: true }).notNull(),
   createdAt: createdAt(),
