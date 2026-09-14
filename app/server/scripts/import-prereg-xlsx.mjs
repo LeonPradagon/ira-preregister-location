@@ -474,8 +474,8 @@ const importRows = async ({ rows, stats }) => {
 
     const customerResult = await client.query(
       `
-      INSERT INTO customers (external_id, name, phone_e164, status, source_record_id, source_created_at, is_cover_bts, bts_name, coverage_status, source_metadata, created_at, updated_at)
-      SELECT external_id, full_name, phone_e164, 'PENDING_INSTALLATION',
+      INSERT INTO customers (external_id, name, phone_e164, whatsapp_status, status, source_record_id, source_created_at, is_cover_bts, bts_name, coverage_status, source_metadata, created_at, updated_at)
+      SELECT external_id, full_name, phone_e164, 'VALID_FORMAT', 'PENDING_INSTALLATION',
         source_id, source_created_at, is_cover_bts, bts_name, coverage_status,
         jsonb_build_object('source', 'prereg_non_customer', 'sourceId', source_id, 'addressReference', landmark, 'isCoverBts', is_cover_bts, 'btsName', bts_name, 'coverageStatus', coverage_status),
         COALESCE(source_created_at, $1), $1
@@ -483,6 +483,7 @@ const importRows = async ({ rows, stats }) => {
       ON CONFLICT (external_id) DO UPDATE SET
         name = EXCLUDED.name,
         phone_e164 = EXCLUDED.phone_e164,
+        whatsapp_status = CASE WHEN customers.phone_e164 IS DISTINCT FROM EXCLUDED.phone_e164 THEN 'VALID_FORMAT' ELSE customers.whatsapp_status END,
         source_record_id = EXCLUDED.source_record_id,
         source_created_at = EXCLUDED.source_created_at,
         is_cover_bts = EXCLUDED.is_cover_bts,

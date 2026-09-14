@@ -86,6 +86,7 @@ export const customers = pgTable('customers', {
   externalId: varchar('external_id', { length: 128 }).notNull().unique(),
   name: varchar('name', { length: 255 }).notNull(),
   phoneE164: varchar('phone_e164', { length: 32 }).notNull(),
+  whatsappStatus: varchar('whatsapp_status', { length: 32 }).notNull().default('NOT_CHECKED'),
   whatsappOptInAt: timestamp('whatsapp_opt_in_at', { withTimezone: true }),
   whatsappOptInSource: varchar('whatsapp_opt_in_source', { length: 128 }),
   whatsappOptOutAt: timestamp('whatsapp_opt_out_at', { withTimezone: true }),
@@ -98,7 +99,7 @@ export const customers = pgTable('customers', {
   sourceMetadata: jsonb('source_metadata'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-});
+}, (table) => [index('customers_whatsapp_status_idx').on(table.whatsappStatus)]);
 
 export const administrativeRegions = pgTable('administrative_regions', {
   code: varchar('code', { length: 13 }).primaryKey(),
@@ -290,6 +291,7 @@ export const reminders = pgTable('reminders', {
   tokenHash: varchar('token_hash', { length: 128 }).unique(),
   tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),
   tokenInvalidatedAt: timestamp('token_invalidated_at', { withTimezone: true }),
+  reminderSource: varchar('reminder_source', { length: 32 }).notNull().default('CUSTOMER_SELECTED'),
   status: varchar('status', { length: 32 }).notNull(),
   messageText: text('message_text').notNull(),
   providerMessageId: varchar('provider_message_id', { length: 255 }),
@@ -342,6 +344,7 @@ export const verificationCampaignItems = pgTable('verification_campaign_items', 
 
 export const whatsappDeliveryLogs = pgTable('whatsapp_delivery_logs', {
   id: id(),
+  customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
   phoneHash: varchar('phone_hash', { length: 64 }).notNull(),
   messageType: varchar('message_type', { length: 32 }).notNull(),
   idempotencyKey: varchar('idempotency_key', { length: 255 }).notNull().unique(),
@@ -353,7 +356,7 @@ export const whatsappDeliveryLogs = pgTable('whatsapp_delivery_logs', {
   lastError: text('last_error'),
   sentAt: timestamp('sent_at', { withTimezone: true }).notNull(),
   createdAt: createdAt(),
-});
+}, (table) => [index('whatsapp_delivery_logs_customer_status_idx').on(table.customerId, table.status)]);
 
 export const integrationOutbox = pgTable('integration_outbox', {
   id: id(),

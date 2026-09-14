@@ -168,6 +168,9 @@ export const customerListQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
   search: z.string().trim().max(128).default(''),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
+  whatsappStatus: z
+    .enum(['VALID_FORMAT', 'FORMAT_INVALID', 'NOT_CHECKED', 'ACCEPTED', 'DELIVERED', 'READ', 'FAILED'])
+    .optional(),
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
   coordinateAuditStatus: z.enum(['PENDING', 'MATCHED', 'UNCERTAIN', 'MISMATCH', 'INVALID']).optional(),
   addressCompleteness: z.enum(['COMPLETE', 'INCOMPLETE']).optional(),
@@ -180,6 +183,9 @@ export const customerExportQuerySchema = z.object({
   format: z.enum(['xlsx', 'csv']).default('xlsx'),
   search: z.string().trim().max(128).default(''),
   status: z.enum(['ACTIVE', 'PENDING_INSTALLATION', 'SUSPENDED', 'VERIFIED']).optional(),
+  whatsappStatus: z
+    .enum(['VALID_FORMAT', 'FORMAT_INVALID', 'NOT_CHECKED', 'ACCEPTED', 'DELIVERED', 'READ', 'FAILED'])
+    .optional(),
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
   coordinateAuditStatus: z.enum(['PENDING', 'MATCHED', 'UNCERTAIN', 'MISMATCH', 'INVALID']).optional(),
   addressCompleteness: z.enum(['COMPLETE', 'INCOMPLETE']).optional(),
@@ -220,6 +226,8 @@ export const validationConfigSchema = z.object({
   COORDINATE_DISPLAY_DECIMALS: z.number().int().min(0).max(8).optional(),
   VERIFICATION_TOKEN_TTL_DAYS: z.number().int().positive().optional(),
   REMINDER_LINK_TTL_HOURS: z.number().positive().optional(),
+  UNOPENED_LINK_REMINDER_DELAY_DAYS: z.number().positive().optional(),
+  UNOPENED_LINK_REMINDER_INTERVAL_DAYS: z.number().positive().optional(),
   REMINDER_DEFAULT_1_HOURS: z.number().positive().optional(),
   REMINDER_DEFAULT_2_HOURS: z.number().positive().optional(),
   REMINDER_DEFAULT_3_HOURS: z.number().positive().optional(),

@@ -48,6 +48,7 @@ import { canRestartVerificationCycle } from '../verification/verification-cycle.
 import { buildVerifiedAddressReference } from '../verification/verified-location.js';
 import { campaignRecipientReservationStatuses } from '../campaigns/campaign-target.policy.js';
 import { campaignEligibleAddressSql, incompleteAddressSql } from '../validation/address-completeness.sql.js';
+import { unopenedLinkReminderAt, verificationSessionExpiresAt } from '../reminders/reminder.policy.js';
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
 const customerAuditActorIds = ['customer', 'customer-token'];
@@ -361,6 +362,7 @@ export class AdminService {
       );
     }
     if (query.status) filters.push(eq(customers.status, query.status));
+    if (query.whatsappStatus) filters.push(eq(customers.whatsappStatus, query.whatsappStatus));
     if (query.locationStatus === 'UNVERIFIED') {
       filters.push(
         ne(customers.status, 'SUSPENDED'),
@@ -437,6 +439,7 @@ export class AdminService {
       {
         search: query.search,
         status: query.status,
+        whatsappStatus: query.whatsappStatus,
         locationStatus: query.locationStatus,
         coordinateAuditStatus: query.coordinateAuditStatus,
         addressCompleteness: query.addressCompleteness,
@@ -541,6 +544,7 @@ export class AdminService {
           externalId: input.externalId,
           name: input.name,
           phoneE164: input.phoneE164,
+          whatsappStatus: 'VALID_FORMAT',
           whatsappOptInAt: input.whatsappOptInAt ? new Date(input.whatsappOptInAt) : null,
           whatsappOptInSource: input.whatsappOptInSource ?? null,
           status: input.status,
@@ -640,6 +644,8 @@ export class AdminService {
           externalId: input.externalId ?? existing.externalId,
           name: input.name ?? existing.name,
           phoneE164: input.phoneE164 ?? existing.phoneE164,
+          whatsappStatus:
+            input.phoneE164 && input.phoneE164 !== existing.phoneE164 ? 'VALID_FORMAT' : existing.whatsappStatus,
           whatsappOptInAt:
             input.whatsappOptInAt === undefined
               ? existing.whatsappOptInAt
@@ -780,7 +786,14 @@ export class AdminService {
     await this.assertManualSendAllowed(customer.phoneE164);
     const verificationToken = await createVerificationToken();
     const created = timestamp();
-    const expiresAt = new Date(Date.now() + config.VERIFICATION_TOKEN_TTL_DAYS * 86400000);
+    const initialLinkExpiresAt = new Date(Date.now() + config.VERIFICATION_TOKEN_TTL_DAYS * 86400000);
+    const expiresAt = verificationSessionExpiresAt(
+      initialLinkExpiresAt,
+      config.MAX_REMINDERS_PER_SESSION,
+      config.REMINDER_LINK_TTL_HOURS,
+      config.UNOPENED_LINK_REMINDER_DELAY_DAYS,
+      config.UNOPENED_LINK_REMINDER_INTERVAL_DAYS,
+    );
     const [session] = await db
       .insert(verificationSessions)
       .values({
@@ -819,7 +832,13 @@ export class AdminService {
         .where(eq(verificationSessions.id, session.id));
       throw error;
     }
+    const sentAt = timestamp();
+    const scheduledUnopenedReminderAt = unopenedLinkReminderAt(
+      initialLinkExpiresAt,
+      config.UNOPENED_LINK_REMINDER_DELAY_DAYS,
+    );
     await this.recordManualDelivery(
+      customer.id,
       customer.phoneE164,
       `invitation:${session.id}`,
       'CAMPAIGN_INVITATION',
@@ -828,15 +847,44 @@ export class AdminService {
     await db.transaction(async (tx) => {
       await tx
         .update(verificationSessions)
-        .set({ verificationStatus: 'MESSAGE_SENT', updatedAt: timestamp() })
+        .set({ verificationStatus: 'MESSAGE_SENT', updatedAt: sentAt })
         .where(eq(verificationSessions.id, session.id));
       await tx.insert(verificationShortLinks).values({
         sessionId: session.id,
         tokenId: verificationToken.tokenId,
         codeHash: hashShortLinkCode(shortLinkCode),
-        expiresAt,
-        createdAt: created,
+        expiresAt: initialLinkExpiresAt,
+        createdAt: sentAt,
       });
+      if (config.ENABLE_REMINDERS) {
+        const reminderId = randomUUID();
+        await tx.insert(reminders).values({
+          id: reminderId,
+          sessionId: session.id,
+          reminderNumber: 1,
+          channel: 'WHATSAPP',
+          scheduledAt: scheduledUnopenedReminderAt,
+          status: 'SCHEDULED',
+          reminderSource: 'UNOPENED_LINK',
+          messageText: `Halo ${customer.name}, pengingat 1 dari ${config.MAX_REMINDERS_PER_SESSION}. Tautan baru berlaku maksimal ${config.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`,
+          retryCount: 0,
+          createdAt: sentAt,
+        });
+        await tx.insert(auditLogs).values({
+          actorUserId: 'system',
+          actorName: 'Reminder Scheduler',
+          action: 'REMINDER_SCHEDULED',
+          entityType: 'REMINDER',
+          entityId: reminderId,
+          after: {
+            reminderNumber: 1,
+            scheduledAt: scheduledUnopenedReminderAt.toISOString(),
+            automaticSchedule: true,
+            trigger: 'INITIAL_LINK_EXPIRED_UNOPENED',
+          },
+          timestamp: sentAt,
+        });
+      }
     });
     await db.insert(auditLogs).values({
       actorUserId: admin.id,
@@ -847,7 +895,7 @@ export class AdminService {
       after: { customerId, addressId, tokenStoredAsHash: true },
       timestamp: created,
     });
-    return { sessionId: session.id, verificationLink, expiresAt: session.expiresAt };
+    return { sessionId: session.id, verificationLink, expiresAt: initialLinkExpiresAt };
   }
 
   async createSimulationVerification(admin: RequestAdmin, customerId: string, addressId: string) {
@@ -1206,6 +1254,7 @@ export class AdminService {
       });
     });
     await this.recordManualDelivery(
+      detail.customer.id,
       detail.customer.phoneE164,
       idempotencyKey,
       'INVITATION_RESEND',
@@ -1729,6 +1778,7 @@ export class AdminService {
   }
 
   private async recordManualDelivery(
+    customerId: string,
     phoneE164: string,
     idempotencyKey: string,
     messageType: string,
@@ -1738,6 +1788,7 @@ export class AdminService {
       .insert(whatsappDeliveryLogs)
       .values({
         id: randomUUID(),
+        customerId,
         phoneHash: hashPhone(phoneE164),
         messageType,
         idempotencyKey,
@@ -1747,5 +1798,9 @@ export class AdminService {
         createdAt: new Date(),
       })
       .onConflictDoNothing({ target: whatsappDeliveryLogs.idempotencyKey });
+    await db
+      .update(customers)
+      .set({ whatsappStatus: 'ACCEPTED', updatedAt: new Date() })
+      .where(eq(customers.id, customerId));
   }
 }

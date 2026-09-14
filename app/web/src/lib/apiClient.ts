@@ -484,6 +484,7 @@ const adminApi = {
       pageSize?: number;
       search?: string;
       status?: string;
+      whatsappStatus?: 'ALL' | 'VALID_FORMAT' | 'FORMAT_INVALID' | 'NOT_CHECKED' | 'ACCEPTED' | 'DELIVERED' | 'READ' | 'FAILED';
       locationStatus?: 'UNVERIFIED' | 'VERIFIED';
       coordinateAuditStatus?: 'PENDING' | 'MATCHED' | 'UNCERTAIN' | 'MISMATCH' | 'INVALID';
       addressCompleteness?: 'COMPLETE' | 'INCOMPLETE';
@@ -496,6 +497,7 @@ const adminApi = {
     if (query.pageSize) params.set('pageSize', String(query.pageSize));
     if (query.search) params.set('search', query.search);
     if (query.status && query.status !== 'ALL') params.set('status', query.status);
+    if (query.whatsappStatus && query.whatsappStatus !== 'ALL') params.set('whatsappStatus', query.whatsappStatus);
     if (query.locationStatus) params.set('locationStatus', query.locationStatus);
     if (query.coordinateAuditStatus) params.set('coordinateAuditStatus', query.coordinateAuditStatus);
     if (query.addressCompleteness) params.set('addressCompleteness', query.addressCompleteness);
@@ -518,6 +520,7 @@ const adminApi = {
     format: 'xlsx' | 'csv';
     search?: string;
     status?: string;
+    whatsappStatus?: 'VALID_FORMAT' | 'FORMAT_INVALID' | 'NOT_CHECKED' | 'ACCEPTED' | 'DELIVERED' | 'READ' | 'FAILED';
     coordinateAuditStatus?: 'PENDING' | 'MATCHED' | 'UNCERTAIN' | 'MISMATCH' | 'INVALID';
     addressCompleteness?: 'COMPLETE' | 'INCOMPLETE';
   }) =>

@@ -21,10 +21,16 @@ export const incompleteAddressSql = (alias: string): SQL => {
 };
 
 /**
- * A customer also needs a location verification campaign when the address is
- * complete but the admin has not supplied a reference coordinate yet.
+ * A customer needs a location verification campaign when the address is
+ * incomplete, has no reference coordinate, or its imported coordinate audit
+ * is MATCHED/MISMATCH. The latter two audit results are intentionally included
+ * so operations can re-check the GPS against the stored longitude/latitude.
  */
 export const campaignEligibleAddressSql = (alias: string): SQL => {
   if (!allowedAliases.has(alias)) throw new Error(`Unsupported address SQL alias: ${alias}`);
-  return sql`(${incompleteAddressSql(alias)} OR ${sql.raw(`${alias}.reference_location IS NULL`)})`;
+  return sql`(
+    ${incompleteAddressSql(alias)}
+    OR ${sql.raw(`${alias}.reference_location IS NULL`)}
+    OR ${sql.raw(`(${alias}.reference_location IS NOT NULL AND ${alias}.coordinate_audit_status IN ('MATCHED', 'MISMATCH'))`)}
+  )`;
 };

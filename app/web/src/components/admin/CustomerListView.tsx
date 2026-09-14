@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../lib/apiClient';
-import { CoordinateAuditStatus, Customer, CustomerStatus } from '../../types';
+import { CoordinateAuditStatus, Customer, CustomerStatus, WhatsappStatus } from '../../types';
 import { hasCapability } from '../../lib/accessControl';
 import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
 import { CustomerImportModal } from './CustomerImportModal';
@@ -43,6 +43,17 @@ const CUSTOMER_STATUS_LABEL: Record<CustomerStatus, string> = {
 };
 type AddressCompletenessFilter = 'ALL' | 'COMPLETE' | 'INCOMPLETE';
 type CoordinateAuditFilter = 'ALL' | CoordinateAuditStatus;
+type WhatsappStatusFilter = 'ALL' | WhatsappStatus;
+
+const WHATSAPP_STATUS_LABEL: Record<WhatsappStatus, string> = {
+  VALID_FORMAT: 'customers.whatsappStatus.VALID_FORMAT',
+  FORMAT_INVALID: 'customers.whatsappStatus.FORMAT_INVALID',
+  NOT_CHECKED: 'customers.whatsappStatus.NOT_CHECKED',
+  ACCEPTED: 'customers.whatsappStatus.ACCEPTED',
+  DELIVERED: 'customers.whatsappStatus.DELIVERED',
+  READ: 'customers.whatsappStatus.READ',
+  FAILED: 'customers.whatsappStatus.FAILED',
+};
 
 const COORDINATE_AUDIT_STATUS_LABEL: Record<CoordinateAuditStatus, string> = {
   PENDING: 'customers.coordinateAuditPending',
@@ -115,6 +126,15 @@ const statusBadgeClass = (status: CustomerStatus) => {
   return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800';
 };
 
+const whatsappStatusBadgeClass = (status: WhatsappStatus) => {
+  if (status === 'READ' || status === 'DELIVERED')
+    return 'text-emerald-700 dark:text-emerald-300';
+  if (status === 'FAILED' || status === 'FORMAT_INVALID')
+    return 'text-rose-700 dark:text-rose-300';
+  if (status === 'ACCEPTED') return 'text-blue-700 dark:text-blue-300';
+  return 'text-slate-500 dark:text-slate-400';
+};
+
 type RegionLevel = 'province' | 'city' | 'district' | 'subdistrict';
 const regionLevels: RegionLevel[] = ['province', 'city', 'district', 'subdistrict'];
 
@@ -159,6 +179,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
   const [addressCompletenessFilter, setAddressCompletenessFilter] =
     useState<AddressCompletenessFilter>('ALL');
   const [coordinateAuditFilter, setCoordinateAuditFilter] = useState<CoordinateAuditFilter>('ALL');
+  const [whatsappStatusFilter, setWhatsappStatusFilter] = useState<WhatsappStatusFilter>('ALL');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -370,6 +391,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           customerPage.pageSize,
           addressCompletenessFilter,
           coordinateAuditFilter,
+          whatsappStatusFilter,
         ),
         refreshDashboard(),
       ]);
@@ -393,6 +415,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
         status: statusFilter,
         coordinateAuditStatus: coordinateAuditFilter === 'ALL' ? undefined : coordinateAuditFilter,
         addressCompleteness: addressCompletenessFilter === 'ALL' ? undefined : addressCompletenessFilter,
+        whatsappStatus: whatsappStatusFilter === 'ALL' ? undefined : whatsappStatusFilter,
       });
       let currentJob = job;
       const deadline = Date.now() + 30 * 60 * 1000;
@@ -424,14 +447,23 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
       void refreshCustomerData(true, 1);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [searchTerm, statusFilter, addressCompletenessFilter, coordinateAuditFilter, t]);
+  }, [searchTerm, statusFilter, addressCompletenessFilter, coordinateAuditFilter, whatsappStatusFilter, t]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
       void refreshCustomerData(false);
     }, 10000);
     return () => window.clearInterval(timer);
-  }, [searchTerm, statusFilter, addressCompletenessFilter, coordinateAuditFilter, customerPage.page, customerPage.pageSize, t]);
+  }, [
+    searchTerm,
+    statusFilter,
+    addressCompletenessFilter,
+    coordinateAuditFilter,
+    whatsappStatusFilter,
+    customerPage.page,
+    customerPage.pageSize,
+    t,
+  ]);
 
   const handleCreateCustomerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -509,7 +541,13 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
         setEditingCustomer(null);
       } else {
         await addCustomer(
-          { name: newCustName, phoneE164: newCustPhone, externalId: newCustExtId, status: 'PENDING_INSTALLATION' },
+          {
+            name: newCustName,
+            phoneE164: newCustPhone,
+            externalId: newCustExtId,
+            status: 'PENDING_INSTALLATION',
+            whatsappStatus: 'VALID_FORMAT',
+          },
           {
             ...address,
             addressType: 'MASTER',
@@ -525,6 +563,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           customerPage.pageSize,
           addressCompletenessFilter,
           coordinateAuditFilter,
+          whatsappStatusFilter,
         );
       }
       setIsAddModalOpen(false);
@@ -752,8 +791,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           </div>
         </div>
 
-        <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
-          <div className="relative min-w-0 sm:col-span-2 lg:col-span-3">
+        <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+          <div className="relative min-w-0 sm:col-span-2 lg:col-span-4">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
             <input
               type="text"
@@ -808,6 +847,22 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
               ))}
             </select>
           </label>
+          <label htmlFor="customer-whatsapp-status-filter" className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300">
+            <span className="font-medium text-slate-500 dark:text-slate-400">{t('customers.whatsappStatusFilter')}</span>
+            <select
+              id="customer-whatsapp-status-filter"
+              value={whatsappStatusFilter}
+              onChange={(e) => setWhatsappStatusFilter(e.target.value as WhatsappStatusFilter)}
+              className="h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
+            >
+              <option value="ALL">{t('customers.whatsappStatusAll')}</option>
+              {(Object.keys(WHATSAPP_STATUS_LABEL) as WhatsappStatus[]).map((status) => (
+                <option key={status} value={status}>
+                  {t(WHATSAPP_STATUS_LABEL[status])}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </section>
 
@@ -828,6 +883,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 customerPage.pageSize,
                 addressCompletenessFilter,
                 coordinateAuditFilter,
+                whatsappStatusFilter,
               )
             }
             onPageSizeChange={(pageSize: TablePageSize) =>
@@ -838,6 +894,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 pageSize,
                 addressCompletenessFilter,
                 coordinateAuditFilter,
+                whatsappStatusFilter,
               )
             }
           />
@@ -886,8 +943,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
 
                   <td className="px-4 py-3.5 align-top font-mono text-gray-700 dark:text-gray-300 whitespace-nowrap">
                     <div>{cust.phoneE164}</div>
-                    <div className="font-sans text-[10px] text-gray-400 dark:text-gray-500 mt-1">
-                      {t('customers.whatsappLabel')}
+                    <div className={`font-sans text-[10px] mt-1 ${whatsappStatusBadgeClass(cust.whatsappStatus)}`}>
+                      {t(WHATSAPP_STATUS_LABEL[cust.whatsappStatus])}
                     </div>
                   </td>
 
@@ -1271,6 +1328,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 customerPage.pageSize,
                 addressCompletenessFilter,
                 coordinateAuditFilter,
+                whatsappStatusFilter,
               ),
               refreshDashboard(),
             ]);

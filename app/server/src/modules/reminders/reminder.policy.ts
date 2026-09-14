@@ -1,7 +1,12 @@
 export const MAX_REMINDERS_PER_SESSION = 3;
 export const DEFAULT_REMINDER_LINK_TTL_HOURS = 24;
+export const DEFAULT_UNOPENED_LINK_REMINDER_DELAY_DAYS = 1;
+export const DEFAULT_UNOPENED_LINK_REMINDER_INTERVAL_DAYS = 1;
 const AUTOMATIC_REMINDER_INTERVAL_DAYS = 2;
 const REMINDER_EXPIRY_BUFFER_MS = 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export type ReminderSource = 'CUSTOMER_SELECTED' | 'UNOPENED_LINK';
 
 export type ReminderPreference = 'IN_1_HOUR' | 'TONIGHT' | 'TOMORROW_MORNING' | 'DEFAULT';
 
@@ -40,6 +45,37 @@ export function reminderLinkExpiresAt(
 ): Date {
   if (!Number.isFinite(ttlHours) || ttlHours <= 0) throw new Error('Reminder link TTL must be positive');
   return new Date(Math.min(sessionExpiresAt.getTime(), sentAt.getTime() + ttlHours * 60 * 60 * 1000));
+}
+
+export function unopenedLinkReminderAt(
+  initialLinkExpiresAt: Date,
+  delayDays = DEFAULT_UNOPENED_LINK_REMINDER_DELAY_DAYS,
+): Date {
+  if (!Number.isFinite(initialLinkExpiresAt.getTime())) throw new Error('Initial link expiry must be valid');
+  if (!Number.isFinite(delayDays) || delayDays <= 0) throw new Error('Unopened reminder delay must be positive');
+  return new Date(initialLinkExpiresAt.getTime() + delayDays * DAY_MS);
+}
+
+export function verificationSessionExpiresAt(
+  initialLinkExpiresAt: Date,
+  maxReminders: number,
+  reminderLinkTtlHours = DEFAULT_REMINDER_LINK_TTL_HOURS,
+  unopenedReminderDelayDays = DEFAULT_UNOPENED_LINK_REMINDER_DELAY_DAYS,
+  unopenedReminderIntervalDays = DEFAULT_UNOPENED_LINK_REMINDER_INTERVAL_DAYS,
+): Date {
+  if (!Number.isFinite(initialLinkExpiresAt.getTime())) throw new Error('Initial link expiry must be valid');
+  if (!Number.isInteger(maxReminders) || maxReminders < 1) throw new Error('Maximum reminders must be positive');
+  if (!Number.isFinite(reminderLinkTtlHours) || reminderLinkTtlHours <= 0)
+    throw new Error('Reminder link TTL must be positive');
+  if (!Number.isFinite(unopenedReminderDelayDays) || unopenedReminderDelayDays <= 0)
+    throw new Error('Unopened reminder delay must be positive');
+  if (!Number.isFinite(unopenedReminderIntervalDays) || unopenedReminderIntervalDays <= 0)
+    throw new Error('Unopened reminder interval must be positive');
+  const reminderWindowMs =
+    unopenedReminderDelayDays * DAY_MS +
+    Math.max(0, maxReminders - 1) * unopenedReminderIntervalDays * DAY_MS +
+    reminderLinkTtlHours * 60 * 60 * 1000;
+  return new Date(initialLinkExpiresAt.getTime() + reminderWindowMs);
 }
 
 export function isReminderScheduledBeforeSessionExpiry(scheduledAt: Date, sessionExpiresAt: Date): boolean {

@@ -19,6 +19,7 @@ import {
   VerificationCampaign,
   VerificationReview,
   VerificationSession,
+  WhatsappStatus,
 } from '../types';
 import { assertCapability } from '../lib/accessControl';
 import { AdminDashboardApi, api } from '../lib/apiClient';
@@ -41,6 +42,8 @@ const DEFAULT_VALIDATION_CONFIG: ValidationConfig = {
   COORDINATE_DISPLAY_DECIMALS: 6,
   VERIFICATION_TOKEN_TTL_DAYS: 7,
   REMINDER_LINK_TTL_HOURS: 24,
+  UNOPENED_LINK_REMINDER_DELAY_DAYS: 1,
+  UNOPENED_LINK_REMINDER_INTERVAL_DAYS: 1,
   REMINDER_DEFAULT_1_HOURS: 2,
   REMINDER_DEFAULT_2_HOURS: 24,
   REMINDER_DEFAULT_3_HOURS: 24,
@@ -109,6 +112,7 @@ interface AppContextType {
     pageSize?: number,
     addressCompleteness?: 'ALL' | 'COMPLETE' | 'INCOMPLETE',
     coordinateAuditStatus?: 'ALL' | CoordinateAuditStatus,
+    whatsappStatus?: 'ALL' | WhatsappStatus,
   ) => Promise<CustomerPage>;
   loadCustomerDetail: (
     customerId: string,
@@ -237,6 +241,7 @@ export function mapApiCustomer(raw: Record<string, unknown>): Customer {
     externalId: String(raw.externalId ?? ''),
     name: String(raw.name ?? ''),
     phoneE164: String(raw.phoneE164 ?? ''),
+    whatsappStatus: String(raw.whatsappStatus ?? 'NOT_CHECKED') as Customer['whatsappStatus'],
     whatsappOptInAt: raw.whatsappOptInAt ? String(raw.whatsappOptInAt) : undefined,
     whatsappOptInSource: raw.whatsappOptInSource ? String(raw.whatsappOptInSource) : undefined,
     whatsappOptOutAt: raw.whatsappOptOutAt ? String(raw.whatsappOptOutAt) : undefined,
@@ -496,6 +501,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     pageSize = customerPage.pageSize || 25,
     addressCompleteness: 'ALL' | 'COMPLETE' | 'INCOMPLETE' = 'ALL',
     coordinateAuditStatus: 'ALL' | CoordinateAuditStatus = 'ALL',
+    whatsappStatus: 'ALL' | WhatsappStatus = 'ALL',
   ): Promise<CustomerPage> => {
     const raw = await api.customers({
       page,
@@ -504,6 +510,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status,
       addressCompleteness: addressCompleteness === 'ALL' ? undefined : addressCompleteness,
       coordinateAuditStatus: coordinateAuditStatus === 'ALL' ? undefined : coordinateAuditStatus,
+      whatsappStatus: whatsappStatus === 'ALL' ? undefined : whatsappStatus,
       cursor: page === 1 ? undefined : customerCursors[page],
     });
     if (page === 1) setCustomerCursors({});

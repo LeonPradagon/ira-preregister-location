@@ -147,6 +147,7 @@ function buildCustomerFilters(query: CustomerExportQueryInput): SQL[] {
     );
   }
   if (query.status) filters.push(eq(customers.status, query.status));
+  if (query.whatsappStatus) filters.push(eq(customers.whatsappStatus, query.whatsappStatus));
   if (query.locationStatus === 'UNVERIFIED') {
     filters.push(
       ne(customers.status, 'SUSPENDED'),
@@ -537,6 +538,7 @@ export class AdminExportService implements OnModuleDestroy {
           filters: {
             search: query.search || null,
             status: query.status || null,
+            whatsappStatus: query.whatsappStatus || null,
             locationStatus: query.locationStatus || null,
             coordinateAuditStatus: query.coordinateAuditStatus || null,
             addressCompleteness: query.addressCompleteness || null,

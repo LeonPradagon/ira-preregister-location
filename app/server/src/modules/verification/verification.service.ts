@@ -91,6 +91,7 @@ export class VerificationService {
         customer: customers,
         address: customerAddresses,
         reminder: reminders,
+        shortLinkExpiresAt: verificationShortLinks.expiresAt,
         referenceLatitude: sql<number>`ST_Y(${customerAddresses.referenceLocation}::geometry)`,
         referenceLongitude: sql<number>`ST_X(${customerAddresses.referenceLocation}::geometry)`,
       })
@@ -98,6 +99,7 @@ export class VerificationService {
       .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
       .innerJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
       .leftJoin(reminders, eq(reminders.tokenId, verificationSessions.tokenId))
+      .leftJoin(verificationShortLinks, eq(verificationShortLinks.tokenId, verificationSessions.tokenId))
         .where(
           and(
           sessionFilter,
@@ -206,6 +208,17 @@ export class VerificationService {
               timestamp,
             });
           }
+        } else if (!reminder) {
+          await tx
+            .update(reminders)
+            .set({ status: 'CANCELLED' })
+            .where(
+              and(
+                eq(reminders.sessionId, row.session.id),
+                eq(reminders.status, 'SCHEDULED'),
+                eq(reminders.reminderSource, 'UNOPENED_LINK'),
+              ),
+            );
         }
       });
     }
@@ -214,7 +227,10 @@ export class VerificationService {
         id: row.session.id,
         status: row.session.openedAt ? row.session.verificationStatus : 'LINK_OPENED',
         expiresAt: row.session.expiresAt.toISOString(),
-        linkExpiresAt: row.reminder?.tokenExpiresAt?.toISOString() ?? row.session.expiresAt.toISOString(),
+        linkExpiresAt:
+          row.reminder?.tokenExpiresAt?.toISOString() ??
+          row.shortLinkExpiresAt?.toISOString() ??
+          row.session.expiresAt.toISOString(),
         customerConfirmationStatus: row.session.customerConfirmationStatus,
         reminderCount: effectiveReminderCount,
         attemptCount: row.reminder ? 0 : row.session.attemptCount,
@@ -733,6 +749,7 @@ export class VerificationService {
             tokenHash: null,
             tokenExpiresAt: null,
             tokenInvalidatedAt: null,
+            reminderSource: 'CUSTOMER_SELECTED',
             status: 'SCHEDULED',
             messageText: reminderMessage,
             providerMessageId: null,
@@ -747,6 +764,7 @@ export class VerificationService {
           channel: 'WHATSAPP',
           scheduledAt,
           status: 'SCHEDULED',
+          reminderSource: 'CUSTOMER_SELECTED',
           messageText: reminderMessage,
           retryCount: 0,
           createdAt: timestamp,

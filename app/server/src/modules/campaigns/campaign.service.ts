@@ -31,6 +31,7 @@ import {
   selectMaterializationTargetIds,
 } from './campaign-target.policy.js';
 import { campaignEligibleAddressSql } from '../validation/address-completeness.sql.js';
+import { verificationSessionExpiresAt } from '../reminders/reminder.policy.js';
 
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
@@ -384,6 +385,7 @@ export class CampaignService {
       !campaignNeedsMaterialization(campaign.materializationComplete, campaign.materializedCount, campaign.targetCount)
     )
       return { done: true, inserted: 0 };
+    const config = await this.validationConfig.get();
     const stored = (
       campaign.targetFilter && typeof campaign.targetFilter === 'object' ? campaign.targetFilter : {}
     ) as StoredTargetFilter;
@@ -424,6 +426,18 @@ export class CampaignService {
       );
     const now = timestamp();
     const windowMs = Math.max(0, campaign.sendWindowDays) * 86400000;
+    const initialLinkExpiresAt = new Date(
+      Math.max(campaign.scheduledAt.getTime(), now.getTime()) +
+        windowMs +
+        config.VERIFICATION_TOKEN_TTL_DAYS * 86400000,
+    );
+    const sessionExpiresAt = verificationSessionExpiresAt(
+      initialLinkExpiresAt,
+      config.MAX_REMINDERS_PER_SESSION,
+      config.REMINDER_LINK_TTL_HOURS,
+      config.UNOPENED_LINK_REMINDER_DELAY_DAYS,
+      config.UNOPENED_LINK_REMINDER_INTERVAL_DAYS,
+    );
     const sessions = targets.map(({ customer, address }) => {
       const id = randomUUID();
       return {
@@ -433,11 +447,7 @@ export class CampaignService {
         currentAddressId: address.id,
         tokenHash: null,
         tokenId: null,
-        expiresAt: new Date(
-          Math.max(campaign.scheduledAt.getTime(), now.getTime()) +
-            windowMs +
-            Number(process.env.VERIFICATION_TOKEN_TTL_DAYS ?? 7) * 86400000,
-        ),
+        expiresAt: sessionExpiresAt,
         verificationStatus: 'CREATED',
         customerConfirmationStatus: 'UNCONFIRMED',
         registeredPhoneSnapshot: customer.phoneE164,

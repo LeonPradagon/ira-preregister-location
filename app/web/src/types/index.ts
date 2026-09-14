@@ -10,12 +10,21 @@ export interface AdminUser {
 }
 
 export type CustomerStatus = 'ACTIVE' | 'PENDING_INSTALLATION' | 'SUSPENDED' | 'VERIFIED';
+export type WhatsappStatus =
+  | 'VALID_FORMAT'
+  | 'FORMAT_INVALID'
+  | 'NOT_CHECKED'
+  | 'ACCEPTED'
+  | 'DELIVERED'
+  | 'READ'
+  | 'FAILED';
 
 export interface Customer {
   id: string;
   externalId: string;
   name: string;
   phoneE164: string;
+  whatsappStatus: WhatsappStatus;
   whatsappOptInAt?: string;
   whatsappOptInSource?: string;
   whatsappOptOutAt?: string;
@@ -380,6 +389,8 @@ export interface ValidationConfig {
   COORDINATE_DISPLAY_DECIMALS: number;
   VERIFICATION_TOKEN_TTL_DAYS: number;
   REMINDER_LINK_TTL_HOURS: number;
+  UNOPENED_LINK_REMINDER_DELAY_DAYS: number;
+  UNOPENED_LINK_REMINDER_INTERVAL_DAYS: number;
   REMINDER_DEFAULT_1_HOURS: number;
   REMINDER_DEFAULT_2_HOURS: number;
   REMINDER_DEFAULT_3_HOURS: number;

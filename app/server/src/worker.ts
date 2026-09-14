@@ -31,7 +31,12 @@ import { createShortLinkCode, hashShortLinkCode } from './modules/verification/s
 import { CampaignService } from './modules/campaigns/campaign.service.js';
 import { ValidationConfigService } from './config/validation-config.service.js';
 import { getWhatsAppTemplate } from './integrations/whatsapp/whatsapp.templates.js';
-import { nextAutomaticReminderAt, reminderLinkExpiresAt } from './modules/reminders/reminder.policy.js';
+import {
+  nextAutomaticReminderAt,
+  reminderLinkExpiresAt,
+  unopenedLinkReminderAt,
+  verificationSessionExpiresAt,
+} from './modules/reminders/reminder.policy.js';
 import { CampaignItemState } from './modules/campaigns/campaign-item-state.js';
 import { campaignNeedsMaterialization } from './modules/campaigns/campaign-target.policy.js';
 import { ReadCacheService } from './common/read-cache.service.js';
@@ -214,6 +219,7 @@ const dispatchSafety = async (phoneE164: string, campaignId?: string, campaignDa
 };
 
 const recordDelivery = async (
+  customerId: string,
   phoneE164: string,
   messageType: string,
   idempotencyKey: string,
@@ -223,6 +229,7 @@ const recordDelivery = async (
     .insert(whatsappDeliveryLogs)
     .values({
       id: randomUUID(),
+      customerId,
       phoneHash: hashPhone(phoneE164),
       messageType,
       idempotencyKey,
@@ -232,6 +239,10 @@ const recordDelivery = async (
       createdAt: new Date(),
     })
     .onConflictDoNothing({ target: whatsappDeliveryLogs.idempotencyKey });
+  await db
+    .update(customers)
+    .set({ whatsappStatus: 'ACCEPTED', updatedAt: new Date() })
+    .where(eq(customers.id, customerId));
 };
 
 const outboxWorker = runs('messaging')
@@ -295,6 +306,10 @@ const reminderWorker = runs('messaging')
           await db.update(reminders).set({ status: 'CANCELLED' }).where(eq(reminders.id, reminderId));
           return;
         }
+        if (target.reminder.reminderSource === 'UNOPENED_LINK' && target.session.openedAt) {
+          await db.update(reminders).set({ status: 'CANCELLED' }).where(eq(reminders.id, reminderId));
+          return;
+        }
         if (target.customer.whatsappOptOutAt) {
           await db.update(reminders).set({ status: 'CANCELLED' }).where(eq(reminders.id, reminderId));
           await db.insert(auditLogs).values({
@@ -348,9 +363,13 @@ const reminderWorker = runs('messaging')
           const sentAt = new Date();
           const tokenExpiresAt = reminderLinkExpiresAt(sentAt, target.session.expiresAt, reminderTtlHours);
           const nextReminderNumber = target.reminder.reminderNumber + 1;
+          const reminderIntervalDays =
+            target.reminder.reminderSource === 'UNOPENED_LINK'
+              ? runtimeConfig.UNOPENED_LINK_REMINDER_INTERVAL_DAYS
+              : undefined;
           const nextScheduledAt =
             nextReminderNumber <= runtimeConfig.MAX_REMINDERS_PER_SESSION
-              ? nextAutomaticReminderAt(target.reminder.scheduledAt, target.session.expiresAt)
+              ? nextAutomaticReminderAt(target.reminder.scheduledAt, target.session.expiresAt, reminderIntervalDays)
               : null;
           await db.transaction(async (tx) => {
             await tx
@@ -403,6 +422,7 @@ const reminderWorker = runs('messaging')
                 channel: 'WHATSAPP',
                 scheduledAt: nextScheduledAt,
                 status: 'SCHEDULED',
+                reminderSource: target.reminder.reminderSource,
                 messageText: `Halo ${target.customer.name}, pengingat ${nextReminderNumber} dari ${runtimeConfig.MAX_REMINDERS_PER_SESSION}. Tautan baru berlaku maksimal ${runtimeConfig.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`,
                 retryCount: 0,
                 createdAt: sentAt,
@@ -424,7 +444,13 @@ const reminderWorker = runs('messaging')
             }
           });
           await recordProviderOutcome(true);
-          await recordDelivery(target.customer.phoneE164, 'REMINDER', `reminder:${reminderId}`, sent.providerMessageId);
+          await recordDelivery(
+            target.customer.id,
+            target.customer.phoneE164,
+            'REMINDER',
+            `reminder:${reminderId}`,
+            sent.providerMessageId,
+          );
           await db.insert(auditLogs).values({
             actorUserId: 'system',
             actorName: 'Reminder Worker',
@@ -542,7 +568,7 @@ const campaignWorker = runs('campaign')
         let providerAccepted = false;
         try {
           const verificationToken = await createVerificationToken();
-          const expiresAt = new Date(Date.now() + Number(process.env.VERIFICATION_TOKEN_TTL_DAYS ?? 7) * 86400000);
+          const runtimeConfig = await reminderConfig.get();
           const shortLinkCode = createShortLinkCode();
           const verificationLink = `${getPublicWebOrigin()}/s/${shortLinkCode}`;
           await acquireWhatsAppSendSlot();
@@ -558,6 +584,18 @@ const campaignWorker = runs('campaign')
           });
           providerAccepted = true;
           const sentAt = new Date();
+          const initialLinkExpiresAt = new Date(sentAt.getTime() + runtimeConfig.VERIFICATION_TOKEN_TTL_DAYS * 86400000);
+          const sessionExpiresAt = verificationSessionExpiresAt(
+            initialLinkExpiresAt,
+            runtimeConfig.MAX_REMINDERS_PER_SESSION,
+            runtimeConfig.REMINDER_LINK_TTL_HOURS,
+            runtimeConfig.UNOPENED_LINK_REMINDER_DELAY_DAYS,
+            runtimeConfig.UNOPENED_LINK_REMINDER_INTERVAL_DAYS,
+          );
+          const unopenedReminderAt = unopenedLinkReminderAt(
+            initialLinkExpiresAt,
+            runtimeConfig.UNOPENED_LINK_REMINDER_DELAY_DAYS,
+          );
           await db.transaction(async (tx) => {
             await tx
               .update(reminders)
@@ -574,7 +612,7 @@ const campaignWorker = runs('campaign')
               .set({
                 tokenId: verificationToken.tokenId,
                 tokenHash: verificationToken.tokenHash,
-                expiresAt,
+                expiresAt: sessionExpiresAt,
                 verificationStatus: 'MESSAGE_SENT',
                 updatedAt: sentAt,
               })
@@ -583,13 +621,43 @@ const campaignWorker = runs('campaign')
               sessionId: target.session.id,
               tokenId: verificationToken.tokenId,
               codeHash: hashShortLinkCode(shortLinkCode),
-              expiresAt,
+              expiresAt: initialLinkExpiresAt,
               createdAt: sentAt,
             });
+            if (runtimeConfig.ENABLE_REMINDERS && runtimeConfig.MAX_REMINDERS_PER_SESSION > 0) {
+              const reminderId = randomUUID();
+              await tx.insert(reminders).values({
+                id: reminderId,
+                sessionId: target.session.id,
+                reminderNumber: 1,
+                channel: 'WHATSAPP',
+                scheduledAt: unopenedReminderAt,
+                status: 'SCHEDULED',
+                reminderSource: 'UNOPENED_LINK',
+                messageText: `Halo ${target.customer.name}, pengingat 1 dari ${runtimeConfig.MAX_REMINDERS_PER_SESSION}. Tautan baru berlaku maksimal ${runtimeConfig.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`,
+                retryCount: 0,
+                createdAt: sentAt,
+              });
+              await tx.insert(auditLogs).values({
+                actorUserId: 'system',
+                actorName: 'Reminder Scheduler',
+                action: 'REMINDER_SCHEDULED',
+                entityType: 'REMINDER',
+                entityId: reminderId,
+                after: {
+                  reminderNumber: 1,
+                  scheduledAt: unopenedReminderAt.toISOString(),
+                  automaticSchedule: true,
+                  trigger: 'INITIAL_LINK_EXPIRED_UNOPENED',
+                },
+                timestamp: sentAt,
+              });
+            }
           });
           await recordProviderOutcome(true);
           await CampaignItemState.markSent(itemId, sent.providerMessageId, sentAt);
           await recordDelivery(
+            target.customer.id,
             target.customer.phoneE164,
             'CAMPAIGN_INVITATION',
             `campaign-invitation:${itemId}`,

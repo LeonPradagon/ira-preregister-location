@@ -3,6 +3,7 @@ import {
   addressChangeSchema,
   campaignCreateSchema,
   customerCreateSchema,
+  customerExportQuerySchema,
   customerListQuerySchema,
   locationSamplesSchema,
   reminderSchema,
@@ -135,6 +136,12 @@ describe('API contracts', () => {
     expect(customerListQuerySchema.safeParse({ coordinateAuditStatus: 'UNCERTAIN' }).success).toBe(true);
     expect(customerListQuerySchema.safeParse({ addressCompleteness: 'UNKNOWN' }).success).toBe(false);
     expect(customerListQuerySchema.safeParse({ coordinateAuditStatus: 'UNKNOWN' }).success).toBe(false);
+  });
+
+  it('accepts WhatsApp delivery status filters for customers and address exports', () => {
+    expect(customerListQuerySchema.safeParse({ whatsappStatus: 'DELIVERED' }).success).toBe(true);
+    expect(customerExportQuerySchema.safeParse({ resource: 'addresses', whatsappStatus: 'FAILED' }).success).toBe(true);
+    expect(customerListQuerySchema.safeParse({ whatsappStatus: 'UNKNOWN' }).success).toBe(false);
   });
 
   it('requires exactly one campaign target source', () => {

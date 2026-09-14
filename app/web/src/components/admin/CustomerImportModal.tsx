@@ -110,6 +110,11 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
               Gunakan header report yang sama seperti import sebelumnya. Maksimal 50 MB per file. Source ID yang sudah
               ada akan diperbarui secara idempotent, bukan dibuat sebagai duplikat.
             </p>
+            <p className="mt-2 leading-relaxed">
+              Nomor WhatsApp harus valid dalam format internasional (contoh: +628123456789). Nomor dengan format
+              tidak valid akan ditolak. Status nomor terdaftar di WhatsApp dikonfirmasi setelah pengiriman diproses
+              oleh provider.
+            </p>
           </div>
 
           <label

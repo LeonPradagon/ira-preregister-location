@@ -12,6 +12,8 @@ import {
   scheduleReminder,
   scheduleReminderInTimezone,
   spreadReminderTimes,
+  unopenedLinkReminderAt,
+  verificationSessionExpiresAt,
 } from '../../../src/modules/reminders/reminder.policy.js';
 
 describe('reminder policy', () => {
@@ -53,6 +55,18 @@ describe('reminder policy', () => {
     );
     expect(reminderLinkExpiresAt(sentAt, new Date('2026-01-01T18:00:00.000Z'), 24).toISOString()).toBe(
       '2026-01-01T18:00:00.000Z',
+    );
+  });
+
+  it('starts an unopened-link reminder one day after the initial link expires', () => {
+    const initialExpiry = new Date('2026-01-08T10:00:00.000Z');
+    expect(unopenedLinkReminderAt(initialExpiry).toISOString()).toBe('2026-01-09T10:00:00.000Z');
+  });
+
+  it('keeps the verification session alive through three unopened-link reminders', () => {
+    const initialExpiry = new Date('2026-01-08T10:00:00.000Z');
+    expect(verificationSessionExpiresAt(initialExpiry, 3, 24, 1, 1).toISOString()).toBe(
+      '2026-01-12T10:00:00.000Z',
     );
   });
 

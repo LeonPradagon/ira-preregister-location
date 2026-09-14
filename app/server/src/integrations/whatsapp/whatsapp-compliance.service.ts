@@ -33,7 +33,16 @@ export class WhatsAppComplianceService {
         lastError: input.status === 'FAILED' ? (input.error ?? 'PROVIDER_REPORTED_FAILURE') : null,
       })
       .where(eq(whatsappDeliveryLogs.providerMessageId, input.providerMessageId))
-      .returning({ id: whatsappDeliveryLogs.id });
+      .returning({ id: whatsappDeliveryLogs.id, customerId: whatsappDeliveryLogs.customerId });
+    if (delivery?.customerId) {
+      await db
+        .update(customers)
+        .set({
+          whatsappStatus: input.status === 'SENT' ? 'ACCEPTED' : input.status,
+          updatedAt: occurredAt,
+        })
+        .where(eq(customers.id, delivery.customerId));
+    }
     const campaignItem = await CampaignItemState.applyDeliveryStatus(input.providerMessageId, input.status, occurredAt);
     const [reminder] = await db
       .update(reminders)
