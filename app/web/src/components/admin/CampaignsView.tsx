@@ -208,8 +208,8 @@ export const CampaignsView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [customerSearchInput, setCustomerSearchInput] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
-  const [coverageFwaFilter, setCoverageFwaFilter] = useState('Not Coverage');
-  const [coverageFtthFilter, setCoverageFtthFilter] = useState('Not Coverage');
+  const [coverageFwaFilter, setCoverageFwaFilter] = useState('ALL');
+  const [coverageFtthFilter, setCoverageFtthFilter] = useState('ALL');
   const [candidateCustomers, setCandidateCustomers] = useState<Customer[]>([]);
   const [candidatePage, setCandidatePage] = useState(1);
   const [candidatePageSize, setCandidatePageSize] = useState<TablePageSize>(25);
