@@ -27,6 +27,7 @@ import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js'
 import { buildVerificationSimulationConfig } from '../verification/simulation-config.js';
 import { getPublicWebOrigin } from '../../config/public-origin.js';
 import {
+  campaignCoverageFilterWithMissingReferenceLocation,
   campaignNeedsMaterialization,
   campaignRecipientReservationStatuses,
   selectCampaignTargetIds,
@@ -57,8 +58,14 @@ function filtersForTarget(target: StoredTargetFilter, cursor?: string) {
     );
   }
   if (target.status) filters.push(eq(customers.status, target.status));
-  if (target.coverageFwaStatus) filters.push(eq(customers.coverageFwaStatus, target.coverageFwaStatus));
-  if (target.coverageFtthStatus) filters.push(eq(customers.coverageFtthStatus, target.coverageFtthStatus));
+  const coverageFilters = [];
+  if (target.coverageFwaStatus) coverageFilters.push(eq(customers.coverageFwaStatus, target.coverageFwaStatus));
+  if (target.coverageFtthStatus) coverageFilters.push(eq(customers.coverageFtthStatus, target.coverageFtthStatus));
+  const coverageFilter =
+    target.locationStatus === 'VERIFIED'
+      ? and(...coverageFilters)
+      : campaignCoverageFilterWithMissingReferenceLocation(and(...coverageFilters));
+  if (coverageFilter) filters.push(coverageFilter);
   filters.push(ne(customers.status, 'SUSPENDED'), isNull(customers.whatsappOptOutAt));
   if (target.locationStatus === 'VERIFIED') {
     filters.push(

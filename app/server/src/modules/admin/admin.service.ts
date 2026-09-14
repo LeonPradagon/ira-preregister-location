@@ -47,7 +47,10 @@ import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js'
 import { buildVerificationSimulationConfig } from '../verification/simulation-config.js';
 import { canRestartVerificationCycle } from '../verification/verification-cycle.policy.js';
 import { buildVerifiedAddressReference } from '../verification/verified-location.js';
-import { campaignRecipientReservationStatuses } from '../campaigns/campaign-target.policy.js';
+import {
+  campaignCoverageFilterWithMissingReferenceLocation,
+  campaignRecipientReservationStatuses,
+} from '../campaigns/campaign-target.policy.js';
 import { campaignEligibleAddressSql, incompleteAddressSql } from '../validation/address-completeness.sql.js';
 import { unopenedLinkReminderAt, verificationSessionExpiresAt } from '../reminders/reminder.policy.js';
 const timestamp = () => new Date();
@@ -524,8 +527,14 @@ export class AdminService {
     }
     if (query.status) filters.push(eq(customers.status, query.status));
     if (query.whatsappStatus) filters.push(eq(customers.whatsappStatus, query.whatsappStatus));
-    if (query.coverageFwaStatus) filters.push(eq(customers.coverageFwaStatus, query.coverageFwaStatus));
-    if (query.coverageFtthStatus) filters.push(eq(customers.coverageFtthStatus, query.coverageFtthStatus));
+    const coverageFilters = [];
+    if (query.coverageFwaStatus) coverageFilters.push(eq(customers.coverageFwaStatus, query.coverageFwaStatus));
+    if (query.coverageFtthStatus) coverageFilters.push(eq(customers.coverageFtthStatus, query.coverageFtthStatus));
+    const coverageFilter =
+      query.campaignAvailable && query.locationStatus !== 'VERIFIED'
+        ? campaignCoverageFilterWithMissingReferenceLocation(and(...coverageFilters))
+        : and(...coverageFilters);
+    if (coverageFilter) filters.push(coverageFilter);
     if (query.locationStatus === 'UNVERIFIED') {
       filters.push(
         ne(customers.status, 'SUSPENDED'),

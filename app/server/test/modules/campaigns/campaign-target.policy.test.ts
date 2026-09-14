@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   campaignRecipientReservationStatuses,
+  campaignCoverageFilterWithMissingReferenceLocation,
   campaignNeedsMaterialization,
   selectCampaignTargetIds,
   selectMaterializationTargetIds,
 } from '../../../src/modules/campaigns/campaign-target.policy.js';
+import { eq } from 'drizzle-orm';
+import { customers } from '../../../src/db/schema/index.js';
 
 describe('campaign target policy', () => {
   it('caps select-all targets at the configured daily send limit', () => {
@@ -34,5 +37,14 @@ describe('campaign target policy', () => {
   it('recognizes an incomplete materialization even when its completion flag is stale', () => {
     expect(campaignNeedsMaterialization(true, 0, 1)).toBe(true);
     expect(campaignNeedsMaterialization(true, 1, 1)).toBe(false);
+  });
+
+  it('keeps customers without coordinates eligible even when coverage filters are selected', () => {
+    const filter = campaignCoverageFilterWithMissingReferenceLocation(eq(customers.coverageFwaStatus, 'Not Coverage'));
+
+    expect(filter).toBeDefined();
+    const serialized = JSON.stringify(filter, (key, value) => (key === 'table' ? undefined : value));
+    expect(serialized).toContain('reference_location is null');
+    expect(serialized).toContain('coverage_fwa_status');
   });
 });
