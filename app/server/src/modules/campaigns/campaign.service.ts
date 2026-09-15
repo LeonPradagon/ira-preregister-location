@@ -8,6 +8,7 @@ import {
   customers,
   locationCaptures,
   reminders,
+  validationResults,
   verificationCampaignItems,
   verificationCampaigns,
   verificationSessions,
@@ -35,12 +36,59 @@ import {
 } from './campaign-target.policy.js';
 import { campaignEligibleAddressSql } from '../validation/address-completeness.sql.js';
 import { verificationSessionExpiresAt } from '../reminders/reminder.policy.js';
+import {
+  campaignExportContentTypes,
+  campaignExportStatusLabels,
+  createCampaignCsv,
+  createCampaignXlsx,
+  type CampaignExportRow,
+} from './campaign-export.js';
 
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
 const maxBatchSize = () => Number(process.env.CAMPAIGN_MAX_BATCH_SIZE ?? 1000);
 const defaultMaterializationBatch = () => Number(process.env.CAMPAIGN_MATERIALIZATION_BATCH_SIZE ?? 1000);
 type StoredTargetFilter = CampaignTargetFilterInput & { customerIds?: string[] };
+
+const exportDate = (date: Date | null | undefined): string | null => (date ? date.toISOString() : null);
+const exportNumber = (value: unknown): number | null => {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+const exportJson = (value: unknown): string => {
+  if (value == null) return '';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+};
+
+function exportAddressText(address: Record<string, unknown> | null | undefined): string {
+  if (!address) return '';
+  const rawAddress = String(address.rawAddress ?? '').trim();
+  if (rawAddress) return rawAddress;
+  const parts = [
+    address.street,
+    address.houseNumber && `No. ${address.houseNumber}`,
+    address.rt && `RT ${address.rt}`,
+    address.rw && `RW ${address.rw}`,
+    address.building,
+    address.block && `Blok ${address.block}`,
+    address.unit && `Unit ${address.unit}`,
+    address.addressDetail,
+    address.landmark,
+    address.subdistrict,
+    address.district,
+    address.city,
+    address.province,
+    address.postalCode,
+  ]
+    .map((part) => String(part ?? '').trim())
+    .filter(Boolean);
+  return parts.join(', ');
+}
 
 function filtersForTarget(target: StoredTargetFilter, cursor?: string) {
   const filters = [];
@@ -357,6 +405,216 @@ export class CampaignService {
     return { campaign, items: await this.items(campaignId, { page: 1, pageSize: 25, search: '' }) };
   }
 
+  async exportCampaign(
+    admin: Pick<RequestAdmin, 'id' | 'name'>,
+    campaignId: string,
+    format: 'xlsx' | 'csv',
+  ): Promise<{ body: Buffer; contentType: string; fileName: string }> {
+    const [campaign] = await db.select().from(verificationCampaigns).where(eq(verificationCampaigns.id, campaignId));
+    if (!campaign) throw new NotFoundError('Campaign not found');
+
+    const itemRows = await db
+      .select({
+        item: verificationCampaignItems,
+        customer: customers,
+        session: verificationSessions,
+        currentAddress: {
+          id: customerAddresses.id,
+          rawAddress: customerAddresses.rawAddress,
+          street: customerAddresses.street,
+          houseNumber: customerAddresses.houseNumber,
+          rt: customerAddresses.rt,
+          rw: customerAddresses.rw,
+          building: customerAddresses.building,
+          block: customerAddresses.block,
+          unit: customerAddresses.unit,
+          subdistrict: customerAddresses.subdistrict,
+          district: customerAddresses.district,
+          city: customerAddresses.city,
+          province: customerAddresses.province,
+          postalCode: customerAddresses.postalCode,
+          addressDetail: customerAddresses.addressDetail,
+          landmark: customerAddresses.landmark,
+        },
+        addressChanged: sql<boolean>`
+          ${verificationSessions.verificationStatus} in ('ADDRESS_EDITING', 'ADDRESS_PROPOSED')
+          or ${verificationSessions.currentAddressId} <> ${verificationCampaignItems.addressId}
+          or exists (
+            select 1 from ${auditLogs}
+            where ${auditLogs.action} = 'ADDRESS_PROPOSED'
+              and ${auditLogs.entityType} = 'ADDRESS'
+              and (${auditLogs.after} ->> 'sessionId') = (${verificationSessions.id}::text)
+          )`,
+      })
+      .from(verificationCampaignItems)
+      .innerJoin(customers, eq(customers.id, verificationCampaignItems.customerId))
+      .innerJoin(verificationSessions, eq(verificationSessions.id, verificationCampaignItems.sessionId))
+      .leftJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
+      .where(eq(verificationCampaignItems.campaignId, campaignId))
+      .orderBy(desc(verificationCampaignItems.createdAt), desc(verificationCampaignItems.id));
+
+    const sessionIds = itemRows.map((row) => row.session.id);
+    const addressIds = [...new Set(itemRows.flatMap((row) => [row.item.addressId, row.session.currentAddressId]))];
+    const [addressRows, reminderRows, captureRows, validationRows] = sessionIds.length
+      ? await Promise.all([
+          db.select().from(customerAddresses).where(inArray(customerAddresses.id, addressIds)),
+          db.select().from(reminders).where(inArray(reminders.sessionId, sessionIds)).orderBy(asc(reminders.reminderNumber), asc(reminders.createdAt)),
+          db.select().from(locationCaptures).where(inArray(locationCaptures.sessionId, sessionIds)).orderBy(desc(locationCaptures.serverTimestamp)),
+          db.select().from(validationResults).where(inArray(validationResults.sessionId, sessionIds)).orderBy(desc(validationResults.createdAt)),
+        ])
+      : [[], [], [], []];
+
+    const addressById = new Map(addressRows.map((address) => [address.id, address]));
+    const remindersBySession = new Map<string, typeof reminderRows>();
+    for (const reminder of reminderRows) remindersBySession.set(reminder.sessionId, [...(remindersBySession.get(reminder.sessionId) ?? []), reminder]);
+    const capturesBySession = new Map<string, typeof captureRows>();
+    for (const capture of captureRows) capturesBySession.set(capture.sessionId, [...(capturesBySession.get(capture.sessionId) ?? []), capture]);
+    const validationsBySession = new Map<string, typeof validationRows>();
+    for (const validation of validationRows) validationsBySession.set(validation.sessionId, [...(validationsBySession.get(validation.sessionId) ?? []), validation]);
+
+    const detailRows: CampaignExportRow[] = itemRows.map((row) => {
+      const originalAddress = addressById.get(row.item.addressId);
+      const currentAddress = row.currentAddress as Record<string, unknown> | null;
+      const remindersForSession = remindersBySession.get(row.session.id) ?? [];
+      const capturesForSession = capturesBySession.get(row.session.id) ?? [];
+      const validationsForSession = validationsBySession.get(row.session.id) ?? [];
+      const latestCapture = capturesForSession[0];
+      const latestValidation = validationsForSession[0];
+      return {
+        campaign_id: campaign.id,
+        campaign_name: campaign.name,
+        campaign_status: campaignExportStatusLabels[campaign.status] ?? campaign.status,
+        campaign_scheduled_at: exportDate(campaign.scheduledAt),
+        item_id: row.item.id,
+        customer_id: row.customer.id,
+        customer_external_id: row.customer.externalId,
+        customer_name: row.customer.name,
+        phone_number: row.customer.phoneE164,
+        customer_status: campaignExportStatusLabels[row.customer.status] ?? row.customer.status,
+        coverage_fwa: row.customer.coverageFwaStatus,
+        coverage_ftth: row.customer.coverageFtthStatus,
+        delivery_status: campaignExportStatusLabels[row.item.status] ?? row.item.status,
+        scheduled_at: exportDate(row.item.scheduledAt),
+        processing_started_at: exportDate(row.item.processingStartedAt),
+        sent_at: exportDate(row.item.sentAt),
+        delivered_at: exportDate(row.item.deliveredAt),
+        read_at: exportDate(row.item.readAt),
+        failed_at: exportDate(row.item.failedAt),
+        provider_message_id: row.item.providerMessageId,
+        retry_count: row.item.retryCount,
+        delivery_error: row.item.lastError,
+        session_id: row.session.id,
+        session_status: campaignExportStatusLabels[row.session.verificationStatus] ?? row.session.verificationStatus,
+        customer_confirmation_status:
+          campaignExportStatusLabels[row.session.customerConfirmationStatus] ?? row.session.customerConfirmationStatus,
+        link_opened_at: exportDate(row.session.openedAt),
+        customer_confirmed_at: exportDate(row.session.customerConfirmedAt),
+        consent_at: exportDate(row.session.consentAt),
+        location_verified_at: exportDate(row.session.locationVerifiedAt),
+        completed_at: exportDate(row.session.completedAt),
+        session_expires_at: exportDate(row.session.expiresAt),
+        attempt_count: row.session.attemptCount,
+        reminder_count: row.session.reminderCount,
+        original_address_id: row.item.addressId,
+        original_address: exportAddressText(originalAddress as unknown as Record<string, unknown> | null),
+        current_address_id: row.session.currentAddressId,
+        current_address: exportAddressText(currentAddress),
+        address_changed: Boolean(row.addressChanged) ? 'Ya' : 'Tidak',
+        gps_received: capturesForSession.length > 0 ? 'Ya' : 'Belum',
+        latest_gps_latitude: exportNumber(latestCapture?.latitude),
+        latest_gps_longitude: exportNumber(latestCapture?.longitude),
+        latest_gps_accuracy_meters: exportNumber(latestCapture?.accuracyMeters),
+        latest_gps_server_timestamp: exportDate(latestCapture?.serverTimestamp),
+        latest_gps_device_timestamp: exportDate(latestCapture?.deviceTimestamp),
+        location_valid: row.session.verificationStatus === 'LOCATION_VALID' ? 'Ya' : 'Belum',
+        manual_review: row.session.verificationStatus === 'MANUAL_REVIEW' ? 'Ya' : 'Tidak',
+        latest_validation_result: latestValidation?.result ?? null,
+        validation_reason_codes: latestValidation ? exportJson(latestValidation.reasonCodes) : '',
+        validation_address_score: exportNumber(latestValidation?.addressScore),
+        validation_distance_meters: exportNumber(latestValidation?.distanceToReferenceMeters),
+        validation_street_score: exportNumber(latestValidation?.streetScore),
+        validation_reference_precision: latestValidation?.referencePrecision ?? null,
+        validation_created_at: exportDate(latestValidation?.createdAt),
+        reminder_sent_count: remindersForSession.filter((reminder) => reminder.status === 'SENT').length,
+        reminder_last_sent_at: exportDate(remindersForSession.filter((reminder) => reminder.status === 'SENT').at(-1)?.sentAt),
+        reminder_history: exportJson(
+          remindersForSession.map((reminder) => ({
+            reminderNumber: reminder.reminderNumber,
+            status: reminder.status,
+            scheduledAt: exportDate(reminder.scheduledAt),
+            sentAt: exportDate(reminder.sentAt),
+            openedAt: exportDate(reminder.openedAt),
+            providerMessageId: reminder.providerMessageId,
+            retryCount: reminder.retryCount,
+          })),
+        ),
+        gps_history: exportJson(
+          capturesForSession.map((capture) => ({
+            latitude: exportNumber(capture.latitude),
+            longitude: exportNumber(capture.longitude),
+            accuracyMeters: exportNumber(capture.accuracyMeters),
+            bestAccuracyMeters: exportNumber(capture.bestAccuracyMeters),
+            sampleCount: capture.sampleCount,
+            deviceTimestamp: exportDate(capture.deviceTimestamp),
+            serverTimestamp: exportDate(capture.serverTimestamp),
+          })),
+        ),
+        validation_history: exportJson(
+          validationsForSession.map((validation) => ({
+            result: validation.result,
+            reasonCodes: validation.reasonCodes,
+            addressScore: exportNumber(validation.addressScore),
+            distanceToReferenceMeters: exportNumber(validation.distanceToReferenceMeters),
+            streetScore: exportNumber(validation.streetScore),
+            referencePrecision: validation.referencePrecision,
+            createdAt: exportDate(validation.createdAt),
+          })),
+        ),
+      };
+    });
+
+    const summaryRows: CampaignExportRow[] = [
+      { field: 'Nama campaign', value: campaign.name },
+      { field: 'Status campaign', value: campaignExportStatusLabels[campaign.status] ?? campaign.status },
+      { field: 'Jadwal campaign', value: exportDate(campaign.scheduledAt) },
+      { field: 'Jumlah target', value: campaign.targetCount },
+      { field: 'Jumlah penerima yang tersedia', value: detailRows.length },
+      { field: 'Sudah diterima provider', value: itemRows.filter((row) => ['SENT', 'DELIVERED', 'READ'].includes(row.item.status)).length },
+      { field: 'Sudah terkirim', value: itemRows.filter((row) => ['DELIVERED', 'READ'].includes(row.item.status)).length },
+      { field: 'Sudah dibaca', value: itemRows.filter((row) => row.item.status === 'READ').length },
+      { field: 'Gagal atau dihentikan', value: itemRows.filter((row) => ['FAILED', 'PROVIDER_UNAVAILABLE', 'OPTED_OUT'].includes(row.item.status)).length },
+      { field: 'Link sudah dibuka', value: itemRows.filter((row) => row.session.openedAt != null).length },
+      { field: 'Data sudah dikonfirmasi', value: itemRows.filter((row) => row.session.customerConfirmationStatus === 'CONFIRMED').length },
+      { field: 'Lokasi HP sudah diterima', value: itemRows.filter((row) => capturesBySession.has(row.session.id)).length },
+      { field: 'Alamat berubah', value: itemRows.filter((row) => Boolean(row.addressChanged)).length },
+      { field: 'Lokasi sesuai', value: itemRows.filter((row) => row.session.verificationStatus === 'LOCATION_VALID').length },
+      { field: 'Perlu pemeriksaan tim', value: itemRows.filter((row) => row.session.verificationStatus === 'MANUAL_REVIEW').length },
+      { field: 'Total reminder', value: reminderRows.length },
+      { field: 'Reminder terkirim', value: reminderRows.filter((reminder) => reminder.status === 'SENT').length },
+      { field: 'File dibuat pada', value: new Date().toISOString() },
+    ];
+
+    const body =
+      format === 'xlsx'
+        ? await createCampaignXlsx(summaryRows, detailRows)
+        : createCampaignCsv(detailRows);
+    await db.insert(auditLogs).values({
+      actorUserId: admin.id,
+      actorName: admin.name,
+      action: 'CAMPAIGN_EXPORT_COMPLETED',
+      entityType: 'CAMPAIGN',
+      entityId: campaign.id,
+      after: { format, rows: detailRows.length },
+      reason: 'Admin mengekspor detail monitoring campaign.',
+      timestamp: timestamp(),
+    });
+    return {
+      body,
+      contentType: campaignExportContentTypes[format],
+      fileName: `ira_campaign_${campaign.id}_${format === 'xlsx' ? 'monitoring' : 'monitoring'}.${format}`,
+    };
+  }
+
   async items(campaignId: string, query: AdminListQueryInput) {
     const [campaign] = await db
       .select({ id: verificationCampaigns.id })
@@ -509,7 +767,12 @@ export class CampaignService {
         )`,
         currentAddressId: verificationSessions.currentAddressId,
         currentAddress: {
+          id: customerAddresses.id,
+          addressType: customerAddresses.addressType,
+          isActive: customerAddresses.isActive,
+          isVerified: customerAddresses.isVerified,
           rawAddress: customerAddresses.rawAddress,
+          addressReference: customerAddresses.addressReference,
           street: customerAddresses.street,
           houseNumber: customerAddresses.houseNumber,
           rt: customerAddresses.rt,
@@ -524,6 +787,8 @@ export class CampaignService {
           postalCode: customerAddresses.postalCode,
           addressDetail: customerAddresses.addressDetail,
           landmark: customerAddresses.landmark,
+          referenceSource: customerAddresses.referenceSource,
+          referencePrecision: customerAddresses.referencePrecision,
         },
         gpsReceived: gpsReceivedExpression,
         addressChanged: addressChangedExpression,
@@ -548,9 +813,18 @@ export class CampaignService {
             : asc(verificationCampaignItems.id),
       )
       .offset(usesCursor && cursor ? 0 : (query.page - 1) * query.pageSize)
-      .limit(query.pageSize);
+        .limit(query.pageSize);
+    const originalAddressIds = [...new Set(items.map((row) => row.item.addressId))];
+    const originalAddressRows = originalAddressIds.length
+      ? await db.select().from(customerAddresses).where(inArray(customerAddresses.id, originalAddressIds))
+      : [];
+    const originalAddressById = new Map(originalAddressRows.map((address) => [address.id, address]));
+    const itemsWithOriginalAddress = items.map((row) => ({
+      ...row,
+      originalAddress: originalAddressById.get(row.item.addressId) ?? null,
+    }));
     return {
-      items,
+      items: itemsWithOriginalAddress,
       monitoring: {
         ...Object.fromEntries(Object.entries(monitoring ?? {}).map(([key, value]) => [key, Number(value ?? 0)])),
         reminders: {

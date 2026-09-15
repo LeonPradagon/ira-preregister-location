@@ -60,6 +60,20 @@ describe('API client', () => {
     expect(config.withCredentials).toBe(true);
   });
 
+  it('requests all sessions included in the needs-attention card', async () => {
+    const adapterMock = vi.fn().mockResolvedValue({
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { items: [], page: 1, pageSize: 25, total: 0, totalPages: 0 },
+    });
+    apiClient.defaults.adapter = adapterMock;
+
+    await api.verifications({ status: 'NEEDS_ATTENTION' });
+
+    expect(adapterMock.mock.calls[0][0].url).toBe('/admin/verifications?status=NEEDS_ATTENTION');
+  });
+
   it('normalizes API errors without exposing the raw Axios error', async () => {
     const adapterMock = vi.fn().mockRejectedValue({
       isAxiosError: true,
@@ -93,6 +107,27 @@ describe('API client', () => {
 
     const config = adapterMock.mock.calls[0][0];
     expect(config.url).toBe('/admin/customers?addressCompleteness=INCOMPLETE');
+  });
+
+  it('downloads the complete monitoring export for one campaign', async () => {
+    const adapterMock = vi.fn().mockResolvedValue({
+      status: 200,
+      statusText: 'OK',
+      headers: {
+        'content-disposition': 'attachment; filename="ira_campaign_campaign-1_monitoring.csv"',
+        'content-type': 'text/csv; charset=utf-8',
+      },
+      data: new ArrayBuffer(0),
+    });
+    apiClient.defaults.adapter = adapterMock;
+
+    const result = await api.downloadCampaignExport('campaign-1', 'csv');
+
+    const config = adapterMock.mock.calls[0][0];
+    expect(config.url).toBe('/admin/campaigns/campaign-1/export?format=csv');
+    expect(config.responseType).toBe('arraybuffer');
+    expect(config.timeout).toBe(15 * 60_000);
+    expect(result.fileName).toBe('ira_campaign_campaign-1_monitoring.csv');
   });
 
   it('allows the location submission to wait for reverse geocoding', async () => {

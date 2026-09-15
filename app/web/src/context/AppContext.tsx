@@ -297,7 +297,7 @@ function mapApiReferenceLocation(raw: unknown): CustomerAddress['referenceLocati
   return Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : null;
 }
 
-function mapApiAddress(raw: Record<string, unknown>): CustomerAddress {
+export function mapApiAddress(raw: Record<string, unknown>): CustomerAddress {
   return {
     ...(raw as unknown as CustomerAddress),
     id: String(raw.id),

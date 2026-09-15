@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { adminListQuerySchema, campaignCreateSchema, whatsappPreviewSchema } from '../../common/contracts.js';
 import { BetterAuthGuard } from '../../auth/auth.guard.js';
 import { RolesGuard } from '../../auth/roles.guard.js';
@@ -39,6 +40,22 @@ export class CampaignController {
     const parsed = adminListQuerySchema.safeParse(query);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
     return this.campaigns.list(parsed.data);
+  }
+
+  @Get(':id/export')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
+  async export(
+    @CurrentAdmin() admin: RequestAdmin,
+    @Param('id') id: string,
+    @Query('format') format = 'xlsx',
+    @Res() response: Response,
+  ): Promise<void> {
+    if (format !== 'xlsx' && format !== 'csv') throw new BadRequestException('Format export harus xlsx atau csv.');
+    const result = await this.campaigns.exportCampaign(admin, id, format);
+    response.setHeader('Content-Type', result.contentType);
+    response.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+    response.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type');
+    response.send(result.body);
   }
 
   @Get(':id')

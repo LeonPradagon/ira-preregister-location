@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
   Clock3,
   Compass,
+  Edit3,
   Filter,
   Info,
   RefreshCw as RefreshCwIcon,
@@ -13,9 +14,11 @@ import {
   Users,
   XCircle,
 } from 'lucide-react';
-import { mapApiCustomer, mapApiSession, useApp } from '../../context/AppContext';
+import { mapApiAddress, mapApiCustomer, mapApiSession, useApp } from '../../context/AppContext';
 import { api } from '../../lib/apiClient';
-import { Customer, VerificationSession } from '../../types';
+import { Customer, CustomerAddress, VerificationSession } from '../../types';
+import { formatAppDateTime } from '../../lib/dateTime';
+import { formatAddressForDisplay } from '../../lib/validationEngine';
 import {
   AdminTable,
   SortableTableHeader,
@@ -34,16 +37,29 @@ interface VerificationListViewProps {
   onSelectVerification: (sessionId: string) => void;
 }
 
+interface VerificationListRow {
+  session: VerificationSession;
+  customer: Customer;
+  address: CustomerAddress;
+}
+
 const statusLabels: Record<string, string> = {
   LOCATION_VALID: 'Location matched',
   MANUAL_REVIEW: 'Needs team review',
   WAITING_FOR_HOME: 'Waiting for customer',
   LOW_GPS_ACCURACY: 'Location signal is weak',
+  LOCATION_MISMATCH: 'Location does not match',
   ADDRESS_PROPOSED: 'Address needs review',
+  ADDRESS_EDITING: 'Address is being updated',
   CUSTOMER_DATA_MISMATCH: 'Customer data does not match',
+  REMINDER_REQUIRED: 'Reminder required',
+  REMINDER_LIMIT_REACHED: 'Reminder limit reached',
   GPS_CAPTURING: 'Checking location',
   CONSENTED: 'Waiting for location permission',
+  LINK_OPENED: 'Link opened',
+  MESSAGE_SENT: 'Invitation sent',
   CREATED: 'Not started',
+  EXPIRED: 'Link expired',
 };
 
 const getStatusLabel = (status: string) => statusLabels[status] ?? 'In progress';
@@ -68,7 +84,7 @@ const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
 export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSelectVerification }) => {
   const { validationConfig, dashboardSummary } = useApp();
   const { t } = useTranslation();
-  const [rows, setRows] = useState<Array<{ session: VerificationSession; customer: Customer }>>([]);
+  const [rows, setRows] = useState<VerificationListRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +93,10 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<TablePageSize>(25);
   const [cursors, setCursors] = useState<Record<number, string>>({});
-  const [sortKey, setSortKey] = useState<'customer' | 'status' | 'location' | 'activity'>('customer');
+  const latestRequestId = useRef(0);
+  const [sortKey, setSortKey] = useState<
+    'customer' | 'address' | 'addressChange' | 'status' | 'location' | 'activity'
+  >('customer');
   const [sortDirection, setSortDirection] = useState<TableSortDirection>('asc');
 
   useEffect(() => {
@@ -86,6 +105,8 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
   }, [searchTerm, statusFilter]);
 
   const load = async () => {
+    const requestId = latestRequestId.current + 1;
+    latestRequestId.current = requestId;
     setLoading(true);
     setError(null);
     try {
@@ -98,15 +119,21 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
         sortDirection,
         cursor: page === 1 ? undefined : cursors[page],
       });
+      if (requestId !== latestRequestId.current) return;
       if (response.nextCursor) setCursors((previous) => ({ ...previous, [page + 1]: response.nextCursor! }));
       setRows(
-        response.items.map((row) => ({ session: mapApiSession(row.session), customer: mapApiCustomer(row.customer) })),
+        response.items.map((row) => ({
+          session: mapApiSession(row.session),
+          customer: mapApiCustomer(row.customer),
+          address: mapApiAddress(row.address),
+        })),
       );
       setTotal(response.total);
     } catch (cause) {
+      if (requestId !== latestRequestId.current) return;
       setError(cause instanceof Error ? cause.message : t('verifications.loadError'));
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestId.current) setLoading(false);
     }
   };
 
@@ -120,6 +147,12 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
         rows,
         (row) => {
           if (sortKey === 'customer') return row.customer.name;
+          if (sortKey === 'address') return row.address.rawAddress;
+          if (sortKey === 'addressChange')
+            return ['ADDRESS_EDITING', 'ADDRESS_PROPOSED'].includes(row.session.verificationStatus) ||
+              row.address.addressType === 'PROPOSED'
+              ? 1
+              : 0;
           if (sortKey === 'status') return row.session.verificationStatus;
           if (sortKey === 'location') return row.session.lastValidationResult?.result;
           return row.session.attemptCount;
@@ -129,7 +162,9 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
     [rows, sortDirection, sortKey],
   );
 
-  const toggleSort = (nextKey: 'customer' | 'status' | 'location' | 'activity') => {
+  const toggleSort = (
+    nextKey: 'customer' | 'address' | 'addressChange' | 'status' | 'location' | 'activity',
+  ) => {
     if (sortKey === nextKey) setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
     else {
       setSortKey(nextKey);
@@ -273,6 +308,8 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
                   {label}
                 </option>
               ))}
+              <option value="ADDRESS_CHANGED">{t('verifications.addressChangeFilter')}</option>
+              <option value="NEEDS_ATTENTION">{t('verifications.needsAttentionFilter')}</option>
               <option value="NEEDS_REVIEW">{t('verifications.locationNeedsReviewFilter')}</option>
             </select>
           </label>
@@ -285,7 +322,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('verifications.listDescription')}</p>
         </div>
         <AdminTable
-          minWidthClass="min-w-[800px]"
+          minWidthClass="min-w-[1400px]"
           footer={
             <TablePagination
               page={page}
@@ -306,6 +343,22 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
               <SortableTableHeader active={sortKey === 'customer'} direction={sortDirection} onClick={() => toggleSort('customer')} className="px-4 py-3">
                 {t('table.customerName')}
               </SortableTableHeader>
+              <SortableTableHeader
+                active={sortKey === 'address'}
+                direction={sortDirection}
+                onClick={() => toggleSort('address')}
+                className="px-4 py-3"
+              >
+                {t('verifications.address')}
+              </SortableTableHeader>
+              <SortableTableHeader
+                active={sortKey === 'addressChange'}
+                direction={sortDirection}
+                onClick={() => toggleSort('addressChange')}
+                className="px-4 py-3"
+              >
+                {t('verifications.addressChange')}
+              </SortableTableHeader>
               <SortableTableHeader active={sortKey === 'status'} direction={sortDirection} onClick={() => toggleSort('status')} className="px-4 py-3">
                 {t('verifications.status')}
               </SortableTableHeader>
@@ -319,8 +372,14 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {sortedRows.map(({ session, customer }) => {
+            {sortedRows.map(({ session, customer, address }) => {
               const lastVal = session.lastValidationResult;
+              const addressChangeStatus =
+                session.verificationStatus === 'ADDRESS_EDITING'
+                  ? t('verifications.addressChangeInProgress')
+                  : session.verificationStatus === 'ADDRESS_PROPOSED' || address.addressType === 'PROPOSED'
+                    ? t('verifications.addressChangePending')
+                    : null;
               return (
                 <tr key={session.id} className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
                   <td className="px-4 py-3">
@@ -329,6 +388,26 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
                       {customer.externalId} · {customer.phoneE164}
                     </div>
                   </td>
+                  <td className="max-w-[320px] px-4 py-3">
+                    <div className="line-clamp-2 text-xs font-medium leading-5 text-slate-900 dark:text-white">
+                      {formatAddressForDisplay(address.rawAddress)}
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      {address.subdistrict}, {address.district}, {address.city}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {addressChangeStatus ? (
+                      <span className="inline-flex max-w-[190px] items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold leading-4 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
+                        <Edit3 className="h-3.5 w-3.5 shrink-0" />
+                        {addressChangeStatus}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400 dark:text-slate-500">
+                        {t('verifications.addressChangeNone')}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${getStatusClassName(session.verificationStatus)}`}
@@ -336,6 +415,13 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
                       <StatusIcon status={session.verificationStatus} />
                       {getStatusLabel(session.verificationStatus)}
                     </span>
+                    <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      {session.customerConfirmationStatus === 'CONFIRMED'
+                        ? 'Data customer sesuai'
+                        : session.customerConfirmationStatus === 'MISMATCH'
+                          ? 'Data customer berbeda'
+                          : 'Belum dikonfirmasi'}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     {lastVal ? (
@@ -366,6 +452,12 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
                       {session.reminderCount} / {validationConfig.MAX_REMINDERS_PER_SESSION}{' '}
                       {t('verifications.reminders')}
                     </div>
+                    <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      Terakhir: {formatAppDateTime(session.updatedAt)}
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      Link berlaku sampai: {formatAppDateTime(session.expiresAt)}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
@@ -382,21 +474,21 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
             })}
             {loading && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
                   {t('table.loadingSessions')}
                 </td>
               </tr>
             )}
             {!loading && error && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-rose-600">
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-rose-600">
                   {error}
                 </td>
               </tr>
             )}
             {!loading && !error && !rows.length && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
                   {t('table.noMatchingSessions')}
                 </td>
               </tr>

@@ -628,7 +628,13 @@ const adminApi = {
   },
   importJob: (id: string) => request<CustomerImportApiResult>(`/admin/import-jobs/${encodeURIComponent(id)}`),
   verifications: (query: AdminListQuery = {}) =>
-    request<AdminPageApi<{ session: Record<string, unknown>; customer: Record<string, unknown> }>>(
+    request<
+      AdminPageApi<{
+        session: Record<string, unknown>;
+        customer: Record<string, unknown>;
+        address: Record<string, unknown>;
+      }>
+    >(
       `/admin/verifications${queryString(query)}`,
     ),
   verification: (id: string) => request<Record<string, unknown>>(`/admin/verifications/${encodeURIComponent(id)}`),
@@ -710,6 +716,20 @@ const adminApi = {
     request<AdminPageApi<Record<string, unknown>> & { monitoring: CampaignMonitoringSummary }>(
       `/admin/campaigns/${encodeURIComponent(id)}/items${queryString(query)}`,
     ),
+  downloadCampaignExport: async (id: string, format: 'xlsx' | 'csv') => {
+    const response = await apiClient.get<ArrayBuffer>(
+      `/admin/campaigns/${encodeURIComponent(id)}/export?format=${format}`,
+      { responseType: 'arraybuffer', timeout: EXPORT_DOWNLOAD_TIMEOUT_MS },
+    );
+    const disposition = response.headers['content-disposition'];
+    const fallbackFileName = `ira_campaign_${id}_monitoring.${format}`;
+    const fileName =
+      typeof disposition === 'string'
+        ? disposition.match(/filename="([^"]+)"/)?.[1] || fallbackFileName
+        : fallbackFileName;
+    const contentType = String(response.headers['content-type'] || 'application/octet-stream');
+    return { blob: new Blob([response.data], { type: contentType }), fileName };
+  },
   createCampaign: (body: unknown) =>
     request<Record<string, unknown>>('/admin/campaigns', { method: 'POST', body: JSON.stringify(body) }),
   previewWhatsApp: (body: {

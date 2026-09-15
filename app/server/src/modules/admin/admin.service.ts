@@ -1237,7 +1237,29 @@ export class AdminService {
         ),
       );
     }
-    if (query.status === 'NEEDS_REVIEW') {
+    if (query.status === 'NEEDS_ATTENTION') {
+      filters.push(
+        or(
+          inArray(verificationSessions.verificationStatus, [
+            'MANUAL_REVIEW',
+            'LOW_GPS_ACCURACY',
+            'WAITING_FOR_HOME',
+            'ADDRESS_EDITING',
+            'ADDRESS_PROPOSED',
+          ]),
+          eq(verificationSessions.customerConfirmationStatus, 'MISMATCH'),
+        ),
+      );
+    } else if (query.status === 'ADDRESS_CHANGED') {
+      filters.push(inArray(verificationSessions.verificationStatus, ['ADDRESS_EDITING', 'ADDRESS_PROPOSED']));
+    } else if (query.status === 'CUSTOMER_DATA_MISMATCH') {
+      filters.push(
+        or(
+          eq(verificationSessions.verificationStatus, 'CUSTOMER_DATA_MISMATCH'),
+          eq(verificationSessions.customerConfirmationStatus, 'MISMATCH'),
+        ),
+      );
+    } else if (query.status === 'NEEDS_REVIEW') {
       filters.push(sql`exists (
         select 1
         from validation_results latest_location_result
@@ -1288,9 +1310,17 @@ export class AdminService {
     )`;
     const usesCursor = !query.sortBy;
     const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
+    const addressChangedSort = sql<number>`case
+      when ${verificationSessions.verificationStatus} in ('ADDRESS_EDITING', 'ADDRESS_PROPOSED')
+        or ${verificationSessions.customerConfirmationStatus} = 'MISMATCH'
+      then 1 else 0 end`;
     const sortExpression =
       query.sortBy === 'status'
         ? verificationSessions.verificationStatus
+        : query.sortBy === 'address'
+          ? customerAddresses.rawAddress
+          : query.sortBy === 'addressChange'
+            ? addressChangedSort
         : query.sortBy === 'location'
           ? latestLocationResultSort
           : query.sortBy === 'activity'
@@ -1304,9 +1334,10 @@ export class AdminService {
         )
       : undefined;
     const rows = await db
-      .select({ session: verificationSessions, customer: customers })
+      .select({ session: verificationSessions, customer: customers, address: customerAddresses })
       .from(verificationSessions)
       .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
+      .innerJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
       .where(cursorWhere ? and(where, cursorWhere) : where)
       .orderBy(
         usesCursor
@@ -1324,8 +1355,8 @@ export class AdminService {
       .limit(query.pageSize);
     const resultRows = rows.length
       ? await db
-          .select()
-          .from(validationResults)
+      .select()
+      .from(validationResults)
           .where(
             or(
               ...rows.map(({ session }) =>
@@ -1342,9 +1373,10 @@ export class AdminService {
     for (const result of resultRows)
       if (!resultBySession.has(result.sessionId)) resultBySession.set(result.sessionId, result);
     return {
-      items: rows.map(({ session, customer }) => ({
+      items: rows.map(({ session, customer, address }) => ({
         session: { ...sanitizeSession(session), lastValidationResult: resultBySession.get(session.id) ?? null },
         customer,
+        address,
       })),
       page: query.page,
       pageSize: query.pageSize,

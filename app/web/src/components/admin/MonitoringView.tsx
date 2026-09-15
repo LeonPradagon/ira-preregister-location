@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   CheckCircle2,
+  ChevronDown,
   Clock3,
+  Download,
   ExternalLink,
   MapPin,
   RefreshCw,
@@ -111,8 +113,11 @@ export const MonitoringView: React.FC = () => {
   const [recipientSortKey, setRecipientSortKey] = useState<RecipientSortKey>('recipient');
   const [recipientSortDirection, setRecipientSortDirection] = useState<'asc' | 'desc'>('asc');
   const [recipientLoading, setRecipientLoading] = useState(false);
+  const [expandedRecipientId, setExpandedRecipientId] = useState<string | null>(null);
   const [monitoringSortKey, setMonitoringSortKey] = useState<MonitoringSortKey>('campaign');
   const [monitoringSortDirection, setMonitoringSortDirection] = useState<TableSortDirection>('asc');
+  const [exportingCampaign, setExportingCampaign] = useState<string | null>(null);
+  const [exportMenuCampaign, setExportMenuCampaign] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -202,6 +207,27 @@ export const MonitoringView: React.FC = () => {
     }
   };
 
+  const exportCampaign = async (campaign: AdminMonitoringCampaign, format: 'xlsx' | 'csv') => {
+    setExportingCampaign(`${campaign.id}:${format}`);
+    setExportMenuCampaign(null);
+    setError(null);
+    try {
+      const result = await api.downloadCampaignExport(campaign.id, format);
+      const url = URL.createObjectURL(result.blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = result.fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('monitoring.exportError'));
+    } finally {
+      setExportingCampaign(null);
+    }
+  };
+
   const summary = data?.summary;
 
   return (
@@ -249,6 +275,7 @@ export const MonitoringView: React.FC = () => {
           <div>
             <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t('monitoring.breakdownTitle')}</h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('monitoring.breakdownDescription')}</p>
+            <p className="mt-1 text-[11px] text-indigo-600 dark:text-indigo-300">{t('monitoring.exportHelp')}</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="relative block">
@@ -328,19 +355,52 @@ export const MonitoringView: React.FC = () => {
                     <td className="px-3 py-3 font-semibold text-emerald-600 dark:text-emerald-300">{value(campaign.locationValid)}</td>
                     <td className="px-3 py-3 text-rose-600 dark:text-rose-300">{value(campaign.failed)} <XCircle className="ml-1 inline h-3.5 w-3.5" /></td>
                     <td className="px-3 py-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedCampaign(campaign);
-                          setRecipientPage(1);
-                          setRecipientCursors({});
-                          setRecipientSortKey('recipient');
-                          setRecipientSortDirection('asc');
-                        }}
-                        className="whitespace-nowrap rounded-lg border border-indigo-200 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
-                      >
-                        {t('monitoring.viewRecipients')}
-                      </button>
+                      <div className="flex min-w-[190px] flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCampaign(campaign);
+                            setRecipientPage(1);
+                            setRecipientCursors({});
+                            setRecipientSortKey('recipient');
+                            setRecipientSortDirection('asc');
+                          }}
+                          className="whitespace-nowrap rounded-lg border border-indigo-200 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                        >
+                          {t('monitoring.viewRecipients')}
+                        </button>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setExportMenuCampaign((current) => (current === campaign.id ? null : campaign.id))}
+                            disabled={exportingCampaign !== null}
+                            title={t('monitoring.export')}
+                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            {exportingCampaign?.startsWith(`${campaign.id}:`) ? '...' : t('monitoring.export')}
+                            <ChevronDown className="h-3 w-3" />
+                          </button>
+                          {exportMenuCampaign === campaign.id && exportingCampaign === null && (
+                            <div className="absolute right-0 top-full z-30 mt-1 w-36 overflow-hidden rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                              <button
+                                type="button"
+                                onClick={() => void exportCampaign(campaign, 'xlsx')}
+                                className="block w-full rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-700 hover:bg-emerald-50 dark:text-slate-200 dark:hover:bg-emerald-950/40"
+                              >
+                                {t('monitoring.exportXlsx')}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void exportCampaign(campaign, 'csv')}
+                                className="block w-full rounded-md px-3 py-2 text-left text-[11px] font-semibold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                              >
+                                {t('monitoring.exportCsv')}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -425,12 +485,30 @@ export const MonitoringView: React.FC = () => {
                   const currentAddressId = String(row.currentAddressId ?? '');
                   const originalAddressId = String(item.addressId ?? '');
                   const addressWasReplaced = Boolean(currentAddressId && originalAddressId && currentAddressId !== originalAddressId);
-                  const changedAddress = addressValue(row.currentAddress as Record<string, unknown> | null);
+                  const originalAddress = row.originalAddress as Record<string, unknown> | null;
+                  const currentAddress = row.currentAddress as Record<string, unknown> | null;
+                  const changedAddress = addressValue(currentAddress);
+                  const expanded = expandedRecipientId === String(item.id);
                   return (
-                    <tr key={String(item.id)} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                    <React.Fragment key={String(item.id)}>
+                    <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
                       <td className="max-w-[260px] whitespace-normal break-words px-4 py-3">
                         <div className="font-semibold text-slate-800 dark:text-slate-100">{String(customer.name ?? t('campaigns.defaultCustomer'))}</div>
-                        <div className="mt-1 break-all font-mono text-[10px] text-slate-500">{String(customer.phoneE164 ?? '')}</div>
+                        <div className="mt-1 break-all text-[10px] text-slate-500 dark:text-slate-400">
+                          {String(customer.externalId ?? '')} · {String(customer.phoneE164 ?? '')}
+                        </div>
+                        <div className="mt-2 line-clamp-2 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                          {addressValue(currentAddress || originalAddress) || t('monitoring.addressUnavailable')}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedRecipientId(expanded ? null : String(item.id))}
+                          aria-expanded={expanded}
+                          className="mt-2 inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                        >
+                          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                          {expanded ? t('monitoring.hideDetails') : t('monitoring.showDetails')}
+                        </button>
                       </td>
                       <td className="px-3 py-3 font-semibold text-slate-700 dark:text-slate-200">{t(`campaigns.itemStatus.${String(item.status ?? 'PENDING')}`)}</td>
                       <td className="px-3 py-3">
@@ -464,6 +542,55 @@ export const MonitoringView: React.FC = () => {
                         <div className="mt-1 text-[10px] text-slate-400">{t(`monitoring.status.${sessionStatus}`)}</div>
                       </td>
                     </tr>
+                    {expanded && (
+                      <tr className="bg-indigo-50/40 dark:bg-indigo-950/10">
+                        <td colSpan={8} className="px-4 py-4">
+                          <div className="grid gap-3 text-xs md:grid-cols-3">
+                            <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                              <h3 className="font-semibold text-slate-900 dark:text-white">{t('monitoring.customerDetails')}</h3>
+                              <dl className="mt-2 space-y-1.5 text-slate-600 dark:text-slate-300">
+                                <div><dt className="inline font-medium">{t('monitoring.customerName')}:</dt> <dd className="inline">{String(customer.name ?? '—')}</dd></div>
+                                <div><dt className="inline font-medium">{t('monitoring.customerId')}:</dt> <dd className="inline">{String(customer.externalId ?? '—')}</dd></div>
+                                <div><dt className="inline font-medium">{t('monitoring.phoneNumber')}:</dt> <dd className="inline">{String(customer.phoneE164 ?? '—')}</dd></div>
+                                <div><dt className="inline font-medium">{t('monitoring.customerStatus')}:</dt> <dd className="inline">{customer.status ? t(`customers.statusLabel.${String(customer.status)}`) : '—'}</dd></div>
+                                <div><dt className="inline font-medium">FWA:</dt> <dd className="inline">{String(customer.coverageFwaStatus ?? '—')}</dd></div>
+                                <div><dt className="inline font-medium">FTTH:</dt> <dd className="inline">{String(customer.coverageFtthStatus ?? '—')}</dd></div>
+                              </dl>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                              <h3 className="font-semibold text-slate-900 dark:text-white">{t('monitoring.addressDetails')}</h3>
+                              <div className="mt-2 space-y-3 text-slate-600 dark:text-slate-300">
+                                <div>
+                                  <div className="font-medium text-slate-500 dark:text-slate-400">{t('monitoring.originalAddress')}</div>
+                                  <div className="mt-1 leading-relaxed">{addressValue(originalAddress) || t('monitoring.addressUnavailable')}</div>
+                                  {originalAddress && <div className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">{t('monitoring.addressVerification')}: {originalAddress.isVerified ? t('monitoring.verified') : t('monitoring.notVerified')}</div>}
+                                </div>
+                                {addressWasReplaced && (
+                                  <div>
+                                    <div className="font-medium text-amber-600 dark:text-amber-300">{t('monitoring.currentAddress')}</div>
+                                    <div className="mt-1 leading-relaxed">{changedAddress || t('monitoring.addressUnavailable')}</div>
+                                    {currentAddress && <div className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">{t('monitoring.addressVerification')}: {currentAddress.isVerified ? t('monitoring.verified') : t('monitoring.notVerified')}</div>}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                              <h3 className="font-semibold text-slate-900 dark:text-white">{t('monitoring.checkDetails')}</h3>
+                              <dl className="mt-2 space-y-1.5 text-slate-600 dark:text-slate-300">
+                                <div><dt className="inline font-medium">{t('monitoring.deliveryStatus')}:</dt> <dd className="inline">{t(`campaigns.itemStatus.${String(item.status ?? 'PENDING')}`)}</dd></div>
+                                <div><dt className="inline font-medium">{t('monitoring.verificationStatus')}:</dt> <dd className="inline">{t(`monitoring.status.${sessionStatus}`)}</dd></div>
+                                <div><dt className="inline font-medium">{t('monitoring.linkStatus')}:</dt> <dd className="inline">{opened ? t('monitoring.opened') : t('monitoring.notOpened')}{opened && row.linkOpenedAt ? ` · ${formatAppDateTime(String(row.linkOpenedAt))}` : ''}</dd></div>
+                                <div><dt className="inline font-medium">{t('monitoring.confirmed')}:</dt> <dd className="inline">{String(row.confirmationStatus ?? 'UNCONFIRMED') === 'CONFIRMED' ? t('monitoring.yes') : t('monitoring.notYet')}</dd></div>
+                                <div><dt className="inline font-medium">{t('monitoring.gps')}:</dt> <dd className="inline">{yes(row.gpsReceived) ? t('monitoring.yes') : t('monitoring.notYet')}</dd></div>
+                                <div><dt className="inline font-medium">{t('monitoring.locationValid')}:</dt> <dd className="inline">{yes(row.locationValid) ? t('monitoring.yes') : t('monitoring.notYet')}</dd></div>
+                                <div><dt className="inline font-medium">{t('monitoring.reminderCount')}:</dt> <dd className="inline">{reminderSentCount > 0 ? `${reminderSentCount}x` : t('monitoring.noReminder')}</dd></div>
+                              </dl>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
                 {recipientLoading && <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">{t('monitoring.loading')}</td></tr>}
