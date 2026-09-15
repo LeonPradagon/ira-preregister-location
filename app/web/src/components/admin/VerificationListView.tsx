@@ -6,6 +6,7 @@ import {
   Clock3,
   Compass,
   Filter,
+  Info,
   RefreshCw as RefreshCwIcon,
   Search,
   ShieldCheck,
@@ -145,6 +146,13 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
     verificationStats.waitingForHome +
     verificationStats.addressChanged +
     verificationStats.customersMismatch;
+  const attentionBreakdown = [
+    ['verifications.needsAttentionManualReview', verificationStats.manualReview],
+    ['verifications.needsAttentionLowGpsAccuracy', verificationStats.lowGpsAccuracy],
+    ['verifications.needsAttentionWaitingForHome', verificationStats.waitingForHome],
+    ['verifications.needsAttentionAddressChanged', verificationStats.addressChanged],
+    ['verifications.needsAttentionCustomerMismatch', verificationStats.customersMismatch],
+  ] as const;
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -181,28 +189,34 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-            <Users className="h-4 w-4" />
-            {t('verifications.totalChecks')}
+      <section className="grid gap-3 sm:grid-cols-2 sm:items-stretch">
+        <div className="grid h-full grid-rows-2 gap-3">
+          <div className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+              <Users className="h-4 w-4" />
+              {t('verifications.totalChecks')}
+            </div>
+            <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
+              {total.toLocaleString('en-US')}
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              {t('verifications.totalChecksHelp')}
+            </p>
           </div>
-          <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">{total.toLocaleString('en-US')}</p>
-          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{t('verifications.totalChecksHelp')}</p>
-        </div>
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/20">
-          <div className="flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-            <CheckCircle2 className="h-4 w-4" />
-            {t('verifications.matched')}
+          <div className="flex h-full flex-col rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/20">
+            <div className="flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2 className="h-4 w-4" />
+              {t('verifications.matched')}
+            </div>
+            <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-300">
+              {verificationStats.locationValid.toLocaleString('en-US')}
+            </p>
+            <p className="mt-1 text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
+              {t('verifications.matchedHelp')}
+            </p>
           </div>
-          <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-300">
-            {verificationStats.locationValid.toLocaleString('en-US')}
-          </p>
-          <p className="mt-1 text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
-            {t('verifications.matchedHelp')}
-          </p>
         </div>
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 shadow-sm dark:border-amber-900 dark:bg-amber-950/20">
+        <div className="flex h-full flex-col rounded-2xl border border-amber-200 bg-amber-50/60 p-4 shadow-sm dark:border-amber-900 dark:bg-amber-950/20">
           <div className="flex items-center gap-2 text-xs font-medium text-amber-700 dark:text-amber-300">
             <AlertTriangle className="h-4 w-4" />
             {t('verifications.needsAttention')}
@@ -213,6 +227,23 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
           <p className="mt-1 text-[11px] text-amber-700/80 dark:text-amber-300/80">
             {t('verifications.needsAttentionHelp')}
           </p>
+          <div className="mt-3 rounded-xl border border-amber-200/80 bg-white/60 p-3 dark:border-amber-900/70 dark:bg-amber-950/20">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
+              <Info className="h-3.5 w-3.5" />
+              <span>{t('verifications.needsAttentionBreakdown')}</span>
+            </div>
+            <ul className="mt-2 space-y-1 text-[11px] text-amber-800/90 dark:text-amber-200/90">
+              {attentionBreakdown.map(([label, value]) => (
+                <li key={label} className="flex items-start justify-between gap-3">
+                  <span>{t(label)}</span>
+                  <span className="font-semibold tabular-nums">{value.toLocaleString('en-US')}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 border-t border-amber-200/70 pt-2 text-[10px] leading-4 text-amber-700/80 dark:border-amber-900/60 dark:text-amber-300/80">
+              {t('verifications.needsAttentionCountNote')}
+            </p>
+          </div>
         </div>
       </section>
 
