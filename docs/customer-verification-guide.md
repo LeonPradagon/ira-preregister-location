@@ -1,429 +1,374 @@
-# Panduan Customer: Verifikasi Alamat dan Lokasi melalui Link Unik
+# Panduan CS Verifikasi Alamat dan Lokasi melalui Link Unik
 
-Dokumen ini digunakan oleh tim Customer Service (CS) untuk menjelaskan proses kepada customer yang menerima link unik pemeriksaan alamat dan lokasi pemasangan.
+Dokumen ini membantu CS mengirim link verifikasi dan menjawab pertanyaan customer dengan langkah yang sederhana.
 
-## 1. Tujuan proses
+## Ringkasan paling singkat
 
-Customer diminta melakukan pemeriksaan singkat untuk memastikan bahwa:
+Alur yang harus diingat CS:
 
-- data nama dan alamat yang terdaftar benar;
-- customer memang berada di alamat pemasangan;
-- titik lokasi dari HP sesuai dengan alamat pemasangan.
+1. Pastikan customer, nomor WhatsApp, dan alamat aktif sudah benar.
+2. Buat atau mulai pengiriman link dari menu resmi aplikasi.
+3. Pastikan status WhatsApp sudah dipantau.
+4. Customer membuka **link terbaru** saat berada di alamat pemasangan.
+5. Customer memeriksa data, mengizinkan lokasi, lalu menunggu pemeriksaan GPS.
+6. Jika belum berada di alamat, customer memilih pengingat.
+7. Jika hasil belum cocok, ikuti pesan yang muncul. Jangan meminta customer mencoba secara acak.
+8. Jika batas GPS dan reminder habis, CS/Ops melakukan pemeriksaan lanjutan atau membuat siklus baru melalui menu resmi.
 
-Customer tidak perlu menginstal aplikasi tambahan. Proses dilakukan melalui browser di HP menggunakan link unik yang dikirim melalui WhatsApp.
+## 1. Sebelum mengirim link
 
-## 2. Hal yang perlu disiapkan customer
+Sebelum membuat link, CS memeriksa:
 
-Sebelum membuka link, minta customer menyiapkan:
+- nama customer dan ID customer;
+- nomor WhatsApp yang aktif;
+- alamat pemasangan yang aktif;
+- customer belum melakukan opt-out WhatsApp;
+- alamat sudah cukup lengkap untuk diperiksa.
 
-1. HP dengan koneksi internet yang stabil.
-2. Browser seperti Google Chrome atau Safari.
-3. Fitur **Lokasi / Location** pada HP dalam keadaan aktif.
-4. Customer berada di alamat pemasangan saat melakukan pemeriksaan lokasi.
-5. Waktu sekitar 2–5 menit untuk menyelesaikan proses.
+Jika nomor WhatsApp salah, perbaiki data terlebih dahulu. Jika customer melakukan opt-out, jangan mengirim pesan sebelum status komunikasi diselesaikan sesuai prosedur.
 
-Jika customer belum berada di alamat pemasangan, customer dapat memilih pengingat untuk melanjutkan nanti.
+### 1.1 Preview bukan link customer
 
-## 3. Peringatan keamanan link
+Tombol **Preview** atau **Preview WhatsApp** hanya untuk melihat contoh isi pesan dan contoh halaman. Link preview adalah link simulasi/testing.
 
-Link yang dikirim adalah link unik untuk satu customer dan satu proses pemeriksaan.
+- Jangan mengirim link preview kepada customer.
+- Jangan menyimpan link preview sebagai link pemeriksaan resmi.
+- Link resmi dibuat ketika CS membuat verifikasi individual atau memulai pengiriman/campaign resmi.
 
-- Jangan meneruskan atau membagikan link kepada orang lain.
-- Jangan meminta customer mengirimkan link tersebut ke CS melalui grup atau media sosial.
-- Jangan meminta password, PIN, atau kode OTP karena proses ini tidak memerlukan password atau OTP customer.
-- Jika customer merasa link bukan berasal dari IRA atau data yang muncul bukan miliknya, customer tidak boleh menekan tombol konfirmasi. Arahkan customer untuk menghubungi CS.
-- Masa berlaku link dapat dilihat pada halaman pemeriksaan. Jika sudah kedaluwarsa, CS perlu mengirimkan link baru melalui proses resmi.
+## 2. Cara mengirim link resmi
 
-## 4. Template pesan WhatsApp untuk customer
+### A. Mengirim ke satu customer
 
-CS dapat menyalin dan menyesuaikan template berikut.
+1. Buka data customer.
+2. Pilih alamat aktif yang akan dipasang.
+3. Pilih tindakan membuat verifikasi atau mengirim undangan.
+4. Periksa kembali nama, nomor WhatsApp, dan alamat.
+5. Konfirmasi pengiriman.
+6. Sistem membuat sesi verifikasi, link unik, dan pesan WhatsApp.
+7. Simpan nomor sesi atau ID pemeriksaan jika perlu ditindaklanjuti.
+
+Link dibuat khusus untuk satu customer dan satu sesi. Link tidak boleh dipindahkan ke customer lain.
+
+### B. Mengirim ke banyak customer melalui Blasting Verifikasi WhatsApp
+
+1. Buka menu **Blasting Verifikasi WhatsApp**.
+2. Pilih customer yang eligible atau gunakan filter customer yang belum terverifikasi.
+3. Periksa jumlah customer yang terpilih.
+4. Isi nama blasting, jadwal, ukuran batch, dan batas pengiriman harian sesuai kebutuhan.
+5. Gunakan **Preview** hanya untuk memeriksa isi pesan.
+6. Pilih **Buat & mulai blasting** setelah target dan pesan benar.
+7. Buka detail blasting untuk melihat status setiap customer.
+
+Blasting diproses bertahap oleh queue. Karena itu, link tidak selalu terkirim ke semua customer pada detik yang sama. Batas maksimal pengiriman mengikuti angka yang tampil pada aplikasi dan konfigurasi provider.
+
+## 3. Cara membaca status pengiriman WhatsApp
+
+Gunakan arti sederhana berikut:
+
+| Status | Arti sederhana | Tindakan CS |
+|---|---|---|
+| **Menunggu** | Pesan belum diproses. | Tunggu dan cek kembali. |
+| **Sedang diproses** | Sistem sedang mengirim pesan. | Jangan membuat pengiriman kedua. |
+| **Diterima provider** | Provider WhatsApp menerima permintaan kirim. | Belum berarti pesan sudah masuk ke HP customer. |
+| **Terkirim** | Pesan sudah diterima WhatsApp/customer. | Customer dapat membuka link. |
+| **Dibaca** | Pesan sudah dibuka/dibaca. | Jika belum selesai, cek status sesi verifikasi. |
+| **Gagal** | Pengiriman gagal. | Periksa nomor, error, dan provider. Kirim ulang hanya setelah status diperiksa. |
+| **Provider tidak tersedia** | Layanan pengiriman sedang tidak siap. | Tunggu pemulihan atau eskalasi ke Ops. |
+| **Opt-out** | Customer tidak menerima pesan WhatsApp. | Jangan memaksa pengiriman. Selesaikan status opt-out sesuai prosedur. |
+
+Jika customer mengatakan belum menerima pesan, jangan langsung membuat link baru. Periksa nomor WhatsApp dan status pengiriman terlebih dahulu.
+
+## 4. Pesan WhatsApp yang mudah dipahami customer
+
+Gunakan template berikut dan isi bagian dalam kurung:
 
 ```text
 Halo Bapak/Ibu {NAMA CUSTOMER},
 
-Kami dari IRA ingin melakukan pemeriksaan alamat dan lokasi pemasangan Anda.
+Kami dari IRA. Mohon bantu periksa alamat pemasangan internet Anda melalui link berikut:
+{LINK RESMI}
 
-Mohon ikuti langkah berikut:
-1. Buka link unik yang dikirim pada pesan ini.
-2. Periksa nama dan alamat yang tampil.
-3. Jika data benar, tekan “Ya, data saya benar”.
-4. Saat diminta, izinkan akses lokasi pada browser.
-5. Pastikan Anda berada di alamat pemasangan, lalu diam di tempat sampai pemeriksaan selesai.
+Mohon buka link saat Anda sudah berada di alamat pemasangan.
 
-Penting:
-- Aktifkan fitur Lokasi/Location pada HP.
-- Gunakan koneksi internet yang stabil.
-- Jangan membagikan link ini kepada orang lain.
+Setelah link dibuka:
+1. Periksa nama dan alamat.
+2. Jika benar, tekan “Ya, data saya benar”.
+3. Izinkan akses lokasi HP jika diminta.
+4. Diam di tempat sampai pemeriksaan selesai.
 
-Jika belum berada di alamat pemasangan, pilih “Ingatkan saya nanti” dan tentukan waktu pengingat.
+Jika Anda belum berada di alamat pemasangan, pilih “Ingatkan saya nanti”.
 
-Link pemeriksaan Anda:
-{LINK UNIK}
+Link ini khusus untuk Anda. Mohon jangan dibagikan kepada orang lain.
+```
 
-Terima kasih.
-``` 
+CS tidak boleh meminta password, PIN, OTP, atau customer mengirim koordinat manual.
 
-## 5. Panduan langkah demi langkah untuk customer
+## 5. Alur yang dilakukan customer
 
-### Langkah 1 — Buka link unik
+### Langkah 1 — Customer membuka link
 
-Customer mengetuk link yang diterima melalui WhatsApp. Link akan membuka halaman **Verifikasi Lokasi** di browser.
+Customer harus membuka link terbaru dari WhatsApp.
 
-Jika halaman tidak terbuka:
+Jika link tidak terbuka:
 
-- salin link dan buka di Google Chrome atau Safari;
-- pastikan koneksi internet aktif;
-- jangan mengubah atau memotong bagian link;
-- jika muncul pesan link tidak valid atau kedaluwarsa, hubungi CS untuk meminta link baru.
+1. Buka dari pesan WhatsApp terbaru.
+2. Coba Google Chrome atau Safari.
+3. Pastikan seluruh link tersalin.
+4. Coba koneksi internet lain.
+5. Jika muncul **Tautan tidak valid** atau **Tautan kedaluwarsa**, CS memeriksa sesi dan mengirim ulang dari menu resmi bila diperlukan.
 
-### Langkah 2 — Periksa data customer
+Jika CS mengirim ulang undangan, link lama tidak boleh digunakan lagi. Customer harus memakai link yang paling baru.
 
-Halaman akan menampilkan nama, nomor telepon, dan rincian alamat pemasangan.
+### Langkah 2 — Customer memeriksa data
 
-Customer perlu memeriksa terutama:
+Customer memeriksa nama dan alamat yang tampil.
 
-- provinsi;
-- kota atau kabupaten;
-- kecamatan;
-- kelurahan atau desa;
-- nama jalan atau perumahan;
-- nomor rumah dan detail alamat jika tersedia.
+- Jika benar, tekan **Ya, data saya benar**.
+- Jika bukan data customer, tekan **Data saya berbeda** dan hubungi CS.
+- Jangan melanjutkan menggunakan link milik orang lain.
 
-Jika benar, tekan **“Ya, data saya benar”**.
+### Langkah 3 — Customer menentukan apakah sudah berada di alamat
 
-Jika data bukan milik customer atau sangat berbeda, tekan **“Data saya berbeda”** dan hubungi CS. Customer tidak boleh melanjutkan menggunakan link milik orang lain.
+- Jika sudah di alamat pemasangan, lanjutkan ke izin lokasi.
+- Jika belum di alamat, pilih **Ingatkan saya nanti**, pilih tanggal dan waktu, lalu tunggu link pengingat melalui WhatsApp.
 
-### Langkah 3 — Pastikan berada di alamat pemasangan
+### Langkah 4 — Customer mengizinkan lokasi
 
-Pemeriksaan lokasi harus dilakukan saat customer berada di alamat pemasangan.
+Customer menyalakan Location/Lokasi pada HP. Saat browser meminta izin, customer memilih **Izinkan/Allow**.
 
-Jika customer belum berada di lokasi:
+Jika izin tidak muncul:
 
-1. Tekan **“Ingatkan saya nanti”**.
-2. Pilih tanggal dan waktu pengingat.
-3. Buka link pengingat baru saat sudah berada di alamat pemasangan.
+1. Buka Pengaturan HP.
+2. Aktifkan Lokasi.
+3. Aktifkan Lokasi Presisi jika tersedia.
+4. Buka izin lokasi browser.
+5. Izinkan browser mengakses lokasi.
+6. Kembali ke link dan tekan **Izinkan lokasi & mulai** atau tombol coba lagi.
 
-Pengingat dikirim melalui WhatsApp sesuai jadwal. Sistem membatasi jumlah pengingat untuk satu pemeriksaan.
+### Langkah 5 — Customer menunggu pemeriksaan GPS
 
-### Langkah 4 — Aktifkan lokasi HP
+Customer harus:
 
-Saat browser menampilkan permintaan akses lokasi, customer harus memilih **“Izinkan” / “Allow”**.
-
-Jika permintaan izin tidak muncul:
-
-1. Buka Settings/Pengaturan HP.
-2. Aktifkan **Location/Lokasi**.
-3. Aktifkan **Precise Location/Lokasi Presisi** jika tersedia.
-4. Buka pengaturan izin aplikasi untuk browser yang digunakan.
-5. Izinkan browser mengakses lokasi, lalu kembali ke halaman pemeriksaan.
-6. Tekan **“Izinkan lokasi & mulai”** atau tombol coba lagi.
-
-### Langkah 5 — Jalankan pemeriksaan GPS
-
-Setelah izin diberikan:
-
+- berada di alamat pemasangan;
 - berada di area terbuka atau dekat jendela;
-- jangan berpindah tempat selama proses berlangsung;
-- pastikan lokasi HP tetap aktif;
-- tunggu sampai pemeriksaan selesai, biasanya hingga sekitar 30 detik;
-- jangan menutup browser atau memuat ulang halaman selama pemeriksaan.
+- tidak berpindah tempat;
+- menjaga koneksi internet dan lokasi HP tetap aktif;
+- menunggu pemeriksaan, biasanya sampai sekitar 30 detik;
+- tidak menutup atau memuat ulang browser.
 
-Sistem akan mengambil dan memilih data lokasi terbaik dari perangkat customer.
+Sistem mengambil beberapa sampel lokasi dan memilih hasil terbaik. Customer tidak perlu mengirim koordinat melalui chat.
 
-### Langkah 6 — Baca hasil pemeriksaan
+## 6. Arti hasil pemeriksaan dan jawaban CS
 
-Hasil yang muncul dapat berupa:
-
-| Hasil pada halaman | Penjelasan untuk customer | Tindakan customer |
+| Pesan pada halaman | Arti mudah | Jawaban atau tindakan CS |
 |---|---|---|
-| **Lokasi sudah sesuai** | Alamat dan lokasi pemasangan sudah cocok. | Tidak perlu melakukan apa-apa lagi. |
-| **Lokasi belum terbaca dengan jelas** | Sinyal GPS belum cukup kuat atau stabil. Ini tidak otomatis berarti alamat salah. | Aktifkan lokasi, pindah ke area terbuka/dekat jendela, diam di tempat, lalu coba lagi. |
-| **Lokasi belum sesuai** | Lokasi HP belum cocok dengan alamat pemasangan, biasanya karena customer belum berada di alamat tersebut. | Pastikan berada di alamat pemasangan, lalu ulangi pemeriksaan. |
-| **Lokasi belum dapat dipastikan** | Sistem belum memperoleh data lokasi yang cukup jelas. | Coba kembali saat berada di alamat pemasangan. |
-| **Lokasi sedang diperiksa tim** | Data lokasi sudah diterima dan sedang diperiksa secara manual. | Tidak perlu mengulang. Tunggu informasi dari tim IRA. |
-| **Data alamat belum cocok** | Data yang dipilih belum cocok dengan pemeriksaan. | Hubungi CS untuk memperbaiki atau mengonfirmasi alamat. |
-| **Alamat baru sudah dikirim** | Customer mengajukan perubahan alamat dan alamat baru menunggu pemeriksaan lokasi. | Pastikan alamat baru benar, lalu lakukan pemeriksaan lokasi pada alamat tersebut. |
+| **Lokasi sudah sesuai** | Alamat dan lokasi HP cocok. | Sampaikan bahwa proses sudah selesai. |
+| **Lokasi belum terbaca dengan jelas** | Sinyal GPS lemah atau belum stabil. | Minta customer menyalakan lokasi presisi, pindah dekat jendela/area terbuka, diam, lalu coba lagi. Ini belum berarti alamat salah. |
+| **Lokasi belum sesuai** | Posisi HP belum cocok dengan alamat atau titik referensi. | Pastikan customer benar-benar di alamat pemasangan, lalu coba lagi. Jangan langsung mengubah alamat. |
+| **Lokasi belum dapat dipastikan** | Sistem belum mendapatkan bukti lokasi yang cukup. | Minta customer mencoba lagi saat sudah di alamat dengan sinyal GPS lebih baik. |
+| **Lokasi sedang diperiksa tim** | Data GPS sudah diterima dan sedang direview. | Customer tidak perlu mengulang. Tunggu hasil tim IRA. |
+| **Data alamat belum cocok** | Data customer atau alamat perlu dikonfirmasi. | Hubungi CS untuk review alamat. Jangan mengganti alamat tanpa alasan yang benar. |
+| **Alamat baru sudah dikirim** | Alamat baru menunggu pemeriksaan lokasi. | Customer harus memulai pemeriksaan GPS di alamat baru. |
 
-## 6. Jika alamat customer sudah berubah
+## 7. Jika alamat customer benar tetapi hasil belum cocok
 
-Customer dapat menekan **“Alamat saya sudah berubah”** jika alamat terdaftar sudah tidak sesuai.
+Jelaskan bahwa sistem memeriksa dua hal:
 
-Customer perlu mengisi alamat terbaru dengan benar. Field utama yang wajib diisi:
+1. **Isi alamat** yang ditulis customer.
+2. **Posisi GPS** HP saat pemeriksaan.
+
+Alamat bisa benar, tetapi GPS tetap belum cocok jika customer belum berada di rumah, GPS belum stabil, lokasi presisi belum aktif, atau titik referensi belum cukup tepat.
+
+Urutan bantuan CS:
+
+1. Pastikan customer berada di alamat pemasangan.
+2. Pastikan Lokasi dan Lokasi Presisi aktif.
+3. Minta customer pindah ke area terbuka/dekat jendela.
+4. Minta customer menekan **Coba verifikasi lokasi lagi**.
+5. Minta customer diam sampai proses selesai.
+6. Jika tetap belum cocok, catat pesan hasil dan eskalasi ke Ops.
+
+Jangan meminta customer mengganti alamat yang sebenarnya benar hanya agar hasil terlihat cocok. Jangan meminta koordinat manual sebagai pengganti pemeriksaan.
+
+## 8. Jika customer memilih alamat sudah berubah
+
+Customer hanya memilih **Alamat saya sudah berubah** jika alamat terdaftar memang sudah tidak sesuai.
+
+Pada form alamat baru, field wajib adalah:
 
 - provinsi;
 - kota/kabupaten;
 - kecamatan;
 - kelurahan/desa;
-- nama jalan atau perumahan.
+- nama jalan/perumahan.
 
-Field yang dapat dikosongkan jika memang tidak tersedia:
+Nomor rumah, kode pos, dan detail alamat boleh dikosongkan jika memang tidak tersedia. Namun, minta customer mengisinya jika tahu.
 
-- nomor rumah;
-- kode pos;
-- detail alamat.
+Untuk nama jalan:
 
-Namun, CS sebaiknya tetap meminta customer mengisi nomor rumah dan patokan jika tersedia agar alamat lebih mudah diverifikasi.
-
-### Panduan mengisi nama jalan
-
-Jika customer tidak yakin dengan nama jalan:
-
-1. Buka Google Maps.
-2. Cari alamat rumah atau tekan titik biru lokasi saat berada di rumah.
+1. Buka Google Maps saat berada di rumah.
+2. Cari alamat atau lihat titik biru.
 3. Ketuk nama jalan yang tampil.
-4. Salin atau tulis nama tersebut ke kolom **Nama jalan / perumahan**.
-5. Tambahkan patokan pada kolom detail alamat jika nama jalan tidak jelas.
+4. Tulis nama tersebut di form.
+5. Tambahkan patokan pada detail alamat bila perlu.
 
-Setelah alamat dikirim, customer tetap perlu melakukan pemeriksaan GPS di alamat baru.
+Setelah customer mengirim alamat:
 
-### 6.1 Jika alamat sudah diisi benar tetapi hasil masih belum cocok
+- alamat menjadi **alamat baru yang diajukan**, belum otomatis disetujui;
+- pemeriksaan GPS di alamat baru tetap wajib dilakukan;
+- reminder yang masih terjadwal untuk alamat lama dibatalkan;
+- jika alamat sudah pernah diajukan dan ingin diubah lagi, arahkan ke CS/Ops.
 
-Jelaskan kepada customer bahwa **alamat yang ditulis benar belum tentu langsung menghasilkan lokasi yang cocok**. Sistem memeriksa dua hal yang berbeda:
+## 9. Alur reminder atau pengingat
 
-1. **Isi alamat** — apakah provinsi, kota/kabupaten, kecamatan, kelurahan/desa, dan nama jalan sudah benar.
-2. **Posisi GPS saat pemeriksaan** — apakah HP customer benar-benar berada di sekitar alamat pemasangan dan sinyal lokasinya cukup akurat.
+### A. Customer belum berada di rumah
 
-Karena itu, customer dapat melihat hasil belum cocok walaupun merasa alamatnya sudah benar. Penyebab yang umum adalah:
+Customer memilih **Ingatkan saya nanti**, memilih waktu yang masih akan datang, lalu menunggu pesan WhatsApp.
 
-- customer belum berada di alamat pemasangan saat menekan tombol pemeriksaan;
-- lokasi HP masih membaca posisi sebelumnya atau belum stabil;
-- izin **Lokasi Presisi** belum aktif;
-- customer berada di dalam bangunan dengan sinyal GPS yang lemah;
-- titik referensi alamat di peta belum tepat atau belum cukup presisi;
-- nama jalan terbaca berbeda oleh peta, misalnya singkatan atau variasi penulisan.
+Setelah memilih reminder, halaman menampilkan **Pengingat sudah dipilih**. Customer tidak perlu menekan tombol reminder lagi.
 
-#### Edukasi yang harus diberikan CS
+### B. Link reminder sudah masuk
 
-Sampaikan bahwa customer **tidak perlu mengubah alamat yang sebenarnya benar hanya untuk memaksa hasil menjadi cocok**. Minta customer mengikuti urutan berikut:
+Saat customer sudah berada di alamat:
 
-1. Pastikan benar-benar berada di alamat pemasangan.
-2. Aktifkan Location/Lokasi dan **Lokasi Presisi**.
-3. Gunakan koneksi internet yang stabil.
-4. Berada di area terbuka atau dekat jendela.
-5. Tekan tombol **Coba verifikasi lokasi lagi**.
-6. Diam di tempat dan tunggu pemeriksaan selesai, hingga sekitar 30 detik.
+1. Buka link reminder terbaru.
+2. Tekan **Saya sudah di alamat, mulai verifikasi**.
+3. Izinkan akses lokasi.
+4. Diam sampai pemeriksaan selesai.
 
-#### Cara membedakan pesan hasil
+Saat link reminder dibuka, reminder terjadwal berikutnya untuk sesi tersebut dibatalkan. Customer melanjutkan dari link yang baru dibuka.
 
-| Pesan yang dilihat customer | Maksudnya | Edukasi CS |
-|---|---|---|
-| **Lokasi belum terbaca dengan jelas** | Masalah utama ada pada kualitas atau kestabilan GPS. | Ini belum berarti alamat salah. Perbaiki kondisi GPS lalu coba lagi. |
-| **Lokasi belum sesuai** | Posisi GPS belum cocok dengan alamat atau titik referensi yang tersimpan. | Pastikan berada di alamat pemasangan dan ulangi sekali lagi. |
-| **Lokasi belum dapat dipastikan** | Sistem belum memperoleh bukti lokasi yang cukup. | Coba saat berada di lokasi dengan sinyal GPS lebih baik. |
-| **Lokasi sedang diperiksa tim** | Data GPS sudah diterima dan menunggu pemeriksaan manual. | Jangan mengulang. Tunggu hasil dari tim IRA. |
-| **Data alamat belum cocok** | Ada informasi alamat atau hasil lokasi yang perlu dikonfirmasi. | Hubungi CS untuk review alamat; jangan mengganti data tanpa alasan yang benar. |
+### C. Reminder otomatis karena link belum dibuka
 
-#### Jika setelah dicoba tetap belum cocok
+Jika fitur reminder aktif dan link awal tidak dibuka, sistem dapat menjadwalkan pengingat otomatis sesuai konfigurasi. Karena itu, CS tidak perlu mengirim link manual berulang-ulang tanpa memeriksa status sesi.
 
-Jika customer sudah berada di alamat yang benar, sudah mengaktifkan Lokasi Presisi, dan hasil tetap belum cocok:
+### D. Batas reminder tercapai
 
-- jangan meminta customer mengganti alamat dengan alamat yang salah;
-- jangan meminta customer mengirim koordinat manual sebagai pengganti pemeriksaan;
-- catat nama, nomor terdaftar, waktu percobaan, dan pesan hasil yang tampil;
-- minta screenshot hasil jika diperlukan;
-- eskalasikan ke tim Ops untuk memeriksa titik referensi alamat dan hasil GPS;
-- jika sistem menampilkan **Sedang diperiksa tim**, customer cukup menunggu.
+Maksimal reminder adalah **3 kali**, sesuai konfigurasi aplikasi.
 
-#### Script CS yang dapat digunakan
+Jika muncul **Batas pengingat sudah tercapai**:
 
-> Alamat yang Anda isi bisa saja sudah benar, tetapi sistem juga perlu memastikan posisi HP Anda berada di sekitar alamat tersebut. Mohon pastikan Anda sudah berada di alamat pemasangan, aktifkan Lokasi dan Lokasi Presisi, lalu lakukan pemeriksaan di area terbuka atau dekat jendela. Jangan mengubah alamat yang benar. Jika hasilnya tetap belum cocok, kami akan bantu periksa titik lokasi dan data alamatnya.
+- jangan meminta customer memilih reminder lagi;
+- periksa status sesi di dashboard;
+- lanjutkan melalui CS/Ops jika masih perlu pemeriksaan;
+- buat siklus verifikasi baru hanya melalui tombol resmi setelah syaratnya terpenuhi.
 
-## 7. Penanganan kendala umum oleh CS
+## 10. Batas percobaan GPS
 
-### A. Customer belum menerima WhatsApp
+Satu link/sesi memiliki maksimal **3 percobaan GPS** sesuai konfigurasi aplikasi.
 
-CS perlu memeriksa:
+Jika customer sudah mencapai batas GPS tetapi reminder masih tersedia, halaman akan meminta customer memilih reminder. Customer membuka link reminder baru saat sudah berada di alamat.
 
-- nomor WhatsApp customer;
-- status pengiriman pada menu Pengiriman WhatsApp;
-- apakah pesan berstatus terkirim, gagal, atau masih menunggu;
-- apakah customer melakukan opt-out.
+Jika customer membuka link reminder, penghitung percobaan GPS untuk sesi lanjutan dimulai kembali sesuai aturan sistem.
 
-Jangan langsung membuat link baru jika link sebelumnya masih aktif. Pastikan status pengiriman dan sesi pemeriksaan sudah diperiksa terlebih dahulu.
+Jika batas GPS dan reminder sama-sama habis:
 
-### B. Link tidak bisa dibuka
+- jangan meminta customer mencoba berkali-kali;
+- jangan menjanjikan verifikasi akan disetujui;
+- catat nama, nomor, waktu, status, dan screenshot jika diperlukan;
+- eskalasikan ke Ops atau buka pemeriksaan tim;
+- admin yang memiliki hak kirim dapat memilih **Kirim Ulang Link** untuk membuat siklus baru. Siklus lama tetap menjadi riwayat dan link lama tidak dipakai.
 
-Instruksi untuk customer:
+## 11. Perbedaan kirim ulang undangan dan siklus baru
 
-1. Pastikan link dibuka dari pesan WhatsApp terbaru.
-2. Coba buka menggunakan Google Chrome atau Safari.
-3. Pastikan seluruh link tersalin, termasuk karakter setelah tanda `/`.
-4. Coba gunakan koneksi seluler atau Wi-Fi yang stabil.
-5. Jika tetap muncul **Tautan tidak valid**, **Tautan kedaluwarsa**, atau halaman tidak dapat dimuat, CS memeriksa sesi dan mengirimkan link baru jika diperlukan.
+### Kirim Ulang Undangan
 
-### C. Izin lokasi ditolak
+Gunakan jika link belum diterima, link bermasalah, atau perlu mengirim undangan lagi sebelum siklus habis.
 
-Instruksi untuk customer:
+- sistem membuat link baru;
+- link lama menjadi tidak berlaku;
+- customer harus memakai link terbaru;
+- jangan digunakan untuk customer yang sudah selesai dan valid.
 
-1. Aktifkan Location/Lokasi pada HP.
-2. Buka pengaturan izin lokasi browser.
-3. Ubah izin situs menjadi **Allow/Izinkan**.
-4. Aktifkan lokasi presisi jika pilihan tersebut tersedia.
-5. Kembali ke link dan tekan tombol coba lagi.
+### Kirim Ulang Link setelah batas habis
 
-### D. GPS tidak akurat atau pemeriksaan berhenti
+Gunakan hanya jika percobaan GPS dan reminder pada sesi lama sudah habis.
 
-Instruksi untuk customer:
+- sesi lama ditutup sebagai riwayat;
+- sistem membuat sesi baru;
+- batas GPS dan reminder dimulai kembali;
+- customer menerima link baru;
+- jangan menghapus riwayat sesi lama.
 
-- pastikan berada di alamat pemasangan;
-- pindah ke area terbuka atau dekat jendela;
-- pastikan Location/Lokasi aktif;
-- pastikan koneksi internet stabil;
-- jangan bergerak selama pemeriksaan;
-- tekan tombol **Coba verifikasi lokasi lagi**.
+## 12. Case kendala yang sering ditanyakan
 
-Jika customer sudah mencapai batas percobaan, jangan meminta customer mencoba berkali-kali. Arahkan customer memilih pengingat atau hubungi CS untuk tindak lanjut.
+### Customer belum menerima WhatsApp
 
-### E. Customer sedang tidak berada di rumah
+Periksa nomor WhatsApp, status pengiriman, status opt-out, dan status sesi. Jangan langsung membuat link baru.
 
-Arahkan customer memilih **“Ingatkan saya nanti”**. Customer tidak perlu memaksakan pemeriksaan dari lokasi lain karena hasilnya dapat tidak sesuai dengan alamat pemasangan.
+### Customer melihat Tautan tidak valid atau kedaluwarsa
 
-Customer harus membuka link pengingat baru ketika sudah berada di alamat pemasangan.
+Minta customer memakai link terbaru. CS memeriksa masa berlaku atau apakah link sudah diganti. Kirim ulang dari menu resmi bila diperlukan.
 
-### F. Customer melihat “Sedang diperiksa tim”
+### Izin lokasi ditolak
 
-Jelaskan bahwa data lokasi sudah diterima dan sedang diperiksa oleh tim IRA. Customer tidak perlu mengulang proses kecuali diminta oleh CS atau tim operasional.
+Minta customer mengaktifkan Lokasi dan Lokasi Presisi, mengizinkan browser, lalu kembali ke halaman. Jangan meminta koordinat manual.
 
-### G. Customer melihat “Data alamat belum cocok”
+### Customer menutup browser atau halaman ter-refresh
 
-Jangan menjanjikan bahwa pemeriksaan akan langsung disetujui. Minta customer menghubungi CS untuk:
+Minta customer membuka link yang sama selama masih berlaku. Ikuti status terbaru yang tampil. Jika link sudah diganti, gunakan link terbaru.
 
-- mengonfirmasi alamat;
-- mengajukan alamat terbaru jika memang sudah berubah;
-- memberikan patokan atau detail lokasi yang membantu pemeriksaan.
+### Customer salah menekan tombol
 
-### H. Customer salah menekan tombol
+CS memeriksa status sesi terlebih dahulu. Customer tidak perlu mengulang dengan link lain tanpa arahan CS.
 
-Jika customer menekan tombol yang salah, minta customer tidak mengulang secara sembarangan. CS memeriksa status sesi terlebih dahulu. Customer tetap menggunakan link yang sama selama link masih berlaku, kecuali CS mengirim link baru.
+### Customer melihat Sedang diperiksa tim
 
-### I. Customer melihat “Pengingat sudah dipilih”
+Customer cukup menunggu. Jangan meminta customer mengulang.
 
-Artinya customer sudah memilih jadwal pengingat sebelumnya. Customer tidak perlu memilih pengingat lagi.
+### Data customer bukan miliknya
 
-Instruksi untuk customer:
+Hentikan proses. Minta customer menghubungi CS. Jangan mencoba mengubah atau meneruskan verifikasi.
 
-- tunggu sampai link pengingat baru dikirim melalui WhatsApp;
-- buka link pengingat terbaru saat sudah berada di alamat pemasangan;
-- jangan menggunakan link dari customer lain.
+## 13. Informasi yang boleh diminta CS
 
-Jika customer sudah berada di alamat dan halaman menyediakan tombol untuk memulai pemeriksaan, customer dapat melanjutkan dari tombol tersebut.
-
-### J. Batas percobaan GPS atau reminder sudah tercapai
-
-Sistem membatasi percobaan pemeriksaan lokasi dan jumlah reminder untuk satu sesi. Jika customer melihat pesan bahwa batas sudah tercapai:
-
-- jangan meminta customer menekan tombol berulang kali;
-- periksa status sesi melalui dashboard admin;
-- jika masih ada pilihan reminder, arahkan customer memilih jadwal yang tersedia;
-- jika seluruh batas sudah habis, lanjutkan melalui CS/Ops untuk pemeriksaan dan tindak lanjut manual.
-
-### K. Alamat wajib belum lengkap
-
-Jika customer diminta melengkapi alamat, field utama yang wajib diisi adalah provinsi, kota/kabupaten, kecamatan, kelurahan/desa, dan nama jalan/perumahan.
-
-Nomor rumah, kode pos, dan detail alamat dapat dikosongkan jika memang tidak tersedia, tetapi sebaiknya diisi apabila customer mengetahuinya. Customer harus mengirim alamat yang benar sebelum melanjutkan pemeriksaan lokasi.
-
-### L. Link pengingat baru sudah diterima
-
-Jika halaman menampilkan bahwa link pengingat baru sudah diterima:
-
-1. Pastikan customer sudah berada di alamat pemasangan.
-2. Aktifkan Location/Lokasi dan Lokasi Presisi.
-3. Tekan **“Saya sudah di alamat, mulai verifikasi”**.
-4. Izinkan browser mengakses lokasi jika diminta.
-5. Diam di tempat sampai pemeriksaan selesai.
-
-### M. Halaman ter-refresh atau customer menutup browser
-
-Customer dapat membuka kembali link yang sama selama link masih berlaku. Status proses tersimpan pada sesi pemeriksaan. Jika halaman meminta langkah yang berbeda dari sebelumnya, ikuti status terbaru yang tampil dan jangan membuka link milik customer lain.
-
-## 8. Script percakapan CS
-
-### Saat customer bertanya tujuan link
-
-> Link tersebut digunakan untuk memastikan data alamat dan lokasi pemasangan Anda. Proses dilakukan melalui browser HP dan membutuhkan izin lokasi agar sistem dapat mencocokkan posisi Anda dengan alamat yang terdaftar.
-
-### Saat customer bertanya apakah aman
-
-> Link dibuat khusus untuk proses pemeriksaan Anda. Mohon jangan membagikan link tersebut kepada orang lain. Kami hanya meminta izin lokasi saat pemeriksaan berlangsung dan tidak meminta password atau OTP.
-
-### Saat customer belum berada di rumah
-
-> Tidak masalah. Silakan pilih “Ingatkan saya nanti” pada halaman tersebut. Pilih waktu pengingat, kemudian buka link pengingat yang dikirim melalui WhatsApp saat Anda sudah berada di alamat pemasangan.
-
-### Saat lokasi tidak cocok
-
-> Hasil tersebut belum tentu berarti alamat Anda salah. Pastikan Anda berada di alamat pemasangan, aktifkan lokasi presisi, berada di area terbuka atau dekat jendela, lalu coba pemeriksaan kembali tanpa berpindah tempat.
-
-### Saat customer sudah selesai
-
-> Terima kasih, data lokasi Anda sudah diterima. Jika hasilnya memerlukan pemeriksaan tim, Anda tidak perlu mengulang proses. Tim IRA akan memproses hasilnya dan menghubungi Anda jika diperlukan.
-
-## 9. Informasi yang boleh diminta CS
-
-Jika terjadi kendala, CS boleh meminta:
+CS boleh meminta:
 
 - nama customer;
-- nomor WhatsApp yang terdaftar;
-- ID customer jika tersedia;
-- waktu customer mencoba membuka link;
-- jenis HP dan browser yang digunakan;
-- pesan error yang muncul;
-- screenshot pesan error, dengan memastikan informasi sensitif tidak ikut tersebar.
+- nomor WhatsApp terdaftar;
+- ID customer atau nomor sesi;
+- waktu percobaan;
+- jenis HP dan browser;
+- pesan yang tampil;
+- screenshot pesan dengan data sensitif disamarkan.
 
-CS tidak perlu meminta customer mengirim koordinat manual. Lokasi harus dikirim melalui halaman pemeriksaan agar tercatat pada sesi yang benar.
+CS tidak perlu meminta password, PIN, OTP, atau koordinat manual.
 
-## 10. Checklist CS sebelum menutup percakapan
+## 14. Checklist penutupan percakapan
 
-- [ ] Customer membuka link unik yang benar.
-- [ ] Customer memeriksa nama dan alamat.
-- [ ] Customer berada di alamat pemasangan saat melakukan pemeriksaan.
-- [ ] Location/Lokasi HP aktif.
-- [ ] Izin lokasi browser sudah diizinkan.
-- [ ] Customer sudah menunggu sampai pemeriksaan selesai.
-- [ ] Customer memahami hasil yang tampil.
-- [ ] Jika perlu reminder, customer sudah memilih jadwal.
-- [ ] Jika alamat berubah, customer sudah diarahkan mengisi alamat terbaru.
-- [ ] Customer diingatkan untuk tidak membagikan link unik.
+- [ ] Link yang dipakai adalah link resmi dan terbaru.
+- [ ] Nama dan alamat sudah diperiksa customer.
+- [ ] Customer berada di alamat pemasangan saat mengambil GPS.
+- [ ] Lokasi HP dan izin browser sudah aktif.
+- [ ] Customer sudah menunggu proses selesai.
+- [ ] Status akhir sudah dicatat.
+- [ ] Reminder dipilih jika customer belum berada di alamat.
+- [ ] Alamat baru diisi hanya jika memang berubah.
+- [ ] Customer tidak diminta mengirim koordinat manual.
+- [ ] Customer diingatkan untuk tidak membagikan link.
 
-## 11. Matriks singkat semua case
+## 15. Script singkat siap pakai
 
-| Kondisi | Respons CS |
-|---|---|
-| Link valid, data benar, belum mulai | Arahkan customer konfirmasi data dan lanjutkan. |
-| Data bukan milik customer | Jangan lanjutkan; minta customer hubungi CS. |
-| Alamat berubah | Isi alamat terbaru dan lakukan pemeriksaan GPS di alamat baru. |
-| Belum berada di rumah | Pilih reminder dan buka link baru saat sudah di lokasi. |
-| Izin lokasi ditolak | Aktifkan lokasi, izinkan browser, lalu coba lagi. |
-| GPS kurang akurat | Area terbuka/dekat jendela, diam di tempat, lalu ulangi. |
-| Lokasi belum sesuai | Pastikan berada di alamat pemasangan dan ulangi. |
-| Lokasi belum dapat dipastikan | Coba lagi saat berada di alamat pemasangan. |
-| Pengingat sudah dipilih | Tunggu link pengingat baru; jangan membuat pilihan berulang. |
-| Batas percobaan/reminder tercapai | Periksa dashboard dan lanjutkan ke CS/Ops. |
-| Lokasi sedang diperiksa tim | Customer tidak perlu mengulang; tunggu hasil tim. |
-| Lokasi sudah sesuai | Proses customer selesai. |
-| Data alamat belum cocok | Hubungi CS untuk koreksi atau review alamat. |
-| Link invalid/kedaluwarsa | Validasi sesi dan kirim link baru jika diperlukan. |
-| Halaman error/refresh | Coba buka ulang link yang sama; eskalasi jika tetap gagal. |
+### Tujuan link
 
-## 12. Ringkasan alur
+> Link ini digunakan untuk memastikan alamat pemasangan dan lokasi HP Anda sesuai. Proses dilakukan melalui browser dan tidak perlu instal aplikasi.
 
-```mermaid
-flowchart TD
-    A[Customer menerima link unik] --> B[Buka link di browser]
-    B --> C[Periksa nama dan alamat]
-    C -->|Data benar| D[Pastikan berada di alamat pemasangan]
-    C -->|Data salah| E[Hubungi CS]
-    D -->|Belum berada di alamat| F[Pilih pengingat]
-    D -->|Sudah berada di alamat| G[Aktifkan lokasi dan izinkan browser]
-    G --> H[Jalankan pemeriksaan GPS]
-    H -->|Lokasi sesuai| I[Selesai]
-    H -->|GPS kurang akurat| J[Perbaiki kondisi dan coba lagi]
-    H -->|Belum sesuai| K[Pastikan berada di alamat atau hubungi CS]
-    H -->|Perlu pemeriksaan tim| L[Tunggu hasil tim IRA]
-    J --> H
-    F --> M[Buka link pengingat saat sudah di alamat]
-    M --> G
-```
+### Belum berada di alamat
 
-Dokumen ini menjadi panduan komunikasi CS. Keputusan akhir pemeriksaan tetap mengikuti hasil sistem dan proses review tim IRA.
+> Silakan pilih “Ingatkan saya nanti”. Pilih waktunya, lalu buka link pengingat yang dikirim WhatsApp saat Anda sudah berada di alamat pemasangan.
+
+### Lokasi belum cocok
+
+> Hasil ini belum tentu berarti alamat Anda salah. Pastikan berada di alamat pemasangan, nyalakan Lokasi Presisi, lalu coba lagi di area terbuka tanpa berpindah tempat.
+
+### Alamat berubah
+
+> Silakan pilih “Alamat saya sudah berubah” hanya jika alamatnya memang berubah. Isi alamat terbaru dengan benar. Setelah dikirim, Anda tetap perlu melakukan pemeriksaan GPS di alamat baru.
+
+### Batas sudah tercapai
+
+> Percobaan pada sesi ini sudah mencapai batas. Mohon jangan mencoba berulang kali. Kami akan memeriksa statusnya dan membantu melalui tim IRA.
+
+### Hasil sedang diperiksa tim
+
+> Data lokasi Anda sudah kami terima dan sedang diperiksa tim IRA. Anda tidak perlu mengulang proses. Kami akan menghubungi Anda jika ada informasi berikutnya.

@@ -97,6 +97,21 @@ const EMPTY_DASHBOARD_SUMMARY: DashboardSummary = {
   outbox: { total: 0, pending: 0, published: 0, failed: 0 },
 };
 
+/**
+ * Merge a page response into the in-memory cache without dropping records
+ * that were loaded by a detail request while the page response was in flight.
+ */
+export function mergeCachedRecords<T extends { id: string }>(current: T[], incoming: T[]): T[] {
+  const incomingIds = new Set(incoming.map((item) => item.id));
+  return [...incoming, ...current.filter((item) => !incomingIds.has(item.id))];
+}
+
+export interface VerificationDetailData {
+  session: VerificationSession;
+  customer: Customer;
+  address: CustomerAddress;
+}
+
 interface AppContextType {
   currentAdmin: AdminUser | null;
   loginAdmin: (email: string, password?: string) => Promise<boolean>;
@@ -121,7 +136,7 @@ interface AppContextType {
   loadCustomerDetail: (
     customerId: string,
   ) => Promise<{ customer: Customer; addresses: CustomerAddress[]; sessions: VerificationSession[] }>;
-  loadVerificationDetail: (sessionId: string) => Promise<void>;
+  loadVerificationDetail: (sessionId: string) => Promise<VerificationDetailData>;
   addresses: CustomerAddress[];
   verificationSessions: VerificationSession[];
   locationCaptures: LocationCapture[];
@@ -434,32 +449,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (rawDashboard) setDashboardSummary(mapApiDashboard(rawDashboard));
       if (rawCustomerPage) {
         const mappedCustomers = rawCustomerPage.items.map(mapApiCustomer);
-        setCustomers(mappedCustomers);
+        setCustomers((previous) => mergeCachedRecords(previous, mappedCustomers));
         setCustomerPage({ ...rawCustomerPage, items: mappedCustomers });
         if (rawCustomerPage.nextCursor) setCustomerCursors({ 2: rawCustomerPage.nextCursor });
       }
-      setAddresses([]);
-      if (rawVerifications) setVerificationSessions(rawVerifications.items.map((raw) => mapApiSession(raw.session)));
-      if (rawReminders) setReminders(rawReminders.items as unknown as Reminder[]);
-      if (rawAudits) setAuditLogs(rawAudits.items as unknown as AuditLog[]);
-      if (rawOutbox) setOutboxEvents(rawOutbox.items as unknown as IntegrationOutboxEvent[]);
+      if (rawVerifications)
+        setVerificationSessions((previous) =>
+          mergeCachedRecords(
+            previous,
+            rawVerifications.items.map((raw) => mapApiSession(raw.session)),
+          ),
+        );
+      if (rawReminders)
+        setReminders((previous) =>
+          mergeCachedRecords(previous, rawReminders.items as unknown as Reminder[]),
+        );
+      if (rawAudits)
+        setAuditLogs((previous) => mergeCachedRecords(previous, rawAudits.items as unknown as AuditLog[]));
+      if (rawOutbox)
+        setOutboxEvents((previous) =>
+          mergeCachedRecords(previous, rawOutbox.items as unknown as IntegrationOutboxEvent[]),
+        );
       if (rawCampaigns)
-        setCampaigns(
-          rawCampaigns.items.map((raw) => ({
-            ...(raw as unknown as VerificationCampaign),
-            id: String(raw.id),
-            name: String(raw.name ?? ''),
-            status: String(raw.status ?? 'DRAFT') as VerificationCampaign['status'],
-            timezone: String(raw.timezone ?? 'Asia/Jakarta'),
-            scheduledAt: String(raw.scheduledAt ?? ''),
-            targetCount: Number(raw.targetCount ?? 0),
-            sentCount: Number(raw.sentCount ?? 0),
-            failedCount: Number(raw.failedCount ?? 0),
-            dailySendLimit: Number(raw.dailySendLimit ?? 500),
-            createdBy: String(raw.createdBy ?? ''),
-            createdAt: String(raw.createdAt ?? ''),
-            updatedAt: String(raw.updatedAt ?? ''),
-          })),
+        setCampaigns((previous) =>
+          mergeCachedRecords(
+            previous,
+            rawCampaigns.items.map((raw) => ({
+              ...(raw as unknown as VerificationCampaign),
+              id: String(raw.id),
+              name: String(raw.name ?? ''),
+              status: String(raw.status ?? 'DRAFT') as VerificationCampaign['status'],
+              timezone: String(raw.timezone ?? 'Asia/Jakarta'),
+              scheduledAt: String(raw.scheduledAt ?? ''),
+              targetCount: Number(raw.targetCount ?? 0),
+              sentCount: Number(raw.sentCount ?? 0),
+              failedCount: Number(raw.failedCount ?? 0),
+              dailySendLimit: Number(raw.dailySendLimit ?? 500),
+              createdBy: String(raw.createdBy ?? ''),
+              createdAt: String(raw.createdAt ?? ''),
+              updatedAt: String(raw.updatedAt ?? ''),
+            })),
+          ),
         );
       if (rawSettings) setValidationConfig({ ...DEFAULT_VALIDATION_CONFIG, ...rawSettings } as ValidationConfig);
       if (rawIntegrations) {
@@ -601,6 +631,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...(raw.audits as AuditLog[]),
         ...previous.filter((item) => item.entityId !== session.id),
       ]);
+    return { session: { ...session, lastValidationResult }, customer: customerWithAddress, address };
   };
 
   const addCustomer = async (

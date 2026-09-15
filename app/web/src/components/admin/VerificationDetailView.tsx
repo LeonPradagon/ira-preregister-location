@@ -17,7 +17,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { VerificationDetailData, useApp } from '../../context/AppContext';
 import { ReviewDecision } from '../../types';
 import { formatAppDate, formatAppDateTime, formatAppTime } from '../../lib/dateTime';
 import { VerificationMap } from '../maps/VerificationMap';
@@ -65,16 +65,21 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailReloadKey, setDetailReloadKey] = useState(0);
+  const [loadedDetail, setLoadedDetail] = useState<VerificationDetailData | null>(null);
 
   useEffect(() => {
     let active = true;
     setDetailLoading(true);
     setDetailError(null);
+    setLoadedDetail(null);
     void withTimeout(
       loadVerificationDetail(sessionId),
       VERIFICATION_DETAIL_TIMEOUT_MS,
       'Detail sesi terlalu lama dimuat. Periksa koneksi atau coba lagi.',
     )
+      .then((detail) => {
+        if (active) setLoadedDetail(detail);
+      })
       .catch((cause) => {
         if (active) setDetailError(cause instanceof Error ? cause.message : 'Detail sesi gagal dimuat.');
       })
@@ -86,9 +91,21 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
     };
   }, [sessionId, detailReloadKey]);
 
-  const session = verificationSessions.find((s) => s.id === sessionId);
-  const customer = session ? customers.find((c) => c.id === session.customerId) : null;
-  const address = session ? addresses.find((a) => a.id === session.currentAddressId) : null;
+  const detail = loadedDetail?.session.id === sessionId ? loadedDetail : null;
+  const cachedSession = verificationSessions.find((s) => s.id === sessionId);
+  const session = detail
+    ? {
+        ...detail.session,
+        ...(cachedSession ?? {}),
+        lastValidationResult: cachedSession?.lastValidationResult ?? detail.session.lastValidationResult,
+      }
+    : cachedSession;
+  const cachedCustomer = session ? customers.find((c) => c.id === session.customerId) : null;
+  const customer = detail
+    ? { ...detail.customer, ...(cachedCustomer ?? {}), activeAddress: detail.address }
+    : cachedCustomer;
+  const cachedAddress = session ? addresses.find((a) => a.id === session.currentAddressId) : null;
+  const address = detail ? { ...detail.address, ...(cachedAddress ?? {}) } : cachedAddress;
   const proposedAddress = customer
     ? addresses.find((a) => a.customerId === customer.id && a.addressType === 'PROPOSED')
     : null;
