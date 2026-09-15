@@ -96,7 +96,16 @@ const campaignRecipientReservationFilter = () => {
   ) and not exists (
     select 1
     from "verification_campaigns" reserved_campaign
-    where reserved_campaign."status" in ('DRAFT', 'RUNNING')
+    -- Fully materialized RUNNING campaigns are covered by the indexed item
+    -- reservation above. Evaluating their large JSON customer-id array for
+    -- every customer makes candidate loading time out on large imports.
+    where (
+      reserved_campaign."status" = 'DRAFT'
+      or (
+        reserved_campaign."status" = 'RUNNING'
+        and reserved_campaign."materialization_complete" = false
+      )
+    )
       and reserved_campaign."target_filter" -> 'customerIds' ? (${customers.id})::text
   )`;
 };
