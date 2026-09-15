@@ -8,3 +8,6 @@ app/server/var/
 *.log
 .env*
 !.env.example
+
+# Generated PDF preview images and contact sheets
+/tmp/pdfs/

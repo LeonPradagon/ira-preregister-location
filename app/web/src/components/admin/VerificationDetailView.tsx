@@ -504,8 +504,9 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
               <button
                 type="button"
                 onClick={handleSendManualReminder}
-                disabled={session.reminderCount >= validationConfig.MAX_REMINDERS_PER_SESSION}
-                className="text-[11px] px-2.5 py-1 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:text-gray-400 dark:disabled:text-gray-600 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-lg font-medium transition-colors flex items-center gap-1"
+                disabled={!canSendVerification || session.reminderCount >= validationConfig.MAX_REMINDERS_PER_SESSION}
+                title={!canSendVerification ? 'Role ini tidak dapat mengirim reminder' : 'Kirim reminder manual'}
+                className="text-[11px] px-2.5 py-1 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:text-gray-400 dark:disabled:text-gray-600 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-lg font-medium transition-colors flex items-center gap-1 disabled:cursor-not-allowed"
               >
                 <Bell className="w-3 h-3" />
                 <span>Kirim Reminder Manual</span>

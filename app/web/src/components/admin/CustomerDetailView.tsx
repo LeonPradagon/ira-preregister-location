@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowLeft, Compass, ExternalLink, Home } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../i18n';
+import { hasCapability } from '../../lib/accessControl';
 import { buildGoogleMapsDeepLink, formatAddressForDisplay, isIncompleteAddress } from '../../lib/validationEngine';
 import { userFriendlyStatus } from '../../lib/statusLabels';
 import { confirmAction } from '../../lib/swal';
@@ -15,8 +16,9 @@ interface CustomerDetailViewProps {
 }
 
 export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customerId, onBack, onSelectVerification }) => {
-  const { customers, addresses, verificationSessions, optOutCustomer } = useApp();
+  const { customers, addresses, verificationSessions, optOutCustomer, currentAdmin } = useApp();
   const { t } = useTranslation();
+  const canManageCustomers = hasCapability(currentAdmin?.role, 'manageCustomers');
 
   const customer = customers.find((c) => c.id === customerId);
   const custAddresses = addresses.filter((a) => a.customerId === customerId);
@@ -143,7 +145,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
                   ? 'WhatsApp opt-out — pengiriman diblokir'
                   : 'WhatsApp eligible — belum opt-out'}
               </span>
-              {!customer.whatsappOptOutAt && (
+              {!customer.whatsappOptOutAt && canManageCustomers && (
                 <button
                   type="button"
                   onClick={() => void handleOptOut()}

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { mapApiCustomer, useApp } from '../../context/AppContext';
 import { api, type CampaignMonitoringSummary } from '../../lib/apiClient';
+import { hasCapability } from '../../lib/accessControl';
 import { Customer, VerificationCampaign } from '../../types';
 import {
   AdminTable,
@@ -186,8 +187,9 @@ const MobileLandingPreviewCard: React.FC<{ preview: WhatsAppPreview; onOpen: () 
 );
 
 export const CampaignsView: React.FC = () => {
-  const { createCampaign, startCampaign, validationConfig } = useApp();
+  const { createCampaign, startCampaign, validationConfig, currentAdmin } = useApp();
   const { t } = useTranslation();
+  const canCreateVerification = hasCapability(currentAdmin?.role, 'createVerification');
   const dailySendLimitMax = Math.min(10000, Math.max(1, validationConfig.WHATSAPP_DAILY_SEND_LIMIT || 1000));
   const messageRate = Math.max(1, validationConfig.WHATSAPP_RATE_LIMIT_PER_SECOND || 1);
   const sameNumberCooldown = Math.max(1, validationConfig.WHATSAPP_MIN_INTERVAL_MINUTES || 60);
@@ -529,6 +531,8 @@ export const CampaignsView: React.FC = () => {
         </div>
       </section>
 
+      {canCreateVerification && (
+        <>
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-start gap-3">
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-sm font-bold text-white">
@@ -743,6 +747,8 @@ export const CampaignsView: React.FC = () => {
           </div>
         </form>
       </section>
+        </>
+      )}
 
       {preview && <MobileLandingPreviewCard preview={preview} onOpen={openMobilePreview} />}
 
@@ -863,7 +869,7 @@ export const CampaignsView: React.FC = () => {
                     >
                       {t('campaigns.viewDetails')}
                     </button>
-                    {campaign.status === 'DRAFT' && (
+                    {canCreateVerification && campaign.status === 'DRAFT' && (
                       <button
                         type="button"
                         onClick={() => void handleStartCampaign(campaign)}

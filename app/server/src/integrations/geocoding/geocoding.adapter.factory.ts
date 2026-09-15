@@ -14,7 +14,14 @@ export function createGeocodingAdapter(): GeocodingPort {
       : null;
 
   if (!google) return osm ?? new DisabledGeocodingAdapter();
-  return osm ? new FallbackGeocodingAdapter(google, osm) : google;
+  if (!osm) return google;
+
+  // OSM is the default primary provider. Set GEOCODING_PRIMARY=GOOGLE to
+  // restore Google-first behavior without changing application code.
+  const primary = process.env.GEOCODING_PRIMARY?.trim().toUpperCase() === 'GOOGLE' ? 'GOOGLE' : 'OSM';
+  return primary === 'GOOGLE'
+    ? new FallbackGeocodingAdapter(google, osm)
+    : new FallbackGeocodingAdapter(osm, google);
 }
 
 /**

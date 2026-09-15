@@ -727,7 +727,9 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           <button
             type="button"
             onClick={() => setIsImportModalOpen(true)}
-            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium transition-colors shadow-xs"
+            disabled={!canManageCustomers}
+            title={!canManageCustomers ? 'Role ini tidak dapat mengimpor customer' : t('customers.import')}
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium transition-colors shadow-xs disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Upload className="w-4 h-4" />
             <span>{t('customers.import')}</span>

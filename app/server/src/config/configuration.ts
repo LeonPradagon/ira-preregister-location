@@ -44,6 +44,7 @@ export const envSchema = z.object({
   ENABLE_AUTO_APPROVAL: booleanFromEnv.default(false),
   ENABLE_ADDRESS_EDIT: booleanFromEnv.default(true),
   ENABLE_REMINDERS: booleanFromEnv.default(true),
+  GEOCODING_PRIMARY: z.enum(['GOOGLE', 'OSM']).default('OSM'),
   GOOGLE_GEOCODING_API_KEY: optionalString,
   GOOGLE_GEOCODING_BASE_URL: optionalUrl,
   GEOCODING_BASE_URL: optionalUrl,

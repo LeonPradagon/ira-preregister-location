@@ -22,6 +22,13 @@ describe('runtime configuration', () => {
     expect(config.GOOGLE_GEOCODING_BASE_URL).toBeUndefined();
     expect(config.GEOCODING_BASE_URL).toBeUndefined();
     expect(config.WHATSAPP_BASE_URL).toBeUndefined();
+    expect(config.GEOCODING_PRIMARY).toBe('OSM');
+  });
+
+  it('accepts only the supported geocoding primary providers', () => {
+    expect(envSchema.parse({ ...required, GEOCODING_PRIMARY: 'OSM' }).GEOCODING_PRIMARY).toBe('OSM');
+    expect(envSchema.parse({ ...required, GEOCODING_PRIMARY: 'GOOGLE' }).GEOCODING_PRIMARY).toBe('GOOGLE');
+    expect(() => envSchema.parse({ ...required, GEOCODING_PRIMARY: 'INVALID' })).toThrow();
   });
 
   it('requires a sufficiently long Better Auth secret', () => {
