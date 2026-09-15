@@ -32,9 +32,12 @@ import { AdminTable } from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
 import { confirmAction } from '../../lib/swal';
 import { AppLoader } from '../common/AppLoader';
+import { withTimeout } from '../../lib/async';
 
 const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) =>
   props.className?.includes('animate-spin') ? <AppLoader size={18} label="Loading" /> : <RefreshCwIcon {...props} />;
+
+const VERIFICATION_DETAIL_TIMEOUT_MS = 20_000;
 
 interface VerificationDetailViewProps {
   sessionId: string;
@@ -61,12 +64,17 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
   const { t } = useTranslation();
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailReloadKey, setDetailReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
     setDetailLoading(true);
     setDetailError(null);
-    void loadVerificationDetail(sessionId)
+    void withTimeout(
+      loadVerificationDetail(sessionId),
+      VERIFICATION_DETAIL_TIMEOUT_MS,
+      'Detail sesi terlalu lama dimuat. Periksa koneksi atau coba lagi.',
+    )
       .catch((cause) => {
         if (active) setDetailError(cause instanceof Error ? cause.message : 'Detail sesi gagal dimuat.');
       })
@@ -76,7 +84,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
     return () => {
       active = false;
     };
-  }, [sessionId]);
+  }, [sessionId, detailReloadKey]);
 
   const session = verificationSessions.find((s) => s.id === sessionId);
   const customer = session ? customers.find((c) => c.id === session.customerId) : null;
@@ -109,13 +117,25 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
   if (!session || !customer || !address) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-8 text-center text-slate-400">
-        {detailLoading || !detailError ? (
+        {detailLoading ? (
           <>
             <AppLoader size={64} label="Loading verification details" />
             <span>Memuat detail sesi verifikasi...</span>
           </>
         ) : (
-          `Detail sesi tidak dapat dimuat: ${detailError}`
+          <>
+            <span>
+              Detail sesi tidak dapat dimuat: {detailError ?? 'Data sesi belum tersedia atau sudah berubah.'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setDetailReloadKey((current) => current + 1)}
+              className="mt-2 inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+            >
+              <RefreshCwIcon className="h-4 w-4" />
+              Coba lagi
+            </button>
+          </>
         )}
         <button onClick={onBack} className="block mx-auto mt-4 px-4 py-2 bg-slate-800 text-white rounded-xl text-xs">
           Kembali
