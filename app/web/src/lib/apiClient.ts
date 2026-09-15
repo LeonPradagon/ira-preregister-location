@@ -397,6 +397,8 @@ export interface AdminListQuery {
   search?: string;
   status?: string;
   actor?: string;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
   cursor?: string;
 }
 
@@ -407,6 +409,8 @@ function queryString(query: AdminListQuery): string {
   if (query.search) params.set('search', query.search);
   if (query.status && query.status !== 'ALL') params.set('status', query.status);
   if (query.actor && query.actor !== 'ALL') params.set('actor', query.actor);
+  if (query.sortBy) params.set('sortBy', query.sortBy);
+  if (query.sortDirection) params.set('sortDirection', query.sortDirection);
   if (query.cursor) params.set('cursor', query.cursor);
   const value = params.toString();
   return value ? `?${value}` : '';
@@ -534,6 +538,8 @@ const adminApi = {
       coverageFwaStatus?: string;
       coverageFtthStatus?: string;
       campaignAvailable?: boolean;
+      sortBy?: string;
+      sortDirection?: 'asc' | 'desc';
       cursor?: string;
     } = {},
   ) => {
@@ -549,6 +555,8 @@ const adminApi = {
     if (query.coverageFwaStatus && query.coverageFwaStatus !== 'ALL') params.set('coverageFwaStatus', query.coverageFwaStatus);
     if (query.coverageFtthStatus && query.coverageFtthStatus !== 'ALL') params.set('coverageFtthStatus', query.coverageFtthStatus);
     if (query.campaignAvailable) params.set('campaignAvailable', 'true');
+    if (query.sortBy) params.set('sortBy', query.sortBy);
+    if (query.sortDirection) params.set('sortDirection', query.sortDirection);
     if (query.cursor) params.set('cursor', query.cursor);
     const suffix = params.toString() ? `?${params.toString()}` : '';
     return request<{

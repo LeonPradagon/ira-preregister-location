@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Ban,
@@ -23,7 +23,14 @@ import { useApp } from '../../context/AppContext';
 import { api } from '../../lib/apiClient';
 import { CoordinateAuditStatus, Customer, CustomerStatus, WhatsappStatus } from '../../types';
 import { hasCapability } from '../../lib/accessControl';
-import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
+import {
+  AdminTable,
+  SortableTableHeader,
+  sortTableRows,
+  TablePagination,
+  TablePageSize,
+  TableSortDirection,
+} from '../common/AdminTable';
 import { CustomerImportModal } from './CustomerImportModal';
 import { useTranslation } from '../../i18n';
 import { formatAddressForDisplay, isIncompleteAddress } from '../../lib/validationEngine';
@@ -183,6 +190,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
   const [whatsappStatusFilter, setWhatsappStatusFilter] = useState<WhatsappStatusFilter>('ALL');
   const [coverageFwaFilter, setCoverageFwaFilter] = useState('ALL');
   const [coverageFtthFilter, setCoverageFtthFilter] = useState('ALL');
+  const [sortKey, setSortKey] = useState<'id' | 'name' | 'whatsapp' | 'address' | 'latitude' | 'longitude' | 'coverage' | 'status'>('name');
+  const [sortDirection, setSortDirection] = useState<TableSortDirection>('asc');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -219,6 +228,34 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const customerRefreshInFlight = useRef(false);
+
+  const sortedCustomers = useMemo(
+    () =>
+      sortTableRows(
+        customers,
+        (customer) => {
+          const address = customer.activeAddress;
+          if (sortKey === 'id') return customer.externalId;
+          if (sortKey === 'name') return customer.name;
+          if (sortKey === 'whatsapp') return customer.phoneE164;
+          if (sortKey === 'address') return address?.rawAddress;
+          if (sortKey === 'latitude') return address?.referenceLocation?.latitude;
+          if (sortKey === 'longitude') return address?.referenceLocation?.longitude;
+          if (sortKey === 'coverage') return customer.coverageStatus;
+          return customer.status;
+        },
+        sortDirection,
+      ),
+    [customers, sortDirection, sortKey],
+  );
+
+  const toggleSort = (nextKey: 'id' | 'name' | 'whatsapp' | 'address' | 'latitude' | 'longitude' | 'coverage' | 'status') => {
+    if (sortKey === nextKey) setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(nextKey);
+      setSortDirection('asc');
+    }
+  };
 
   const resetCustomerForm = () => {
     setEditingCustomer(null);
@@ -397,6 +434,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           whatsappStatusFilter,
           coverageFwaFilter,
           coverageFtthFilter,
+          sortKey,
+          sortDirection,
         ),
         refreshDashboard(),
       ]);
@@ -454,7 +493,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
       void refreshCustomerData(true, 1);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [searchTerm, statusFilter, addressCompletenessFilter, coordinateAuditFilter, whatsappStatusFilter, coverageFwaFilter, coverageFtthFilter, t]);
+  }, [searchTerm, statusFilter, addressCompletenessFilter, coordinateAuditFilter, whatsappStatusFilter, coverageFwaFilter, coverageFtthFilter, sortKey, sortDirection, t]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -469,6 +508,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
     whatsappStatusFilter,
     coverageFwaFilter,
     coverageFtthFilter,
+    sortKey,
+    sortDirection,
     customerPage.page,
     customerPage.pageSize,
     t,
@@ -575,6 +616,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           whatsappStatusFilter,
           coverageFwaFilter,
           coverageFtthFilter,
+          sortKey,
+          sortDirection,
         );
       }
       setIsAddModalOpen(false);
@@ -923,6 +966,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 whatsappStatusFilter,
                 coverageFwaFilter,
                 coverageFtthFilter,
+                sortKey,
+                sortDirection,
               )
             }
             onPageSizeChange={(pageSize: TablePageSize) =>
@@ -936,6 +981,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 whatsappStatusFilter,
                 coverageFwaFilter,
                 coverageFtthFilter,
+                sortKey,
+                sortDirection,
               )
             }
           />
@@ -943,14 +990,30 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
       >
         <thead className="bg-gray-50/80 dark:bg-gray-800/60 text-gray-600 dark:text-gray-400 font-semibold border-b border-gray-200 dark:border-gray-800">
           <tr>
-            <th className="w-[175px] px-4 py-3 whitespace-nowrap">{t('table.customerId')}</th>
-            <th className="w-[155px] px-4 py-3 whitespace-nowrap">{t('table.customerName')}</th>
-            <th className="w-[145px] px-4 py-3 whitespace-nowrap">{t('table.whatsapp')}</th>
-            <th className="w-[260px] px-4 py-3">{t('table.address')}</th>
-            <th className="w-[110px] px-4 py-3 whitespace-nowrap">{t('table.latitude')}</th>
-            <th className="w-[110px] px-4 py-3 whitespace-nowrap">{t('table.longitude')}</th>
-            <th className="w-[145px] px-4 py-3">{t('table.coverage')}</th>
-            <th className="w-[160px] px-4 py-3">{t('table.status')}</th>
+            <SortableTableHeader active={sortKey === 'id'} direction={sortDirection} onClick={() => toggleSort('id')} className="w-[175px] px-4 py-3 whitespace-nowrap">
+              {t('table.customerId')}
+            </SortableTableHeader>
+            <SortableTableHeader active={sortKey === 'name'} direction={sortDirection} onClick={() => toggleSort('name')} className="w-[155px] px-4 py-3 whitespace-nowrap">
+              {t('table.customerName')}
+            </SortableTableHeader>
+            <SortableTableHeader active={sortKey === 'whatsapp'} direction={sortDirection} onClick={() => toggleSort('whatsapp')} className="w-[145px] px-4 py-3 whitespace-nowrap">
+              {t('table.whatsapp')}
+            </SortableTableHeader>
+            <SortableTableHeader active={sortKey === 'address'} direction={sortDirection} onClick={() => toggleSort('address')} className="w-[260px] px-4 py-3">
+              {t('table.address')}
+            </SortableTableHeader>
+            <SortableTableHeader active={sortKey === 'latitude'} direction={sortDirection} onClick={() => toggleSort('latitude')} className="w-[110px] px-4 py-3 whitespace-nowrap">
+              {t('table.latitude')}
+            </SortableTableHeader>
+            <SortableTableHeader active={sortKey === 'longitude'} direction={sortDirection} onClick={() => toggleSort('longitude')} className="w-[110px] px-4 py-3 whitespace-nowrap">
+              {t('table.longitude')}
+            </SortableTableHeader>
+            <SortableTableHeader active={sortKey === 'coverage'} direction={sortDirection} onClick={() => toggleSort('coverage')} className="w-[145px] px-4 py-3">
+              {t('table.coverage')}
+            </SortableTableHeader>
+            <SortableTableHeader active={sortKey === 'status'} direction={sortDirection} onClick={() => toggleSort('status')} className="w-[160px] px-4 py-3">
+              {t('table.status')}
+            </SortableTableHeader>
             <th className="w-[190px] px-4 py-3 text-right whitespace-nowrap">{t('table.action')}</th>
           </tr>
         </thead>
@@ -958,7 +1021,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           {isLoading ? (
             <CustomerTableSkeleton />
           ) : (
-            customers.map((cust) => {
+            sortedCustomers.map((cust) => {
               const masterAddr = cust.activeAddress;
               const latestSession = cust.latestVerification;
 
@@ -1380,6 +1443,8 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 whatsappStatusFilter,
                 coverageFwaFilter,
                 coverageFtthFilter,
+                sortKey,
+                sortDirection,
               ),
               refreshDashboard(),
             ]);

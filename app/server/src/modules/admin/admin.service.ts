@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, ilike, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import {
   auditLogs,
@@ -536,11 +536,12 @@ export class AdminService {
         : and(...coverageFilters);
     if (coverageFilter) filters.push(coverageFilter);
     if (query.locationStatus === 'UNVERIFIED') {
-      filters.push(
-        ne(customers.status, 'SUSPENDED'),
-        isNull(customers.whatsappOptOutAt),
-        sql`exists (select 1 from customer_addresses campaign_address where campaign_address.customer_id = ${customers.id} and campaign_address.is_active = true and campaign_address.is_verified = false)`,
-      );
+      filters.push(ne(customers.status, 'SUSPENDED'), isNull(customers.whatsappOptOutAt));
+      if (!query.campaignAvailable) {
+        filters.push(
+          sql`exists (select 1 from customer_addresses campaign_address where campaign_address.customer_id = ${customers.id} and campaign_address.is_active = true and campaign_address.is_verified = false)`,
+        );
+      }
     } else if (query.locationStatus === 'VERIFIED') {
       filters.push(
         sql`exists (select 1 from customer_addresses campaign_address where campaign_address.customer_id = ${customers.id} and campaign_address.is_active = true and campaign_address.is_verified = true)`,
@@ -627,7 +628,49 @@ export class AdminService {
         return Number(total);
       },
     );
-    const cursor = decodeListCursor(query.cursor);
+    const activeAddressSort = sql<string>`(
+      select sort_address.raw_address
+      from customer_addresses sort_address
+      where sort_address.customer_id = ${customers.id}
+        and sort_address.is_active = true
+      order by sort_address.updated_at desc, sort_address.id desc
+      limit 1
+    )`;
+    const latitudeSort = sql<number>`(
+      select st_y(sort_address.reference_location::geometry)
+      from customer_addresses sort_address
+      where sort_address.customer_id = ${customers.id}
+        and sort_address.is_active = true
+      order by sort_address.updated_at desc, sort_address.id desc
+      limit 1
+    )`;
+    const longitudeSort = sql<number>`(
+      select st_x(sort_address.reference_location::geometry)
+      from customer_addresses sort_address
+      where sort_address.customer_id = ${customers.id}
+        and sort_address.is_active = true
+      order by sort_address.updated_at desc, sort_address.id desc
+      limit 1
+    )`;
+    const usesCursor = !query.sortBy;
+    const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
+    const sortExpression =
+      query.sortBy === 'id'
+        ? customers.externalId
+        : query.sortBy === 'whatsapp'
+          ? customers.phoneE164
+          : query.sortBy === 'address'
+            ? activeAddressSort
+            : query.sortBy === 'latitude'
+              ? latitudeSort
+              : query.sortBy === 'longitude'
+                ? longitudeSort
+                : query.sortBy === 'coverage'
+                  ? customers.coverageStatus
+                  : query.sortBy === 'status'
+                    ? customers.status
+                    : customers.name;
+    const cursor = usesCursor ? decodeListCursor(query.cursor) : undefined;
     const cursorWhere = cursor
       ? or(
           lt(customers.updatedAt, new Date(cursor.value)),
@@ -638,8 +681,19 @@ export class AdminService {
       .select()
       .from(customers)
       .where(cursorWhere ? and(where, cursorWhere) : where)
-      .orderBy(desc(customers.updatedAt), desc(customers.id))
-      .offset(cursor ? 0 : (query.page - 1) * query.pageSize)
+      .orderBy(
+        usesCursor
+          ? desc(customers.updatedAt)
+          : sortDirection === 'desc'
+            ? desc(sortExpression)
+            : asc(sortExpression),
+        usesCursor
+          ? desc(customers.id)
+          : sortDirection === 'desc'
+            ? desc(customers.id)
+            : asc(customers.id),
+      )
+      .offset(usesCursor && cursor ? 0 : (query.page - 1) * query.pageSize)
       .limit(query.pageSize);
     const customerIds = customerRows.map((customer) => customer.id);
     if (!customerIds.length)
@@ -694,7 +748,7 @@ export class AdminService {
       total: cachedCount.total,
       totalPages: Math.ceil(cachedCount.total / query.pageSize),
       nextCursor:
-        customerRows.length === query.pageSize
+        usesCursor && customerRows.length === query.pageSize
           ? encodeListCursor(customerRows[customerRows.length - 1].updatedAt, customerRows[customerRows.length - 1].id)
           : null,
       hasMore: customerRows.length === query.pageSize,
@@ -1163,7 +1217,28 @@ export class AdminService {
         ),
       );
     }
-    if (query.status)
+    if (query.status === 'NEEDS_REVIEW') {
+      filters.push(sql`exists (
+        select 1
+        from validation_results latest_location_result
+        where latest_location_result.session_id = ${verificationSessions.id}
+          and latest_location_result.address_id = ${verificationSessions.currentAddressId}
+          and latest_location_result.result <> 'LOCATION_VALID'
+          and not exists (
+            select 1
+            from validation_results newer_location_result
+            where newer_location_result.session_id = latest_location_result.session_id
+              and newer_location_result.address_id = latest_location_result.address_id
+              and (
+                newer_location_result.created_at > latest_location_result.created_at
+                or (
+                  newer_location_result.created_at = latest_location_result.created_at
+                  and newer_location_result.id > latest_location_result.id
+                )
+              )
+          )
+      )`);
+    } else if (query.status)
       filters.push(
         eq(
           verificationSessions.verificationStatus,
@@ -1183,7 +1258,25 @@ export class AdminService {
         return Number(total);
       },
     );
-    const cursor = decodeListCursor(query.cursor);
+    const latestLocationResultSort = sql<string>`(
+      select latest_location_result.result
+      from validation_results latest_location_result
+      where latest_location_result.session_id = ${verificationSessions.id}
+        and latest_location_result.address_id = ${verificationSessions.currentAddressId}
+      order by latest_location_result.created_at desc, latest_location_result.id desc
+      limit 1
+    )`;
+    const usesCursor = !query.sortBy;
+    const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
+    const sortExpression =
+      query.sortBy === 'status'
+        ? verificationSessions.verificationStatus
+        : query.sortBy === 'location'
+          ? latestLocationResultSort
+          : query.sortBy === 'activity'
+            ? verificationSessions.attemptCount
+            : customers.name;
+    const cursor = usesCursor ? decodeListCursor(query.cursor) : undefined;
     const cursorWhere = cursor
       ? or(
           lt(verificationSessions.updatedAt, new Date(cursor.value)),
@@ -1195,22 +1288,31 @@ export class AdminService {
       .from(verificationSessions)
       .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
       .where(cursorWhere ? and(where, cursorWhere) : where)
-      .orderBy(desc(verificationSessions.updatedAt), desc(verificationSessions.id))
-      .offset(cursor ? 0 : (query.page - 1) * query.pageSize)
+      .orderBy(
+        usesCursor
+          ? desc(verificationSessions.updatedAt)
+          : sortDirection === 'desc'
+            ? desc(sortExpression)
+            : asc(sortExpression),
+        usesCursor
+          ? desc(verificationSessions.id)
+          : sortDirection === 'desc'
+            ? desc(verificationSessions.id)
+            : asc(verificationSessions.id),
+      )
+      .offset(usesCursor && cursor ? 0 : (query.page - 1) * query.pageSize)
       .limit(query.pageSize);
     const resultRows = rows.length
       ? await db
           .select()
           .from(validationResults)
           .where(
-            and(
-              inArray(
-                validationResults.sessionId,
-                rows.map(({ session }) => session.id),
-              ),
-              inArray(
-                validationResults.addressId,
-                rows.map(({ session }) => session.currentAddressId),
+            or(
+              ...rows.map(({ session }) =>
+                and(
+                  eq(validationResults.sessionId, session.id),
+                  eq(validationResults.addressId, session.currentAddressId),
+                ),
               ),
             ),
           )
@@ -1229,7 +1331,7 @@ export class AdminService {
       total: cachedCount.total,
       totalPages: Math.ceil(cachedCount.total / query.pageSize),
       nextCursor:
-        rows.length === query.pageSize
+        usesCursor && rows.length === query.pageSize
           ? encodeListCursor(rows[rows.length - 1].session.updatedAt, rows[rows.length - 1].session.id)
           : null,
       hasMore: rows.length === query.pageSize,
@@ -1744,7 +1846,20 @@ export class AdminService {
         return Number(total);
       },
     );
-    const cursor = decodeListCursor(query.cursor);
+    const scheduleSort = sql<Date>`coalesce(${reminders.sentAt}, ${reminders.scheduledAt})`;
+    const usesCursor = !query.sortBy;
+    const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
+    const sortExpression =
+      query.sortBy === 'customer'
+        ? customers.name
+        : query.sortBy === 'step'
+          ? reminders.reminderNumber
+          : query.sortBy === 'recipient'
+            ? verificationSessions.registeredPhoneSnapshot
+            : query.sortBy === 'status'
+              ? reminders.status
+              : scheduleSort;
+    const cursor = usesCursor ? decodeListCursor(query.cursor) : undefined;
     const cursorWhere = cursor
       ? or(
           lt(reminders.createdAt, new Date(cursor.value)),
@@ -1757,8 +1872,19 @@ export class AdminService {
       .innerJoin(verificationSessions, eq(verificationSessions.id, reminders.sessionId))
       .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
       .where(cursorWhere ? and(where, cursorWhere) : where)
-      .orderBy(desc(reminders.createdAt), desc(reminders.id))
-      .offset(cursor ? 0 : (query.page - 1) * query.pageSize)
+      .orderBy(
+        usesCursor
+          ? desc(reminders.createdAt)
+          : sortDirection === 'desc'
+            ? desc(sortExpression)
+            : asc(sortExpression),
+        usesCursor
+          ? desc(reminders.id)
+          : sortDirection === 'desc'
+            ? desc(reminders.id)
+            : asc(reminders.id),
+      )
+      .offset(usesCursor && cursor ? 0 : (query.page - 1) * query.pageSize)
       .limit(query.pageSize);
     return {
       items: rows.map(({ reminder, session, customer }) => ({
@@ -1771,7 +1897,7 @@ export class AdminService {
       total: cachedCount.total,
       totalPages: Math.ceil(cachedCount.total / query.pageSize),
       nextCursor:
-        rows.length === query.pageSize
+        usesCursor && rows.length === query.pageSize
           ? encodeListCursor(rows[rows.length - 1].reminder.createdAt, rows[rows.length - 1].reminder.id)
           : null,
       hasMore: rows.length === query.pageSize,

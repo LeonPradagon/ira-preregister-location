@@ -115,6 +115,8 @@ interface AppContextType {
     whatsappStatus?: 'ALL' | WhatsappStatus,
     coverageFwaStatus?: string,
     coverageFtthStatus?: string,
+    sortBy?: string,
+    sortDirection?: 'asc' | 'desc',
   ) => Promise<CustomerPage>;
   loadCustomerDetail: (
     customerId: string,
@@ -508,6 +510,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     whatsappStatus: 'ALL' | WhatsappStatus = 'ALL',
     coverageFwaStatus = 'ALL',
     coverageFtthStatus = 'ALL',
+    sortBy,
+    sortDirection,
   ): Promise<CustomerPage> => {
     const raw = await api.customers({
       page,
@@ -519,6 +523,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       whatsappStatus: whatsappStatus === 'ALL' ? undefined : whatsappStatus,
       coverageFwaStatus: coverageFwaStatus === 'ALL' ? undefined : coverageFwaStatus,
       coverageFtthStatus: coverageFtthStatus === 'ALL' ? undefined : coverageFtthStatus,
+      sortBy,
+      sortDirection,
       cursor: page === 1 ? undefined : customerCursors[page],
     });
     if (page === 1) setCustomerCursors({});

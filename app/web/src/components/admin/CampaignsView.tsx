@@ -13,7 +13,14 @@ import {
 import { mapApiCustomer, useApp } from '../../context/AppContext';
 import { api, type CampaignMonitoringSummary } from '../../lib/apiClient';
 import { Customer, VerificationCampaign } from '../../types';
-import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
+import {
+  AdminTable,
+  SortableTableHeader,
+  sortTableRows,
+  TablePagination,
+  TablePageSize,
+  TableSortDirection,
+} from '../common/AdminTable';
 import { AppLoader } from '../common/AppLoader';
 
 const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) =>
@@ -217,6 +224,10 @@ export const CampaignsView: React.FC = () => {
   const [candidateLoading, setCandidateLoading] = useState(true);
   const [preview, setPreview] = useState<WhatsAppPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [campaignSortKey, setCampaignSortKey] = useState<'campaign' | 'target' | 'sent' | 'failed' | 'status'>('campaign');
+  const [campaignSortDirection, setCampaignSortDirection] = useState<TableSortDirection>('asc');
+  const [itemSortKey, setItemSortKey] = useState<'customer' | 'deliveryStatus' | 'retry' | 'providerMessage'>('customer');
+  const [itemSortDirection, setItemSortDirection] = useState<TableSortDirection>('asc');
 
   const selectableCustomers = useMemo(
     () => candidateCustomers.filter((customer) => customer.status !== 'SUSPENDED' && !customer.whatsappOptOutAt),
@@ -224,6 +235,56 @@ export const CampaignsView: React.FC = () => {
   );
   const allSelected =
     selectableCustomers.length > 0 && selectableCustomers.every((customer) => selected.includes(customer.id));
+
+  const sortedCampaigns = useMemo(
+    () =>
+      sortTableRows(
+        campaigns,
+        (campaign) => {
+          if (campaignSortKey === 'campaign') return campaign.name;
+          if (campaignSortKey === 'target') return campaign.targetCount;
+          if (campaignSortKey === 'sent') return campaign.sentCount;
+          if (campaignSortKey === 'failed') return campaign.failedCount;
+          return campaign.status;
+        },
+        campaignSortDirection,
+      ),
+    [campaignSortDirection, campaignSortKey, campaigns],
+  );
+  const sortedItems = useMemo(
+    () =>
+      sortTableRows(
+        items,
+        (row) => {
+          const item = row.item as Record<string, unknown>;
+          const customer = row.customer as Record<string, unknown>;
+          if (itemSortKey === 'customer') return customer.name;
+          if (itemSortKey === 'deliveryStatus') return item.status;
+          if (itemSortKey === 'retry') return Number(item.retryCount ?? 0);
+          return item.providerMessageId;
+        },
+        itemSortDirection,
+      ),
+    [itemSortDirection, itemSortKey, items],
+  );
+  const toggleCampaignSort = (nextKey: 'campaign' | 'target' | 'sent' | 'failed' | 'status') => {
+    if (campaignSortKey === nextKey) setCampaignSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+    else {
+      setCampaignSortKey(nextKey);
+      setCampaignSortDirection('asc');
+    }
+    setPage(1);
+    setCampaignCursors({});
+  };
+  const toggleItemSort = (nextKey: 'customer' | 'deliveryStatus' | 'retry' | 'providerMessage') => {
+    if (itemSortKey === nextKey) setItemSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+    else {
+      setItemSortKey(nextKey);
+      setItemSortDirection('asc');
+    }
+    setItemPage(1);
+    setItemCursors({});
+  };
   const selectedCount = selectAllEligible ? Math.min(candidateTotal, dailySendLimit) : selected.length;
 
   const loadCampaigns = async () => {
@@ -233,6 +294,8 @@ export const CampaignsView: React.FC = () => {
         page,
         pageSize,
         search: searchTerm,
+        sortBy: campaignSortKey,
+        sortDirection: campaignSortDirection,
         cursor: page === 1 ? undefined : campaignCursors[page],
       });
       if (response.nextCursor) setCampaignCursors((previous) => ({ ...previous, [page + 1]: response.nextCursor! }));
@@ -255,7 +318,7 @@ export const CampaignsView: React.FC = () => {
   }, [dailySendLimitMax]);
   useEffect(() => {
     void loadCampaigns();
-  }, [page, pageSize, searchTerm]);
+  }, [page, pageSize, searchTerm, campaignSortKey, campaignSortDirection]);
 
   const loadCandidates = async () => {
     setCandidateLoading(true);
@@ -430,6 +493,8 @@ export const CampaignsView: React.FC = () => {
       const response = await api.campaignItems(campaignId, {
         page: nextPage,
         pageSize: nextPageSize,
+        sortBy: itemSortKey,
+        sortDirection: itemSortDirection,
         cursor: nextPage === 1 ? undefined : itemCursors[nextPage],
       });
       if (response.nextCursor) setItemCursors((previous) => ({ ...previous, [nextPage + 1]: response.nextCursor! }));
@@ -442,6 +507,11 @@ export const CampaignsView: React.FC = () => {
       setItemsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!selectedCampaignId) return;
+    void showItems(selectedCampaignId, 1, itemPageSize);
+  }, [itemSortKey, itemSortDirection]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -722,11 +792,21 @@ export const CampaignsView: React.FC = () => {
         >
           <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
             <tr>
-              <th className="px-4 py-3">{t('table.campaign')}</th>
-              <th className="px-4 py-3">{t('table.target')}</th>
-              <th className="px-4 py-3">{t('table.sent')}</th>
-              <th className="px-4 py-3">{t('table.failed')}</th>
-              <th className="px-4 py-3">{t('table.status')}</th>
+              <SortableTableHeader active={campaignSortKey === 'campaign'} direction={campaignSortDirection} onClick={() => toggleCampaignSort('campaign')} className="px-4 py-3">
+                {t('table.campaign')}
+              </SortableTableHeader>
+              <SortableTableHeader active={campaignSortKey === 'target'} direction={campaignSortDirection} onClick={() => toggleCampaignSort('target')} className="px-4 py-3">
+                {t('table.target')}
+              </SortableTableHeader>
+              <SortableTableHeader active={campaignSortKey === 'sent'} direction={campaignSortDirection} onClick={() => toggleCampaignSort('sent')} className="px-4 py-3">
+                {t('table.sent')}
+              </SortableTableHeader>
+              <SortableTableHeader active={campaignSortKey === 'failed'} direction={campaignSortDirection} onClick={() => toggleCampaignSort('failed')} className="px-4 py-3">
+                {t('table.failed')}
+              </SortableTableHeader>
+              <SortableTableHeader active={campaignSortKey === 'status'} direction={campaignSortDirection} onClick={() => toggleCampaignSort('status')} className="px-4 py-3">
+                {t('table.status')}
+              </SortableTableHeader>
               <th className="px-4 py-3">{t('table.action')}</th>
             </tr>
           </thead>
@@ -739,7 +819,7 @@ export const CampaignsView: React.FC = () => {
               </tr>
             )}
             {!loading &&
-              campaigns.map((campaign) => (
+              sortedCampaigns.map((campaign) => (
                 <tr key={campaign.id} className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
                   <td className="px-4 py-3">
                     <div className="font-semibold text-slate-900 dark:text-white">{campaign.name}</div>
@@ -874,14 +954,22 @@ export const CampaignsView: React.FC = () => {
           >
             <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
               <tr>
-                <th className="px-4 py-3">{t('table.customerName')}</th>
-                <th className="px-4 py-3">{t('table.deliveryStatus')}</th>
-                <th className="px-4 py-3">{t('table.retry')}</th>
-                <th className="px-4 py-3">{t('table.providerMessage')}</th>
+                <SortableTableHeader active={itemSortKey === 'customer'} direction={itemSortDirection} onClick={() => toggleItemSort('customer')} className="px-4 py-3">
+                  {t('table.customerName')}
+                </SortableTableHeader>
+                <SortableTableHeader active={itemSortKey === 'deliveryStatus'} direction={itemSortDirection} onClick={() => toggleItemSort('deliveryStatus')} className="px-4 py-3">
+                  {t('table.deliveryStatus')}
+                </SortableTableHeader>
+                <SortableTableHeader active={itemSortKey === 'retry'} direction={itemSortDirection} onClick={() => toggleItemSort('retry')} className="px-4 py-3">
+                  {t('table.retry')}
+                </SortableTableHeader>
+                <SortableTableHeader active={itemSortKey === 'providerMessage'} direction={itemSortDirection} onClick={() => toggleItemSort('providerMessage')} className="px-4 py-3">
+                  {t('table.providerMessage')}
+                </SortableTableHeader>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {items.map((row) => {
+              {sortedItems.map((row) => {
                 const item = row.item as Record<string, unknown>;
                 const customer = row.customer as Record<string, unknown>;
                 const status = String(item.status ?? 'PENDING');

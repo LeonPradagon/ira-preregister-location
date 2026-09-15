@@ -19,7 +19,14 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
+import {
+  AdminTable,
+  SortableTableHeader,
+  sortTableRows,
+  TablePagination,
+  TablePageSize,
+  TableSortDirection,
+} from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
 import { AppLoader } from '../common/AppLoader';
 import { formatAppDateTime } from '../../lib/dateTime';
@@ -140,6 +147,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
   const { t } = useTranslation();
   const [sessionPage, setSessionPage] = useState(1);
   const [sessionPageSize, setSessionPageSize] = useState<TablePageSize>(10);
+  const [sessionSortKey, setSessionSortKey] = useState<'customer' | 'status' | 'location'>('customer');
+  const [sessionSortDirection, setSessionSortDirection] = useState<TableSortDirection>('asc');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const customerStats = dashboardSummary.customers;
@@ -155,7 +164,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
     verificationStats.addressChanged +
     verificationStats.customersMismatch;
   const matchRate = progressPercent(locationValidCount, totalChecks);
-  const pagedVerificationSessions = verificationSessions.slice(
+  const sortedVerificationSessions = sortTableRows(
+    verificationSessions,
+    (session) => {
+      const customer = customers.find((item) => item.id === session.customerId);
+      if (sessionSortKey === 'customer') return customer?.name || session.registeredPhoneSnapshot;
+      if (sessionSortKey === 'status') return session.verificationStatus;
+      return session.lastValidationResult?.result;
+    },
+    sessionSortDirection,
+  );
+  const pagedVerificationSessions = sortedVerificationSessions.slice(
     (sessionPage - 1) * sessionPageSize,
     sessionPage * sessionPageSize,
   );
@@ -460,9 +479,51 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
         >
           <thead className="border-b border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-400">
             <tr>
-              <th className="px-4 py-3">{t('dashboard.customer')}</th>
-              <th className="px-4 py-3">{t('dashboard.verificationStatus')}</th>
-              <th className="px-4 py-3">{t('dashboard.locationResult')}</th>
+              <SortableTableHeader
+                active={sessionSortKey === 'customer'}
+                direction={sessionSortDirection}
+                onClick={() => {
+                  if (sessionSortKey === 'customer') setSessionSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+                  else {
+                    setSessionSortKey('customer');
+                    setSessionSortDirection('asc');
+                  }
+                  setSessionPage(1);
+                }}
+                className="px-4 py-3"
+              >
+                {t('dashboard.customer')}
+              </SortableTableHeader>
+              <SortableTableHeader
+                active={sessionSortKey === 'status'}
+                direction={sessionSortDirection}
+                onClick={() => {
+                  if (sessionSortKey === 'status') setSessionSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+                  else {
+                    setSessionSortKey('status');
+                    setSessionSortDirection('asc');
+                  }
+                  setSessionPage(1);
+                }}
+                className="px-4 py-3"
+              >
+                {t('dashboard.verificationStatus')}
+              </SortableTableHeader>
+              <SortableTableHeader
+                active={sessionSortKey === 'location'}
+                direction={sessionSortDirection}
+                onClick={() => {
+                  if (sessionSortKey === 'location') setSessionSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+                  else {
+                    setSessionSortKey('location');
+                    setSessionSortDirection('asc');
+                  }
+                  setSessionPage(1);
+                }}
+                className="px-4 py-3"
+              >
+                {t('dashboard.locationResult')}
+              </SortableTableHeader>
               <th className="px-4 py-3 text-right">{t('dashboard.action')}</th>
             </tr>
           </thead>

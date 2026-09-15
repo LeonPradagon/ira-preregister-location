@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -15,7 +15,14 @@ import {
 import { mapApiCustomer, mapApiSession, useApp } from '../../context/AppContext';
 import { api } from '../../lib/apiClient';
 import { Customer, VerificationSession } from '../../types';
-import { AdminTable, TablePagination, TablePageSize } from '../common/AdminTable';
+import {
+  AdminTable,
+  SortableTableHeader,
+  sortTableRows,
+  TablePagination,
+  TablePageSize,
+  TableSortDirection,
+} from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
 import { AppLoader } from '../common/AppLoader';
 
@@ -69,6 +76,8 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<TablePageSize>(25);
   const [cursors, setCursors] = useState<Record<number, string>>({});
+  const [sortKey, setSortKey] = useState<'customer' | 'status' | 'location' | 'activity'>('customer');
+  const [sortDirection, setSortDirection] = useState<TableSortDirection>('asc');
 
   useEffect(() => {
     setPage(1);
@@ -84,6 +93,8 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
         pageSize,
         search: searchTerm,
         status: statusFilter,
+        sortBy: sortKey,
+        sortDirection,
         cursor: page === 1 ? undefined : cursors[page],
       });
       if (response.nextCursor) setCursors((previous) => ({ ...previous, [page + 1]: response.nextCursor! }));
@@ -100,7 +111,32 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
 
   useEffect(() => {
     void load();
-  }, [page, pageSize, searchTerm, statusFilter]);
+  }, [page, pageSize, searchTerm, statusFilter, sortKey, sortDirection]);
+
+  const sortedRows = useMemo(
+    () =>
+      sortTableRows(
+        rows,
+        (row) => {
+          if (sortKey === 'customer') return row.customer.name;
+          if (sortKey === 'status') return row.session.verificationStatus;
+          if (sortKey === 'location') return row.session.lastValidationResult?.result;
+          return row.session.attemptCount;
+        },
+        sortDirection,
+      ),
+    [rows, sortDirection, sortKey],
+  );
+
+  const toggleSort = (nextKey: 'customer' | 'status' | 'location' | 'activity') => {
+    if (sortKey === nextKey) setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(nextKey);
+      setSortDirection('asc');
+    }
+    setPage(1);
+    setCursors({});
+  };
 
   const verificationStats = dashboardSummary.verifications;
   const attentionCount =
@@ -206,6 +242,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
                   {label}
                 </option>
               ))}
+              <option value="NEEDS_REVIEW">{t('verifications.locationNeedsReviewFilter')}</option>
             </select>
           </label>
         </div>
@@ -235,15 +272,23 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
         >
           <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
             <tr>
-              <th className="px-4 py-3">{t('table.customerName')}</th>
-              <th className="px-4 py-3">{t('verifications.status')}</th>
-              <th className="px-4 py-3">{t('verifications.location')}</th>
-              <th className="px-4 py-3">{t('verifications.activity')}</th>
+              <SortableTableHeader active={sortKey === 'customer'} direction={sortDirection} onClick={() => toggleSort('customer')} className="px-4 py-3">
+                {t('table.customerName')}
+              </SortableTableHeader>
+              <SortableTableHeader active={sortKey === 'status'} direction={sortDirection} onClick={() => toggleSort('status')} className="px-4 py-3">
+                {t('verifications.status')}
+              </SortableTableHeader>
+              <SortableTableHeader active={sortKey === 'location'} direction={sortDirection} onClick={() => toggleSort('location')} className="px-4 py-3">
+                {t('verifications.location')}
+              </SortableTableHeader>
+              <SortableTableHeader active={sortKey === 'activity'} direction={sortDirection} onClick={() => toggleSort('activity')} className="px-4 py-3">
+                {t('verifications.activity')}
+              </SortableTableHeader>
               <th className="px-4 py-3 text-right">{t('table.action')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {rows.map(({ session, customer }) => {
+            {sortedRows.map(({ session, customer }) => {
               const lastVal = session.lastValidationResult;
               return (
                 <tr key={session.id} className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40">

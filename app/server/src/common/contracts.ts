@@ -188,6 +188,8 @@ export const customerListQuerySchema = z.object({
   coordinateAuditStatus: z.enum(['PENDING', 'MATCHED', 'UNCERTAIN', 'MISMATCH', 'INVALID']).optional(),
   addressCompleteness: z.enum(['COMPLETE', 'INCOMPLETE']).optional(),
   campaignAvailable: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  sortBy: z.string().trim().max(64).optional(),
+  sortDirection: z.enum(['asc', 'desc']).optional(),
   cursor: z.string().max(255).optional(),
 });
 
@@ -222,6 +224,8 @@ export const adminListQuerySchema = z.object({
   search: z.string().trim().max(128).default(''),
   status: z.string().trim().max(64).optional(),
   actor: z.enum(['CUSTOMER', 'SYSTEM', 'ADMIN', 'AUTH']).optional(),
+  sortBy: z.string().trim().max(64).optional(),
+  sortDirection: z.enum(['asc', 'desc']).optional(),
   cursor: z.string().max(255).optional(),
 });
 

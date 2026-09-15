@@ -1,9 +1,77 @@
 import React, { ReactNode } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTranslation } from '../../i18n';
 
 export const TABLE_PAGE_SIZE_OPTIONS = [5, 10, 25, 50, 100] as const;
 export type TablePageSize = (typeof TABLE_PAGE_SIZE_OPTIONS)[number];
+export type TableSortDirection = 'asc' | 'desc';
+
+interface SortableTableHeaderProps {
+  children: ReactNode;
+  active: boolean;
+  direction: TableSortDirection;
+  onClick: () => void;
+  className?: string;
+  buttonClassName?: string;
+}
+
+export const SortableTableHeader: React.FC<SortableTableHeaderProps> = ({
+  children,
+  active,
+  direction,
+  onClick,
+  className = '',
+  buttonClassName = '',
+}) => {
+  const { t } = useTranslation();
+  const nextDirection = active && direction === 'asc' ? 'desc' : 'asc';
+  return (
+    <th className={className} aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`inline-flex items-center gap-1 rounded px-1 py-1 text-left transition-colors hover:bg-indigo-100 hover:text-indigo-700 dark:hover:bg-indigo-900/60 dark:hover:text-indigo-300 ${active ? 'text-indigo-700 dark:text-indigo-300' : ''} ${buttonClassName}`}
+        title={t(nextDirection === 'asc' ? 'table.sortAscending' : 'table.sortDescending')}
+      >
+        <span>{children}</span>
+        {active ? (
+          direction === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+        ) : (
+          <ArrowUpDown className="h-3.5 w-3.5" />
+        )}
+      </button>
+    </th>
+  );
+};
+
+export function sortTableRows<T>(
+  rows: T[],
+  getValue: (row: T) => unknown,
+  direction: TableSortDirection,
+): T[] {
+  return [...rows].sort((left, right) => {
+    const leftValue = getValue(left);
+    const rightValue = getValue(right);
+    const leftEmpty = leftValue == null || leftValue === '';
+    const rightEmpty = rightValue == null || rightValue === '';
+    if (leftEmpty || rightEmpty) {
+      if (leftEmpty && rightEmpty) return 0;
+      return leftEmpty ? 1 : -1;
+    }
+    let comparison = 0;
+    if (typeof leftValue === 'number' && typeof rightValue === 'number') {
+      comparison = leftValue - rightValue;
+    } else if (typeof leftValue === 'boolean' && typeof rightValue === 'boolean') {
+      comparison = Number(leftValue) - Number(rightValue);
+    } else {
+      comparison = String(leftValue).localeCompare(String(rightValue), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
+    }
+    return direction === 'asc' ? comparison : -comparison;
+  });
+}
 
 interface AdminTableProps {
   children: ReactNode;

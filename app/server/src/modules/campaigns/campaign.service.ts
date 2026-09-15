@@ -290,7 +290,19 @@ export class CampaignService {
         return Number(total);
       },
     );
-    const cursor = decodeListCursor(query.cursor);
+    const usesCursor = !query.sortBy;
+    const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
+    const sortExpression =
+      query.sortBy === 'target'
+        ? verificationCampaigns.targetCount
+        : query.sortBy === 'sent'
+          ? verificationCampaigns.sentCount
+          : query.sortBy === 'failed'
+            ? verificationCampaigns.failedCount
+            : query.sortBy === 'status'
+              ? verificationCampaigns.status
+              : verificationCampaigns.name;
+    const cursor = usesCursor ? decodeListCursor(query.cursor) : undefined;
     const cursorWhere = cursor
       ? or(
           lt(verificationCampaigns.createdAt, new Date(cursor.value)),
@@ -301,8 +313,19 @@ export class CampaignService {
       .select()
       .from(verificationCampaigns)
       .where(cursorWhere ? and(where, cursorWhere) : where)
-      .orderBy(desc(verificationCampaigns.createdAt), desc(verificationCampaigns.id))
-      .offset(cursor ? 0 : (query.page - 1) * query.pageSize)
+      .orderBy(
+        usesCursor
+          ? desc(verificationCampaigns.createdAt)
+          : sortDirection === 'desc'
+            ? desc(sortExpression)
+            : asc(sortExpression),
+        usesCursor
+          ? desc(verificationCampaigns.id)
+          : sortDirection === 'desc'
+            ? desc(verificationCampaigns.id)
+            : asc(verificationCampaigns.id),
+      )
+      .offset(usesCursor && cursor ? 0 : (query.page - 1) * query.pageSize)
       .limit(query.pageSize);
     return {
       items,
@@ -311,7 +334,7 @@ export class CampaignService {
       total: cachedCount.total,
       totalPages: Math.ceil(cachedCount.total / query.pageSize),
       nextCursor:
-        items.length === query.pageSize
+        usesCursor && items.length === query.pageSize
           ? encodeListCursor(items[items.length - 1].createdAt, items[items.length - 1].id)
           : null,
       hasMore: items.length === query.pageSize,
@@ -407,7 +430,45 @@ export class CampaignService {
         .where(and(...itemFilters));
       return Number(total);
     });
-    const cursor = decodeListCursor(query.cursor);
+    const addressChangedExpression = sql<boolean>`
+      ${verificationSessions.verificationStatus} in ('ADDRESS_EDITING', 'ADDRESS_PROPOSED')
+      or exists (
+        select 1 from ${auditLogs}
+        where ${auditLogs.action} = 'ADDRESS_PROPOSED'
+          and ${auditLogs.entityType} = 'ADDRESS'
+          and (${auditLogs.after} ->> 'sessionId') = (${verificationSessions.id}::text)
+      )`;
+    const gpsReceivedExpression = sql<boolean>`exists (
+      select 1 from ${locationCaptures}
+      where ${locationCaptures.sessionId} = ${verificationSessions.id}
+    )`;
+    const locationValidExpression = sql<boolean>`${verificationSessions.verificationStatus} = 'LOCATION_VALID'`;
+    const confirmedExpression = sql<boolean>`${verificationSessions.customerConfirmationStatus} = 'CONFIRMED'`;
+    const reminderSentCountExpression = sql<number>`(
+      select count(*)
+      from reminders recipient_reminder
+      where recipient_reminder.session_id = ${verificationSessions.id}
+        and recipient_reminder.status = 'SENT'
+    )`;
+    const usesCursor = !query.sortBy;
+    const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
+    const sortExpression =
+      query.sortBy === 'deliveryStatus'
+        ? verificationCampaignItems.status
+        : query.sortBy === 'linkStatus'
+          ? sql<boolean>`${verificationSessions.openedAt} is not null`
+          : query.sortBy === 'addressChanged'
+            ? addressChangedExpression
+            : query.sortBy === 'gps'
+              ? gpsReceivedExpression
+              : query.sortBy === 'locationValid'
+                ? locationValidExpression
+                : query.sortBy === 'confirmed'
+                  ? confirmedExpression
+                  : query.sortBy === 'reminderCount'
+                    ? reminderSentCountExpression
+                    : customers.name;
+    const cursor = usesCursor ? decodeListCursor(query.cursor) : undefined;
     const cursorWhere = cursor
       ? or(
           lt(verificationCampaignItems.createdAt, new Date(cursor.value)),
@@ -455,19 +516,9 @@ export class CampaignService {
           addressDetail: customerAddresses.addressDetail,
           landmark: customerAddresses.landmark,
         },
-        gpsReceived: sql<boolean>`exists (
-          select 1 from ${locationCaptures}
-          where ${locationCaptures.sessionId} = ${verificationSessions.id}
-        )`,
-        addressChanged: sql<boolean>`
-          ${verificationSessions.verificationStatus} in ('ADDRESS_EDITING', 'ADDRESS_PROPOSED')
-          or exists (
-            select 1 from ${auditLogs}
-            where ${auditLogs.action} = 'ADDRESS_PROPOSED'
-              and ${auditLogs.entityType} = 'ADDRESS'
-              and (${auditLogs.after} ->> 'sessionId') = (${verificationSessions.id}::text)
-          )`,
-        locationValid: sql<boolean>`${verificationSessions.verificationStatus} = 'LOCATION_VALID'`,
+        gpsReceived: gpsReceivedExpression,
+        addressChanged: addressChangedExpression,
+        locationValid: locationValidExpression,
         manualReview: sql<boolean>`${verificationSessions.verificationStatus} = 'MANUAL_REVIEW'`,
       })
       .from(verificationCampaignItems)
@@ -475,8 +526,19 @@ export class CampaignService {
       .innerJoin(verificationSessions, eq(verificationSessions.id, verificationCampaignItems.sessionId))
       .leftJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
       .where(cursorWhere ? and(...itemFilters, cursorWhere) : and(...itemFilters))
-      .orderBy(desc(verificationCampaignItems.createdAt), desc(verificationCampaignItems.id))
-      .offset(cursor ? 0 : (query.page - 1) * query.pageSize)
+      .orderBy(
+        usesCursor
+          ? desc(verificationCampaignItems.createdAt)
+          : sortDirection === 'desc'
+            ? desc(sortExpression)
+            : asc(sortExpression),
+        usesCursor
+          ? desc(verificationCampaignItems.id)
+          : sortDirection === 'desc'
+            ? desc(verificationCampaignItems.id)
+            : asc(verificationCampaignItems.id),
+      )
+      .offset(usesCursor && cursor ? 0 : (query.page - 1) * query.pageSize)
       .limit(query.pageSize);
     return {
       items,
@@ -494,7 +556,7 @@ export class CampaignService {
       total: cachedCount.total,
       totalPages: Math.ceil(cachedCount.total / query.pageSize),
       nextCursor:
-        items.length === query.pageSize
+        usesCursor && items.length === query.pageSize
           ? encodeListCursor(items[items.length - 1].item.createdAt, items[items.length - 1].item.id)
           : null,
       hasMore: items.length === query.pageSize,

@@ -1,10 +1,26 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart3, CheckCircle2, Clock3, ExternalLink, MapPin, RefreshCw, Search, Send, XCircle } from 'lucide-react';
+import {
+  BarChart3,
+  CheckCircle2,
+  Clock3,
+  ExternalLink,
+  MapPin,
+  RefreshCw,
+  Search,
+  Send,
+  XCircle,
+} from 'lucide-react';
 import { useTranslation } from '../../i18n';
 import { api, type AdminMonitoringApi, type AdminMonitoringCampaign } from '../../lib/apiClient';
 import { formatAppDateTime } from '../../lib/dateTime';
 import { AppLoader } from '../common/AppLoader';
-import { TablePagination, type TablePageSize } from '../common/AdminTable';
+import {
+  SortableTableHeader,
+  sortTableRows,
+  TablePagination,
+  TableSortDirection,
+  type TablePageSize,
+} from '../common/AdminTable';
 
 const numberFormat = new Intl.NumberFormat('id-ID');
 
@@ -55,6 +71,28 @@ const addressValue = (address: Record<string, unknown> | null | undefined) => {
   return parts.join(', ') || String(address.rawAddress ?? '').trim();
 };
 
+type RecipientSortKey =
+  | 'recipient'
+  | 'deliveryStatus'
+  | 'linkStatus'
+  | 'addressChanged'
+  | 'gps'
+  | 'locationValid'
+  | 'confirmed'
+  | 'reminderCount';
+type MonitoringSortKey =
+  | 'campaign'
+  | 'target'
+  | 'sent'
+  | 'delivered'
+  | 'read'
+  | 'linksOpened'
+  | 'remindersSent'
+  | 'addressChanged'
+  | 'gps'
+  | 'locationValid'
+  | 'failed';
+
 export const MonitoringView: React.FC = () => {
   const { t } = useTranslation();
   const [data, setData] = useState<AdminMonitoringApi | null>(null);
@@ -70,7 +108,11 @@ export const MonitoringView: React.FC = () => {
   const [recipientCursors, setRecipientCursors] = useState<Record<number, string>>({});
   const [recipientSearch, setRecipientSearch] = useState('');
   const [debouncedRecipientSearch, setDebouncedRecipientSearch] = useState('');
+  const [recipientSortKey, setRecipientSortKey] = useState<RecipientSortKey>('recipient');
+  const [recipientSortDirection, setRecipientSortDirection] = useState<'asc' | 'desc'>('asc');
   const [recipientLoading, setRecipientLoading] = useState(false);
+  const [monitoringSortKey, setMonitoringSortKey] = useState<MonitoringSortKey>('campaign');
+  const [monitoringSortDirection, setMonitoringSortDirection] = useState<TableSortDirection>('asc');
 
   const load = async () => {
     setLoading(true);
@@ -104,6 +146,8 @@ export const MonitoringView: React.FC = () => {
           page: recipientPage,
           pageSize: recipientPageSize,
           search: debouncedRecipientSearch,
+          sortBy: recipientSortKey,
+          sortDirection: recipientSortDirection,
           cursor: recipientPage === 1 ? undefined : recipientCursors[recipientPage],
         });
         if (response.nextCursor)
@@ -117,9 +161,9 @@ export const MonitoringView: React.FC = () => {
       }
     };
     void loadRecipients();
-  }, [selectedCampaign, recipientPage, recipientPageSize, debouncedRecipientSearch]);
+  }, [selectedCampaign, recipientPage, recipientPageSize, debouncedRecipientSearch, recipientSortKey, recipientSortDirection]);
 
-  const rows = useMemo(() => {
+  const filteredRows = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     return (data?.campaigns ?? []).filter((campaign) => {
       const matchesSearch = !normalizedSearch || campaign.name.toLowerCase().includes(normalizedSearch);
@@ -127,6 +171,36 @@ export const MonitoringView: React.FC = () => {
       return matchesSearch && matchesStatus;
     });
   }, [data, search, status]);
+
+  const rows = useMemo(
+    () =>
+      sortTableRows(
+        filteredRows,
+        (campaign) => {
+          if (monitoringSortKey === 'campaign') return campaign.name;
+          if (monitoringSortKey === 'target') return campaign.target;
+          if (monitoringSortKey === 'sent') return campaign.sent;
+          if (monitoringSortKey === 'delivered') return campaign.delivered;
+          if (monitoringSortKey === 'read') return campaign.read;
+          if (monitoringSortKey === 'linksOpened') return campaign.linksOpened;
+          if (monitoringSortKey === 'remindersSent') return campaign.reminders.sent;
+          if (monitoringSortKey === 'addressChanged') return campaign.addressChanged;
+          if (monitoringSortKey === 'gps') return campaign.gpsReceived;
+          if (monitoringSortKey === 'locationValid') return campaign.locationValid;
+          return campaign.failed;
+        },
+        monitoringSortDirection,
+      ),
+    [filteredRows, monitoringSortDirection, monitoringSortKey],
+  );
+
+  const toggleMonitoringSort = (nextKey: MonitoringSortKey) => {
+    if (monitoringSortKey === nextKey) setMonitoringSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+    else {
+      setMonitoringSortKey(nextKey);
+      setMonitoringSortDirection('asc');
+    }
+  };
 
   const summary = data?.summary;
 
@@ -197,17 +271,39 @@ export const MonitoringView: React.FC = () => {
             <table className="min-w-[1700px] w-full text-left text-xs">
               <thead className="whitespace-nowrap bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500 dark:bg-slate-950/50 dark:text-slate-400">
                 <tr>
-                  <th className="px-4 py-3">{t('monitoring.campaign')}</th>
-                  <th className="px-3 py-3">{t('monitoring.target')}</th>
-                  <th className="px-3 py-3">{t('monitoring.sent')}</th>
-                  <th className="px-3 py-3">{t('monitoring.delivered')}</th>
-                  <th className="px-3 py-3">{t('monitoring.read')}</th>
-                  <th className="px-3 py-3">{t('monitoring.linksOpened')}</th>
-                  <th className="px-3 py-3">{t('monitoring.remindersSent')}</th>
-                  <th className="px-3 py-3">{t('monitoring.addressChanged')}</th>
-                  <th className="px-3 py-3">{t('monitoring.gps')}</th>
-                  <th className="px-3 py-3">{t('monitoring.locationValid')}</th>
-                  <th className="px-3 py-3">{t('monitoring.failed')}</th>
+                  <SortableTableHeader active={monitoringSortKey === 'campaign'} direction={monitoringSortDirection} onClick={() => toggleMonitoringSort('campaign')} className="px-4 py-3">
+                    {t('monitoring.campaign')}
+                  </SortableTableHeader>
+                  <SortableTableHeader active={monitoringSortKey === 'target'} direction={monitoringSortDirection} onClick={() => toggleMonitoringSort('target')} className="px-3 py-3">
+                    {t('monitoring.target')}
+                  </SortableTableHeader>
+                  <SortableTableHeader active={monitoringSortKey === 'sent'} direction={monitoringSortDirection} onClick={() => toggleMonitoringSort('sent')} className="px-3 py-3">
+                    {t('monitoring.sent')}
+                  </SortableTableHeader>
+                  <SortableTableHeader active={monitoringSortKey === 'delivered'} direction={monitoringSortDirection} onClick={() => toggleMonitoringSort('delivered')} className="px-3 py-3">
+                    {t('monitoring.delivered')}
+                  </SortableTableHeader>
+                  <SortableTableHeader active={monitoringSortKey === 'read'} direction={monitoringSortDirection} onClick={() => toggleMonitoringSort('read')} className="px-3 py-3">
+                    {t('monitoring.read')}
+                  </SortableTableHeader>
+                  <SortableTableHeader active={monitoringSortKey === 'linksOpened'} direction={monitoringSortDirection} onClick={() => toggleMonitoringSort('linksOpened')} className="px-3 py-3">
+                    {t('monitoring.linksOpened')}
+                  </SortableTableHeader>
+                  <SortableTableHeader active={monitoringSortKey === 'remindersSent'} direction={monitoringSortDirection} onClick={() => toggleMonitoringSort('remindersSent')} className="px-3 py-3">
+                    {t('monitoring.remindersSent')}
+                  </SortableTableHeader>
+                  <SortableTableHeader active={monitoringSortKey === 'addressChanged'} direction={monitoringSortDirection} onClick={() => toggleMonitoringSort('addressChanged')} className="px-3 py-3">
+                    {t('monitoring.addressChanged')}
+                  </SortableTableHeader>
+                  <SortableTableHeader active={monitoringSortKey === 'gps'} direction={monitoringSortDirection} onClick={() => toggleMonitoringSort('gps')} className="px-3 py-3">
+                    {t('monitoring.gps')}
+                  </SortableTableHeader>
+                  <SortableTableHeader active={monitoringSortKey === 'locationValid'} direction={monitoringSortDirection} onClick={() => toggleMonitoringSort('locationValid')} className="px-3 py-3">
+                    {t('monitoring.locationValid')}
+                  </SortableTableHeader>
+                  <SortableTableHeader active={monitoringSortKey === 'failed'} direction={monitoringSortDirection} onClick={() => toggleMonitoringSort('failed')} className="px-3 py-3">
+                    {t('monitoring.failed')}
+                  </SortableTableHeader>
                   <th className="px-3 py-3">{t('monitoring.action')}</th>
                 </tr>
               </thead>
@@ -238,6 +334,8 @@ export const MonitoringView: React.FC = () => {
                           setSelectedCampaign(campaign);
                           setRecipientPage(1);
                           setRecipientCursors({});
+                          setRecipientSortKey('recipient');
+                          setRecipientSortDirection('asc');
                         }}
                         className="whitespace-nowrap rounded-lg border border-indigo-200 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
                       >
@@ -282,14 +380,37 @@ export const MonitoringView: React.FC = () => {
             <table className="min-w-[1350px] w-full text-left text-xs">
               <thead className="whitespace-nowrap bg-indigo-50/60 text-[10px] uppercase tracking-wider text-slate-500 dark:bg-indigo-950/20 dark:text-slate-400">
                 <tr>
-                  <th className="px-4 py-3">{t('monitoring.recipient')}</th>
-                  <th className="px-3 py-3">{t('monitoring.deliveryStatus')}</th>
-                  <th className="px-3 py-3">{t('monitoring.linkStatus')}</th>
-                  <th className="px-3 py-3">{t('monitoring.addressChanged')}</th>
-                  <th className="px-3 py-3">{t('monitoring.gps')}</th>
-                  <th className="px-3 py-3">{t('monitoring.locationValid')}</th>
-                  <th className="px-3 py-3">{t('monitoring.confirmed')}</th>
-                  <th className="px-3 py-3">{t('monitoring.reminderCount')}</th>
+                  {(
+                    [
+                      ['recipient', t('monitoring.recipient'), 'px-4'],
+                      ['deliveryStatus', t('monitoring.deliveryStatus'), 'px-3'],
+                      ['linkStatus', t('monitoring.linkStatus'), 'px-3'],
+                      ['addressChanged', t('monitoring.addressChanged'), 'px-3'],
+                      ['gps', t('monitoring.gps'), 'px-3'],
+                      ['locationValid', t('monitoring.locationValid'), 'px-3'],
+                      ['confirmed', t('monitoring.confirmed'), 'px-3'],
+                      ['reminderCount', t('monitoring.reminderCount'), 'px-3'],
+                    ] as Array<[RecipientSortKey, string, string]>
+                  ).map(([key, label, padding]) => (
+                    <SortableTableHeader
+                      key={key}
+                      active={recipientSortKey === key}
+                      direction={recipientSortDirection}
+                      onClick={() => {
+                        if (recipientSortKey === key) {
+                          setRecipientSortDirection((direction) => (direction === 'asc' ? 'desc' : 'asc'));
+                        } else {
+                          setRecipientSortKey(key);
+                          setRecipientSortDirection('asc');
+                        }
+                        setRecipientPage(1);
+                        setRecipientCursors({});
+                      }}
+                      className={`${padding} py-3`}
+                    >
+                      {label}
+                    </SortableTableHeader>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

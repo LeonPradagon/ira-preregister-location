@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../i18n';
 import { AdminManagedUser, api } from '../../lib/apiClient';
 import { confirmAction, showActionError, showActionSuccess } from '../../lib/swal';
+import { SortableTableHeader, sortTableRows, TableSortDirection } from '../common/AdminTable';
 
 type UserForm = { name: string; email: string; password: string; role: string; department: string };
 const emptyForm: UserForm = { name: '', email: '', password: '', role: 'VIEWER', department: '' };
@@ -22,8 +23,31 @@ export const UserManagementView: React.FC = () => {
   const [editing, setEditing] = useState<AdminManagedUser | null>(null);
   const [form, setForm] = useState<UserForm>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [sortKey, setSortKey] = useState<'user' | 'role' | 'department' | 'status'>('user');
+  const [sortDirection, setSortDirection] = useState<TableSortDirection>('asc');
 
   const roleLabel = useMemo(() => (role: string) => t(`users.role.${role}`), [t]);
+  const sortedUsers = useMemo(
+    () =>
+      sortTableRows(
+        users,
+        (user) => {
+          if (sortKey === 'user') return user.name;
+          if (sortKey === 'role') return user.role;
+          if (sortKey === 'department') return user.department;
+          return user.disabledAt ? 0 : 1;
+        },
+        sortDirection,
+      ),
+    [sortDirection, sortKey, users],
+  );
+  const toggleSort = (nextKey: 'user' | 'role' | 'department' | 'status') => {
+    if (sortKey === nextKey) setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(nextKey);
+      setSortDirection('asc');
+    }
+  };
   const load = async () => {
     setLoading(true);
     setError(null);
@@ -179,15 +203,23 @@ export const UserManagementView: React.FC = () => {
             <table className="w-full min-w-[760px] text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
                 <tr>
-                  <th className="px-4 py-3">{t('users.user')}</th>
-                  <th className="px-4 py-3">{t('users.role')}</th>
-                  <th className="px-4 py-3">{t('users.department')}</th>
-                  <th className="px-4 py-3">{t('users.status')}</th>
+                  <SortableTableHeader active={sortKey === 'user'} direction={sortDirection} onClick={() => toggleSort('user')} className="px-4 py-3">
+                    {t('users.user')}
+                  </SortableTableHeader>
+                  <SortableTableHeader active={sortKey === 'role'} direction={sortDirection} onClick={() => toggleSort('role')} className="px-4 py-3">
+                    {t('users.role')}
+                  </SortableTableHeader>
+                  <SortableTableHeader active={sortKey === 'department'} direction={sortDirection} onClick={() => toggleSort('department')} className="px-4 py-3">
+                    {t('users.department')}
+                  </SortableTableHeader>
+                  <SortableTableHeader active={sortKey === 'status'} direction={sortDirection} onClick={() => toggleSort('status')} className="px-4 py-3">
+                    {t('users.status')}
+                  </SortableTableHeader>
                   <th className="px-4 py-3 text-right">{t('table.action')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {users.map((user) => (
+                {sortedUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
