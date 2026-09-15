@@ -36,7 +36,10 @@ import { RequestAdmin } from '../../common/request-user.js';
 import { auth } from '../../auth/auth.js';
 import { WhatsAppPort } from '../../integrations/whatsapp/whatsapp.port.js';
 import { assertTransition } from '../verification/state-machine.js';
-import { ValidationConfigService } from '../../config/validation-config.service.js';
+import {
+  MAX_WHATSAPP_DAILY_SEND_LIMIT,
+  ValidationConfigService,
+} from '../../config/validation-config.service.js';
 import { getPublicWebOrigin } from '../../config/public-origin.js';
 import { formatWhatsAppDateTime, hashPhone, nextAllowedSendAt } from '../../integrations/whatsapp/whatsapp.policy.js';
 import { createVerificationToken } from '../verification/verification-token.js';
@@ -621,6 +624,22 @@ export class AdminService {
         campaignAvailable: query.campaignAvailable,
       },
       async () => {
+        // Campaign selection can never send more than the configured WhatsApp
+        // daily limit. Counting every eligible customer makes this endpoint
+        // scan the whole customer/address dataset, even though the UI and
+        // campaign creation only need to know whether that limit is reached.
+        if (query.campaignAvailable) {
+          const candidateCount = db
+            .select({ id: customers.id })
+            .from(customers)
+            .where(where)
+            .limit(MAX_WHATSAPP_DAILY_SEND_LIMIT + 1)
+            .as('candidate_count');
+          const [{ total }] = await db
+            .select({ total: sql<number>`count(*)` })
+            .from(candidateCount);
+          return Math.min(Number(total), MAX_WHATSAPP_DAILY_SEND_LIMIT);
+        }
         const [{ total }] = await db
           .select({ total: sql<number>`count(*)` })
           .from(customers)
