@@ -380,6 +380,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
           {canPerformReview &&
             (session.verificationStatus === 'MANUAL_REVIEW' ||
               session.verificationStatus === 'CUSTOMER_DATA_MISMATCH' ||
+              session.verificationStatus === 'LOCATION_MISMATCH' ||
               (session.verificationStatus === 'REMINDER_LIMIT_REACHED' && cycleExhausted)) && (
               <button
                 type="button"
@@ -387,7 +388,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                 className="px-3.5 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg text-xs font-medium shadow-xs flex items-center gap-1.5 transition-all"
               >
                 <ShieldCheck className="w-4 h-4" />
-                <span>Buka pemeriksaan tim</span>
+                <span>Approval manual</span>
               </button>
             )}
         </div>
@@ -558,8 +559,19 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                     className="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700 text-xs space-y-1"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-gray-900 dark:text-white">
-                        Pengingat #{rem.reminderNumber} ({rem.channel})
+                      <span className="flex flex-wrap items-center gap-1.5 font-semibold text-gray-900 dark:text-white">
+                        <span>Pengingat #{rem.reminderNumber} ({rem.channel})</span>
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                            rem.reminderSource === 'UNOPENED_LINK'
+                              ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300'
+                              : rem.reminderSource === 'ADMIN_MANUAL'
+                                ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                                : 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300'
+                          }`}
+                        >
+                          {t(`reminders.source.${rem.reminderSource ?? 'CUSTOMER_SELECTED'}`)}
+                        </span>
                       </span>
                       <span
                         className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-medium ${

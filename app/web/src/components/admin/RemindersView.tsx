@@ -14,7 +14,7 @@ import {
 import { mapApiCustomer, mapApiSession, useApp } from '../../context/AppContext';
 import { api } from '../../lib/apiClient';
 import { formatAppDateTime } from '../../lib/dateTime';
-import { Customer, Reminder, ReminderStatus, VerificationSession } from '../../types';
+import { Customer, Reminder, ReminderSource, ReminderStatus, VerificationSession } from '../../types';
 import {
   AdminTable,
   SortableTableHeader,
@@ -48,6 +48,16 @@ const StatusIcon: React.FC<{ status: ReminderStatus }> = ({ status }) => {
   if (status === 'CANCELLED' || status === 'LIMIT_REACHED') return <AlertTriangle className="h-3.5 w-3.5" />;
   return <CalendarClock className="h-3.5 w-3.5" />;
 };
+
+const sourceClassName = (source: ReminderSource) => {
+  if (source === 'UNOPENED_LINK')
+    return 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300';
+  if (source === 'ADMIN_MANUAL')
+    return 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200';
+  return 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300';
+};
+
+const sourceIcon = (source: ReminderSource) => (source === 'UNOPENED_LINK' ? '⚙' : source === 'ADMIN_MANUAL' ? '✦' : '✓');
 
 export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerification }) => {
   const { validationConfig, dashboardSummary } = useApp();
@@ -253,6 +263,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerificati
             <SortableTableHeader active={sortKey === 'step'} direction={sortDirection} onClick={() => toggleSort('step')} className="px-4 py-3">
               {t('reminders.step')}
             </SortableTableHeader>
+            <th className="px-4 py-3">{t('reminders.source')}</th>
             <SortableTableHeader active={sortKey === 'recipient'} direction={sortDirection} onClick={() => toggleSort('recipient')} className="px-4 py-3">
               {t('reminders.recipient')}
             </SortableTableHeader>
@@ -277,6 +288,19 @@ export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerificati
                   #{reminder.reminderNumber} / {validationConfig.MAX_REMINDERS_PER_SESSION}
                 </span>
                 <div className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">{t('reminders.step')}</div>
+              </td>
+              <td className="px-4 py-3.5 align-top">
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${sourceClassName(
+                    reminder.reminderSource ?? 'CUSTOMER_SELECTED',
+                  )}`}
+                >
+                  <span aria-hidden="true">{sourceIcon(reminder.reminderSource ?? 'CUSTOMER_SELECTED')}</span>
+                  {t(`reminders.source.${reminder.reminderSource ?? 'CUSTOMER_SELECTED'}`)}
+                </span>
+                <div className="mt-1 text-[10px] leading-4 text-slate-500 dark:text-slate-400">
+                  {t(`reminders.sourceHelp.${reminder.reminderSource ?? 'CUSTOMER_SELECTED'}`)}
+                </div>
               </td>
               <td className="px-4 py-3.5 align-top">
                 <div className="flex items-center gap-1.5 text-sm font-medium text-slate-800 dark:text-slate-200">
@@ -318,7 +342,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerificati
           ))}
           {loading && (
             <tr>
-              <td colSpan={6} className="px-4 py-10 text-center text-xs text-slate-500">
+              <td colSpan={7} className="px-4 py-10 text-center text-xs text-slate-500">
                 <div className="flex flex-col items-center gap-2">
                   <AppLoader size={64} label={t('table.loadingReminders')} />
                   <span>{t('table.loadingReminders')}</span>
@@ -328,14 +352,14 @@ export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerificati
           )}
           {!loading && error && (
             <tr>
-              <td colSpan={6} className="px-4 py-10 text-center text-xs text-rose-600">
+              <td colSpan={7} className="px-4 py-10 text-center text-xs text-rose-600">
                 {error}
               </td>
             </tr>
           )}
           {!loading && !error && !rows.length && (
             <tr>
-              <td colSpan={6} className="px-4 py-10 text-center text-xs text-slate-400">
+              <td colSpan={7} className="px-4 py-10 text-center text-xs text-slate-400">
                 {t('reminders.noItems')}
               </td>
             </tr>

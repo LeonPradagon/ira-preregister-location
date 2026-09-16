@@ -327,6 +327,7 @@ export interface VerificationReview {
 }
 
 export type ReminderStatus = 'SCHEDULED' | 'PROCESSING' | 'SENT' | 'FAILED' | 'CANCELLED' | 'LIMIT_REACHED';
+export type ReminderSource = 'CUSTOMER_SELECTED' | 'UNOPENED_LINK' | 'ADMIN_MANUAL';
 export type ReminderPreference = 'IN_1_HOUR' | 'TONIGHT' | 'TOMORROW_MORNING' | 'DEFAULT';
 
 export interface Reminder {
@@ -334,6 +335,7 @@ export interface Reminder {
   sessionId: string;
   reminderNumber: number; // 1, 2, 3
   channel: 'WHATSAPP';
+  reminderSource: ReminderSource;
   scheduledAt: string;
   sentAt?: string;
   status: ReminderStatus;

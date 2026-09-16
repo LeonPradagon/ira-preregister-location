@@ -1710,6 +1710,7 @@ export class AdminService {
         channel: 'WHATSAPP',
         scheduledAt,
         status: 'SCHEDULED',
+        reminderSource: 'ADMIN_MANUAL',
         messageText: `Halo ${detail.customer.name}, ini pengingat verifikasi lokasi Anda. Pengingat ${reminderNumber} dari ${max}. Tautan baru berlaku maksimal ${config.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`,
         retryCount: 0,
         createdAt: scheduledAt,

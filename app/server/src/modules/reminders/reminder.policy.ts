@@ -6,7 +6,7 @@ const AUTOMATIC_REMINDER_INTERVAL_DAYS = 2;
 const REMINDER_EXPIRY_BUFFER_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export type ReminderSource = 'CUSTOMER_SELECTED' | 'UNOPENED_LINK';
+export type ReminderSource = 'CUSTOMER_SELECTED' | 'UNOPENED_LINK' | 'ADMIN_MANUAL';
 
 export type ReminderPreference = 'IN_1_HOUR' | 'TONIGHT' | 'TOMORROW_MORNING' | 'DEFAULT';
 
