@@ -27,7 +27,7 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
   referencePrecision = 'ROOFTOP',
   capturedLocation,
   capturedLabel = 'Titik GPS Customer',
-  homeRadiusMeters = 50,
+  homeRadiusMeters = 300,
   distanceMeters,
   isMatch = true,
   heightClass = 'h-[360px] md:h-[420px]',

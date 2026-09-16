@@ -244,10 +244,10 @@ export const ValidationSettingsView: React.FC = () => {
                 <input
                   type="number"
                   min="10"
-                  max="200"
+                  max="300"
                   disabled={!canEditSettings}
                   value={formData.HOME_RADIUS_METERS}
-                  onChange={(e) => handleChangeNumber('HOME_RADIUS_METERS', parseInt(e.target.value) || 50)}
+                  onChange={(e) => handleChangeNumber('HOME_RADIUS_METERS', parseInt(e.target.value) || 300)}
                   className="w-32 p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
                 />
                 <span className="text-gray-500 dark:text-gray-400">meter</span>

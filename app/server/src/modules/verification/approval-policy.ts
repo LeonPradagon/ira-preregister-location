@@ -47,6 +47,7 @@ export function shouldAutoApprove(input: AutoApprovalPolicyInput): boolean {
 export interface CoordinateMatchInput {
   geocodingAvailable: boolean;
   referencePrecision: string;
+  houseNumberMatch?: boolean;
   distanceFromReferenceMeters: number | null;
   homeRadiusMeters: number;
   gpsAccuracyMeters: number;
@@ -55,16 +56,17 @@ export interface CoordinateMatchInput {
 }
 
 /**
- * A precise master coordinate is enough to establish a location match when
- * the reverse-geocoder is temporarily unavailable. Unstable or approximate
- * coordinates must still go through the normal review path.
+ * A precise master coordinate can establish a location match only when the
+ * reverse-geocoder also identifies the registered house number. A road-only,
+ * missing, or different house number keeps the result in the review path.
  */
 export function getCoordinateMatchScore(input: CoordinateMatchInput): number {
   const preciseReference = ['EXACT_MASTER', 'ROOFTOP', 'HOUSE'].includes(input.referencePrecision);
   const usableGps = input.gpsAccuracyMeters <= input.gpsMaxAccuracyMeters && input.sampleSpreadMeters <= 100;
   const insideHomeRadius =
     input.distanceFromReferenceMeters != null && input.distanceFromReferenceMeters <= input.homeRadiusMeters;
-  return !input.geocodingAvailable && preciseReference && usableGps && insideHomeRadius ? 1 : 0;
+  const identifiesResidentialPoint = input.houseNumberMatch === true;
+  return preciseReference && usableGps && insideHomeRadius && identifiesResidentialPoint ? 1 : 0;
 }
 
 const canAutoApproveEngineResult = (result: string, reasonCodes: string[]): boolean =>

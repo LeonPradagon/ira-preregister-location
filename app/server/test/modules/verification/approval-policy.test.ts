@@ -69,6 +69,7 @@ describe('automatic approval policy', () => {
       getCoordinateMatchScore({
         geocodingAvailable: false,
         referencePrecision: 'HOUSE',
+        houseNumberMatch: true,
         distanceFromReferenceMeters: 12,
         homeRadiusMeters: 50,
         gpsAccuracyMeters: 8,
@@ -80,11 +81,42 @@ describe('automatic approval policy', () => {
       getCoordinateMatchScore({
         geocodingAvailable: false,
         referencePrecision: 'STREET',
+        houseNumberMatch: true,
         distanceFromReferenceMeters: 12,
         homeRadiusMeters: 50,
         gpsAccuracyMeters: 8,
         gpsMaxAccuracyMeters: 30,
         sampleSpreadMeters: 14,
+      }),
+    ).toBe(0);
+  });
+
+  it('uses a trusted in-radius coordinate match even when reverse geocoding is available', () => {
+    expect(
+      getCoordinateMatchScore({
+        geocodingAvailable: true,
+        referencePrecision: 'HOUSE',
+        houseNumberMatch: true,
+        distanceFromReferenceMeters: 5.3,
+        homeRadiusMeters: 300,
+        gpsAccuracyMeters: 27.29,
+        gpsMaxAccuracyMeters: 30,
+        sampleSpreadMeters: 20,
+      }),
+    ).toBe(1);
+  });
+
+  it('does not auto-match a point that reverse-geocoding identifies only as a road', () => {
+    expect(
+      getCoordinateMatchScore({
+        geocodingAvailable: true,
+        referencePrecision: 'HOUSE',
+        houseNumberMatch: undefined,
+        distanceFromReferenceMeters: 5.3,
+        homeRadiusMeters: 300,
+        gpsAccuracyMeters: 27.29,
+        gpsMaxAccuracyMeters: 30,
+        sampleSpreadMeters: 20,
       }),
     ).toBe(0);
   });

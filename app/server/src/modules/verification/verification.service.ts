@@ -408,6 +408,7 @@ export class VerificationService {
     const coordinateMatchScore = getCoordinateMatchScore({
       geocodingAvailable,
       referencePrecision: decision.referencePrecision,
+      houseNumberMatch: decision.houseNumberMatch,
       distanceFromReferenceMeters: decision.distanceFromReferenceMeters,
       homeRadiusMeters: config.HOME_RADIUS_METERS,
       gpsAccuracyMeters: decision.bestSample.accuracyMeters,
@@ -417,7 +418,11 @@ export class VerificationService {
     if (coordinateMatchScore >= 0.9) {
       decision.result = 'LOCATION_VALID';
       decision.addressScore = Math.max(decision.addressScore, coordinateMatchScore);
-      decision.reasonCodes = ['COORDINATE_MATCHED', 'GEOCODING_UNAVAILABLE', 'LOCATION_VALID'];
+      decision.reasonCodes = [
+        'COORDINATE_MATCHED',
+        ...(geocodingAvailable ? [] : ['GEOCODING_UNAVAILABLE']),
+        'LOCATION_VALID',
+      ];
     } else if (
       !geocodingAvailable &&
       decision.result !== 'WAITING_FOR_HOME' &&

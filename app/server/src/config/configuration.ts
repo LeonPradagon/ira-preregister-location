@@ -22,7 +22,7 @@ export const envSchema = z.object({
   WEB_ORIGIN: z.string().url(),
   CORS_ORIGINS: optionalString,
   GPS_MAX_ACCURACY_METERS: z.coerce.number().positive().default(30),
-  HOME_RADIUS_METERS: z.coerce.number().positive().default(50),
+  HOME_RADIUS_METERS: z.coerce.number().positive().default(300),
   MAX_LOCATION_ATTEMPTS: z.coerce.number().int().min(1).max(3).default(3),
   MAX_REMINDERS_PER_SESSION: z.coerce.number().int().min(1).max(3).default(3),
   COORDINATE_DISPLAY_DECIMALS: z.coerce.number().int().min(0).max(8).default(6),

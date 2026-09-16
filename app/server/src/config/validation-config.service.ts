@@ -59,7 +59,7 @@ export class ValidationConfigService {
   private fromEnvironment(): RuntimeValidationConfig {
     return {
       GPS_MAX_ACCURACY_METERS: Number(process.env.GPS_MAX_ACCURACY_METERS ?? 30),
-      HOME_RADIUS_METERS: Number(process.env.HOME_RADIUS_METERS ?? 50),
+      HOME_RADIUS_METERS: Number(process.env.HOME_RADIUS_METERS ?? 300),
       STREET_MATCH_THRESHOLD: Number(process.env.STREET_MATCH_THRESHOLD ?? 0.9),
       STREET_SOFT_MATCH_THRESHOLD: Number(process.env.STREET_SOFT_MATCH_THRESHOLD ?? 0.7),
       ADDRESS_SCORE_THRESHOLD: Number(process.env.ADDRESS_SCORE_THRESHOLD ?? 0.9),

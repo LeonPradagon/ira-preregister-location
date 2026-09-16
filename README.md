@@ -105,7 +105,7 @@ Migration SQL bernomor dijalankan berurutan dan dicatat di `app_migrations`. Bas
 - **Reminder:** customer memilih tanggal/jam. Worker mengikuti `REMINDER_TIMEZONE`, batas percobaan, dan masa berlaku link; link baru menggantikan link sebelumnya.
 - **Akses:** Better Auth dan role `SUPER_ADMIN`, `ADMIN`, `REVIEWER`, `VIEWER`. Pengelolaan pengguna tersedia bagi super admin.
 
-Aturan lokasi tersedia di Validation Settings dan environment: `GPS_MAX_ACCURACY_METERS`, `HOME_RADIUS_METERS`, `STREET_MATCH_THRESHOLD`, `ADDRESS_SCORE_THRESHOLD`, dan `ENABLE_AUTO_APPROVAL`. Persetujuan otomatis memerlukan konfirmasi data dan skor alamat minimal 90%; hasil yang belum memenuhi syarat ditahan untuk pemeriksaan.
+Aturan lokasi tersedia di Validation Settings dan environment: `GPS_MAX_ACCURACY_METERS`, `HOME_RADIUS_METERS`, `STREET_MATCH_THRESHOLD`, `ADDRESS_SCORE_THRESHOLD`, dan `ENABLE_AUTO_APPROVAL`. Dengan auto-approval aktif, konfirmasi data, GPS yang stabil/akurat, koordinat master presisi, dan jarak dalam `HOME_RADIUS_METERS` akan diverifikasi otomatis berdasarkan kecocokan koordinat; hasil yang belum memenuhi syarat ditahan untuk pemeriksaan.
 
 Untuk Mekari/Qontak, isi `WHATSAPP_PROVIDER=mekari`, `WHATSAPP_BASE_URL`, credential HMAC, channel integration ID, dan template ID undangan/reminder. Nama serta parameter template harus sesuai konfigurasi Qontak yang sudah disetujui. Webhook delivery: `POST /v1/webhooks/whatsapp/status` dengan secret webhook. Opt-out aktif selalu memblokir pengiriman. Metadata opt-in yang tersedia tetap disimpan; aplikasi tidak meminta konfirmasi opt-in WhatsApp tambahan.
 

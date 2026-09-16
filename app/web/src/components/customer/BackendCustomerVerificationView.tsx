@@ -330,7 +330,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       ? { latitude: simulationReferenceLatitude, longitude: simulationReferenceLongitude }
       : null;
   const simulationReferencePrecision = simulationParams?.get('referencePrecision') || 'UNKNOWN';
-  const simulationHomeRadiusMeters = Number(simulationParams?.get('homeRadiusMeters')) || 50;
+  const simulationHomeRadiusMeters = Number(simulationParams?.get('homeRadiusMeters')) || 300;
   const simulationGpsMaxAccuracyMeters = Number(simulationParams?.get('gpsMaxAccuracyMeters')) || 30;
   const simulationConfig = {
     homeRadiusMeters: simulationHomeRadiusMeters,
@@ -508,7 +508,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
           return;
         }
         const simulationConfig = simulationContext.address.simulationConfig ?? {
-          homeRadiusMeters: 50,
+          homeRadiusMeters: 300,
           gpsMaxAccuracyMeters: 30,
           manualReview: true,
           autoApprovalEnabled: false,
