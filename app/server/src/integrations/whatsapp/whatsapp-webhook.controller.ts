@@ -27,16 +27,24 @@ export class WhatsAppWebhookController {
   }
 }
 
-function normalizeDeliveryPayload(body: unknown): Record<string, unknown> {
+export function normalizeDeliveryPayload(body: unknown): Record<string, unknown> {
   if (!body || typeof body !== 'object') return {};
   const payload = body as Record<string, unknown>;
-  if (typeof payload.providerMessageId === 'string' || typeof payload.messageId === 'string') {
+  const directProviderMessageId = firstString(
+    payload.providerMessageId,
+    payload.messageId,
+    payload.message_id,
+    payload.broadcastId,
+    payload.broadcast_id,
+    payload.id,
+  );
+  if (directProviderMessageId) {
     return {
-      providerMessageId: payload.providerMessageId ?? payload.messageId,
+      providerMessageId: directProviderMessageId,
       status: normalizeStatus(payload.status),
       error: formatWebhookError(payload.error, payload.errorCode ?? payload.code),
       errorCode: normalizeErrorCode(payload.errorCode ?? payload.code),
-      occurredAt: payload.occurredAt,
+      occurredAt: normalizeTimestamp(payload.occurredAt ?? payload.timestamp ?? payload.createdAt ?? payload.created_at),
     };
   }
   const entry = Array.isArray(payload.entry) ? (payload.entry[0] as Record<string, unknown> | undefined) : undefined;
@@ -49,16 +57,39 @@ function normalizeDeliveryPayload(body: unknown): Record<string, unknown> {
   const firstError = Array.isArray(status.errors)
     ? (status.errors[0] as Record<string, unknown> | undefined)
     : undefined;
+  const providerMessageId = firstString(
+    status.id,
+    status.providerMessageId,
+    status.messageId,
+    status.message_id,
+    status.broadcastId,
+    status.broadcast_id,
+    status.external_id,
+  );
   return {
-    providerMessageId: status.id,
+    providerMessageId,
     status: normalizeStatus(status.status),
     error: formatWebhookError(firstError ?? status.errors, firstError?.code ?? status.code),
     errorCode: normalizeErrorCode(firstError?.code ?? status.code),
-    occurredAt:
-      typeof status.timestamp === 'string' && /^\d+$/.test(status.timestamp)
-        ? new Date(Number(status.timestamp) * 1000).toISOString()
-        : undefined,
+    occurredAt: normalizeTimestamp(status.timestamp ?? status.occurredAt ?? status.created_at),
   };
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  return values.find((value): value is string => typeof value === 'string' && value.trim().length > 0)?.trim();
+}
+
+function normalizeTimestamp(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const milliseconds = Math.abs(value) < 1_000_000_000_000 ? value * 1000 : value;
+    const date = new Date(milliseconds);
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  }
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return normalizeTimestamp(Number(trimmed));
+  const date = new Date(trimmed);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
 function normalizeErrorCode(value: unknown): string | undefined {

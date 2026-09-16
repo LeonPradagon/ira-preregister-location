@@ -12,6 +12,7 @@ import {
   verificationCampaignItems,
   verificationCampaigns,
   verificationSessions,
+  whatsappDeliveryLogs,
 } from '../../db/schema/index.js';
 import {
   AdminListQueryInput,
@@ -436,6 +437,10 @@ export class CampaignService {
           addressDetail: customerAddresses.addressDetail,
           landmark: customerAddresses.landmark,
         },
+        delivery: {
+          deliveredAt: whatsappDeliveryLogs.deliveredAt,
+          readAt: whatsappDeliveryLogs.readAt,
+        },
         addressChanged: sql<boolean>`
           ${verificationSessions.verificationStatus} in ('ADDRESS_EDITING', 'ADDRESS_PROPOSED')
           or ${verificationSessions.currentAddressId} <> ${verificationCampaignItems.addressId}
@@ -450,6 +455,10 @@ export class CampaignService {
       .innerJoin(customers, eq(customers.id, verificationCampaignItems.customerId))
       .innerJoin(verificationSessions, eq(verificationSessions.id, verificationCampaignItems.sessionId))
       .leftJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
+      .leftJoin(
+        whatsappDeliveryLogs,
+        eq(whatsappDeliveryLogs.providerMessageId, verificationCampaignItems.providerMessageId),
+      )
       .where(eq(verificationCampaignItems.campaignId, campaignId))
       .orderBy(desc(verificationCampaignItems.createdAt), desc(verificationCampaignItems.id));
 
@@ -497,8 +506,8 @@ export class CampaignService {
         scheduled_at: exportDate(row.item.scheduledAt),
         processing_started_at: exportDate(row.item.processingStartedAt),
         sent_at: exportDate(row.item.sentAt),
-        delivered_at: exportDate(row.item.deliveredAt),
-        read_at: exportDate(row.item.readAt),
+        delivered_at: exportDate(row.item.deliveredAt ?? row.delivery?.deliveredAt),
+        read_at: exportDate(row.item.readAt ?? row.delivery?.readAt),
         failed_at: exportDate(row.item.failedAt),
         provider_message_id: row.item.providerMessageId,
         retry_count: row.item.retryCount,
