@@ -76,6 +76,7 @@ export const campaignExportStatusLabels: Record<string, string> = {
 
 const xlsxContentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const csvContentType = 'text/csv; charset=utf-8';
+const omittedSummaryFields = new Set(['Sudah terkirim', 'Sudah dibaca']);
 
 const dateColumns = new Set([
   'campaign_scheduled_at',
@@ -178,7 +179,10 @@ export async function createCampaignXlsx(
   workbook.creator = 'IRA Preregist';
   const summary = workbook.addWorksheet('Campaign Summary');
   summary.columns = [{ header: CAMPAIGN_SUMMARY_HEADERS[0], key: 'field', width: 34 }, { header: CAMPAIGN_SUMMARY_HEADERS[1], key: 'value', width: 72 }];
-  for (const row of summaryRows) summary.addRow([row.field ?? '', row.value ?? '']);
+  for (const row of summaryRows) {
+    if (omittedSummaryFields.has(String(row.field ?? ''))) continue;
+    summary.addRow([row.field ?? '', row.value ?? '']);
+  }
   summary.getRow(1).eachCell((cell) => {
     cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };

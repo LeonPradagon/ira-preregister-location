@@ -263,7 +263,7 @@ export const MonitoringView: React.FC = () => {
           <Metric label={t('monitoring.campaigns')} value={summary.campaigns} icon={<BarChart3 className="h-5 w-5" />} tone="bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300" />
           <Metric label={t('monitoring.target')} value={summary.target} icon={<Send className="h-5 w-5" />} tone="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" />
           <Metric label={t('monitoring.sent')} value={summary.sent} icon={<CheckCircle2 className="h-5 w-5" />} tone="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300" />
-          <Metric label={t('monitoring.delivered')} value={summary.delivered} icon={<CheckCircle2 className="h-5 w-5" />} tone="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300" />
+          {/* <Metric label={t('monitoring.delivered')} value={summary.delivered} icon={<CheckCircle2 className="h-5 w-5" />} tone="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300" /> */}
           <Metric label={t('monitoring.linksOpened')} value={summary.linksOpened} icon={<ExternalLink className="h-5 w-5" />} tone="bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300" />
           <Metric label={t('monitoring.addressChanged')} value={summary.addressChanged} icon={<MapPin className="h-5 w-5" />} tone="bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300" />
           <Metric label={t('monitoring.remindersSent')} value={summary.reminders.sent} icon={<Clock3 className="h-5 w-5" />} tone="bg-orange-50 text-orange-600 dark:bg-orange-950/40 dark:text-orange-300" />

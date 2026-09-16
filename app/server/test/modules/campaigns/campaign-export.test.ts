@@ -25,7 +25,11 @@ describe('campaign export builders', () => {
 
   it('creates an XLSX workbook with summary and detailed monitoring sheets', async () => {
     const workbookBuffer = await createCampaignXlsx(
-      [{ field: 'campaign_id', value: 'campaign-1' }],
+      [
+        { field: 'campaign_id', value: 'campaign-1' },
+        { field: 'Sudah terkirim', value: 1 },
+        { field: 'Sudah dibaca', value: 1 },
+      ],
       [detailRow],
     );
     const workbook = new ExcelJS.Workbook();
@@ -34,6 +38,12 @@ describe('campaign export builders', () => {
       'Campaign Summary',
       'Data Penerima',
     ]);
+    const summaryFields = workbook
+      .getWorksheet('Campaign Summary')!
+      .getColumn(1)
+      .values.map((value) => String(value ?? ''));
+    expect(summaryFields).not.toContain('Sudah terkirim');
+    expect(summaryFields).not.toContain('Sudah dibaca');
     expect(workbook.getWorksheet('Data Penerima')?.getRow(2).getCell(1).value).toBe('Blast September');
   });
 });

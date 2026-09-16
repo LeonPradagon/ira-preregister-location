@@ -590,8 +590,6 @@ export class CampaignService {
       { field: 'Jumlah target', value: campaign.targetCount },
       { field: 'Jumlah penerima yang tersedia', value: detailRows.length },
       { field: 'Sudah diterima provider', value: itemRows.filter((row) => ['SENT', 'DELIVERED', 'READ'].includes(row.item.status)).length },
-      { field: 'Sudah terkirim', value: itemRows.filter((row) => ['DELIVERED', 'READ'].includes(row.item.status)).length },
-      { field: 'Sudah dibaca', value: itemRows.filter((row) => row.item.status === 'READ').length },
       { field: 'Gagal atau dihentikan', value: itemRows.filter((row) => ['FAILED', 'PROVIDER_UNAVAILABLE', 'OPTED_OUT'].includes(row.item.status)).length },
       { field: 'Link sudah dibuka', value: itemRows.filter((row) => row.session.openedAt != null).length },
       { field: 'Data sudah dikonfirmasi', value: itemRows.filter((row) => row.session.customerConfirmationStatus === 'CONFIRMED').length },
