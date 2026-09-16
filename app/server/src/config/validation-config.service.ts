@@ -3,6 +3,7 @@ import { desc } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { validationConfigs } from '../db/schema/index.js';
 import { ValidationConfigInput } from '../common/contracts.js';
+import { AUTO_APPROVAL_SCORE_DEFAULT, AUTO_APPROVAL_SCORE_MIN } from './validation-thresholds.js';
 
 export const MAX_WHATSAPP_DAILY_SEND_LIMIT = 10000;
 
@@ -15,6 +16,13 @@ export const normalizeWhatsAppDailySendLimit = (value: unknown, fallback = 1000)
 const normalizePositiveInteger = (value: unknown, fallback: number) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : fallback;
+};
+
+const normalizeAutoApprovalScoreThreshold = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed)
+    ? Math.min(1, Math.max(AUTO_APPROVAL_SCORE_MIN, parsed))
+    : AUTO_APPROVAL_SCORE_DEFAULT;
 };
 
 export interface RuntimeValidationConfig extends Record<string, unknown> {
@@ -55,7 +63,9 @@ export class ValidationConfigService {
       STREET_MATCH_THRESHOLD: Number(process.env.STREET_MATCH_THRESHOLD ?? 0.9),
       STREET_SOFT_MATCH_THRESHOLD: Number(process.env.STREET_SOFT_MATCH_THRESHOLD ?? 0.7),
       ADDRESS_SCORE_THRESHOLD: Number(process.env.ADDRESS_SCORE_THRESHOLD ?? 0.9),
-      AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: Number(process.env.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD ?? 0.9),
+      AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: normalizeAutoApprovalScoreThreshold(
+        process.env.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD,
+      ),
       MAX_LOCATION_ATTEMPTS: Math.min(3, Number(process.env.MAX_LOCATION_ATTEMPTS ?? 3)),
       MAX_REMINDERS_PER_SESSION: Number(process.env.MAX_REMINDERS_PER_SESSION ?? 3),
       COORDINATE_DISPLAY_DECIMALS: Number(process.env.COORDINATE_DISPLAY_DECIMALS ?? 6),
@@ -89,6 +99,9 @@ export class ValidationConfigService {
     return {
       ...merged,
       MAX_LOCATION_ATTEMPTS: Math.min(3, Math.max(1, Number(merged.MAX_LOCATION_ATTEMPTS ?? 3))),
+      AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: normalizeAutoApprovalScoreThreshold(
+        merged.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD,
+      ),
       WHATSAPP_DAILY_SEND_LIMIT: normalizeWhatsAppDailySendLimit(merged.WHATSAPP_DAILY_SEND_LIMIT),
       WHATSAPP_RATE_LIMIT_PER_SECOND: normalizePositiveInteger(merged.WHATSAPP_RATE_LIMIT_PER_SECOND, 1),
       WHATSAPP_MIN_INTERVAL_MINUTES: normalizePositiveInteger(merged.WHATSAPP_MIN_INTERVAL_MINUTES, 60),

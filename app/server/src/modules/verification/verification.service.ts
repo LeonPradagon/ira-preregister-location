@@ -36,6 +36,7 @@ import {
 import { ValidationConfigService } from '../../config/validation-config.service.js';
 import { parseVerificationToken, verifyVerificationToken } from './verification-token.js';
 import { applyApprovalPolicy, getCoordinateMatchScore } from './approval-policy.js';
+import { AUTO_APPROVAL_SCORE_MIN } from '../../config/validation-thresholds.js';
 import { buildVerifiedAddressReference } from './verified-location.js';
 import { canReplaceAddress, requiresLocationConsentForAddressStatus } from './address-change.policy.js';
 import { hashLegacyShortLinkCode, hashShortLinkCode, isShortLinkCode } from './short-link.js';
@@ -431,7 +432,7 @@ export class VerificationService {
     } else if (!geocodingAvailable) {
       decision.reasonCodes = [...decision.reasonCodes, 'GEOCODING_UNAVAILABLE'];
     }
-    const autoApprovalThreshold = Math.max(0.9, config.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD);
+    const autoApprovalThreshold = Math.max(AUTO_APPROVAL_SCORE_MIN, config.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD);
     const approvalDecision = applyApprovalPolicy({
       result: decision.result,
       addressScore: decision.addressScore,

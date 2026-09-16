@@ -1,4 +1,5 @@
 import type { RuntimeValidationConfig } from '../../config/validation-config.service.js';
+import { AUTO_APPROVAL_SCORE_MIN } from '../../config/validation-thresholds.js';
 
 export interface VerificationSimulationConfig {
   homeRadiusMeters: number;
@@ -28,6 +29,6 @@ export function buildVerificationSimulationConfig(config: SimulationConfigSource
     gpsMaxAccuracyMeters: config.GPS_MAX_ACCURACY_METERS,
     manualReview: config.ENABLE_MANUAL_REVIEW,
     autoApprovalEnabled: config.ENABLE_AUTO_APPROVAL,
-    autoApprovalScoreThreshold: Math.max(0.9, config.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD),
+    autoApprovalScoreThreshold: Math.max(AUTO_APPROVAL_SCORE_MIN, config.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD),
   };
 }

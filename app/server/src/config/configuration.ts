@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AUTO_APPROVAL_SCORE_DEFAULT, AUTO_APPROVAL_SCORE_MIN } from './validation-thresholds.js';
 
 const booleanFromEnv = z.preprocess((value) => value === 'true' || value === true, z.boolean());
 const optionalString = z.preprocess((value) => (value === '' ? undefined : value), z.string().optional());
@@ -34,7 +35,11 @@ export const envSchema = z.object({
   REMINDER_DEFAULT_2_HOURS: z.coerce.number().positive().default(24),
   REMINDER_DEFAULT_3_HOURS: z.coerce.number().positive().default(24),
   ADDRESS_SCORE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.9),
-  AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: z.coerce.number().min(0.9).max(1).default(0.9),
+  AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: z.coerce
+    .number()
+    .min(AUTO_APPROVAL_SCORE_MIN)
+    .max(1)
+    .default(AUTO_APPROVAL_SCORE_DEFAULT),
   STREET_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.9),
   STREET_SOFT_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
   ENABLE_CUSTOMER_OTP: booleanFromEnv.default(false),

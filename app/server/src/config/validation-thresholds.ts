@@ -1,0 +1,2 @@
+export const AUTO_APPROVAL_SCORE_MIN = 0.8;
+export const AUTO_APPROVAL_SCORE_DEFAULT = 0.9;

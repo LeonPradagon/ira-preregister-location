@@ -1366,19 +1366,19 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'campaigns.deliveryTitle': 'Status pengiriman untuk setiap pelanggan',
     'campaigns.itemsDescription': 'Daftar ditampilkan bertahap agar halaman tetap ringan.',
     'settings.description': 'Atur batas dan cara sistem memeriksa kecocokan alamat dengan lokasi pelanggan.',
-    'settings.feature.autoApproval': 'Persetujuan otomatis untuk hasil ≥90%',
+    'settings.feature.autoApproval': 'Persetujuan otomatis berdasarkan ambang',
     'settings.feature.autoApprovalDesc':
-      'Jika aktif, hasil dengan kecocokan lokasi minimal 90% dan data yang sudah dikonfirmasi dapat langsung disetujui. Hasil lainnya tetap diperiksa oleh tim.',
+      'Jika aktif, hasil dengan kecocokan lokasi sesuai ambang dan data yang sudah dikonfirmasi dapat langsung disetujui. Hasil lainnya tetap diperiksa oleh tim.',
     'settings.autoApprovalScore': 'Ambang skor persetujuan otomatis',
-    'settings.autoApprovalScoreHelp': 'Minimum 90%. Hasil di bawah ambang ini tetap masuk antrean pemeriksaan manual.',
+    'settings.autoApprovalScoreHelp': 'Minimum 80%. Hasil di bawah ambang ini tetap masuk antrean pemeriksaan manual.',
     'settings.approvalRulesTitle': 'Aturan persetujuan hasil',
     'settings.approvalRulesDescription':
       'Gunakan satu toggle untuk menentukan apakah hasil yang sangat cocok boleh langsung disetujui.',
     'settings.approvalRulesAutoInfo':
-      'Jika aktif: kecocokan lokasi minimal 90% dapat langsung disetujui setelah customer mengonfirmasi data.',
+      'Jika aktif: kecocokan lokasi sesuai ambang dapat langsung disetujui setelah customer mengonfirmasi data.',
     'settings.approvalRulesManualInfo':
       'Jika mati: hasil akan diperiksa oleh tim. Pemeriksaan tim juga menjadi pengaman untuk hasil yang belum memenuhi syarat otomatis.',
-    'settings.approvalRulesSafety': 'Pengaman: hasil di bawah 90% tidak akan disetujui otomatis.',
+    'settings.approvalRulesSafety': 'Pengaman: hasil di bawah ambang yang dipilih tidak akan disetujui otomatis.',
     'settings.enabled': 'Aktif',
     'settings.disabled': 'Mati',
     'settings.feature.manualReview': 'Pemeriksaan tambahan oleh tim',
@@ -1834,19 +1834,19 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'campaigns.itemLoadError': 'Message status could not be loaded.',
     'campaigns.deliveryTitle': 'Message status for each customer',
     'campaigns.itemsDescription': 'The list is shown in stages so the page stays responsive.',
-    'settings.feature.autoApproval': 'Automatic approval',
+    'settings.feature.autoApproval': 'Automatic approval based on threshold',
     'settings.feature.autoApprovalDesc':
-      'When enabled, results with at least a 90% location match and confirmed customer data can be approved immediately. Other results are checked by the team.',
+      'When enabled, results meeting the configured location threshold with confirmed customer data can be approved immediately. Other results are checked by the team.',
     'settings.autoApprovalScore': 'Automatic approval score threshold',
-    'settings.autoApprovalScoreHelp': 'Minimum 90%. Results below this threshold remain in the manual review queue.',
+    'settings.autoApprovalScoreHelp': 'Minimum 80%. Results below this threshold remain in the manual review queue.',
     'settings.approvalRulesTitle': 'Result approval rules',
     'settings.approvalRulesDescription':
       'Use one toggle to decide whether highly matching results can be approved immediately.',
     'settings.approvalRulesAutoInfo':
-      'When enabled: a location match of at least 90% can be approved after the customer confirms the data.',
+      'When enabled: a location match meeting the configured threshold can be approved after the customer confirms the data.',
     'settings.approvalRulesManualInfo':
       'When off: results are checked by the team. Team review is also the safety fallback for results that do not qualify automatically.',
-    'settings.approvalRulesSafety': 'Safety rule: results below 90% will never be approved automatically.',
+    'settings.approvalRulesSafety': 'Safety rule: results below the selected threshold will never be approved automatically.',
     'settings.enabled': 'On',
     'settings.disabled': 'Off',
     'settings.feature.manualReview': 'Additional team review',

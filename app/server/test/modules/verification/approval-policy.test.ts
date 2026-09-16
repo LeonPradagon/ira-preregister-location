@@ -22,16 +22,16 @@ describe('automatic approval policy', () => {
     expect(shouldAutoApprove({ ...base, enableAutoApproval: true })).toBe(true);
   });
 
-  it('accepts the exact 90% automatic approval boundary', () => {
-    expect(shouldAutoApprove({ ...base, enableAutoApproval: true, addressScore: 0.9 })).toBe(true);
+  it('accepts the exact 80% automatic approval boundary', () => {
+    expect(shouldAutoApprove({ ...base, enableAutoApproval: true, addressScore: 0.8, threshold: 0.8 })).toBe(true);
   });
 
   it('requires customer confirmation before approving automatically', () => {
     expect(shouldAutoApprove({ ...base, enableAutoApproval: true, customerConfirmationStatus: 'PENDING' })).toBe(false);
   });
 
-  it('never auto-approves below the hard 90% floor', () => {
-    expect(shouldAutoApprove({ ...base, enableAutoApproval: true, addressScore: 0.89 })).toBe(false);
+  it('never auto-approves below the hard 80% floor', () => {
+    expect(shouldAutoApprove({ ...base, enableAutoApproval: true, addressScore: 0.79, threshold: 0.79 })).toBe(false);
   });
 
   it('holds a passing result for review when it misses the automatic score floor', () => {

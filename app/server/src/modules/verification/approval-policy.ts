@@ -1,3 +1,5 @@
+import { AUTO_APPROVAL_SCORE_MIN } from '../../config/validation-thresholds.js';
+
 export interface AutoApprovalPolicyInput {
   result: string;
   addressScore: number;
@@ -30,7 +32,7 @@ const autoApprovalBlockingReasonCodes = new Set([
 /**
  * Automatic approval has one source of truth: the automatic-approval setting.
  * Manual review remains the safety fallback whenever that setting is off or
- * the result does not meet the hard 90% score floor.
+ * the result does not meet the configured score floor.
  */
 export function shouldAutoApprove(input: AutoApprovalPolicyInput): boolean {
   const matchScore = Math.max(input.addressScore, input.coordinateMatchScore ?? 0);
@@ -38,7 +40,7 @@ export function shouldAutoApprove(input: AutoApprovalPolicyInput): boolean {
     input.enableAutoApproval &&
     input.customerConfirmationStatus === 'CONFIRMED' &&
     input.result === 'LOCATION_VALID' &&
-    matchScore >= Math.max(0.9, input.threshold)
+    matchScore >= Math.max(AUTO_APPROVAL_SCORE_MIN, input.threshold)
   );
 }
 

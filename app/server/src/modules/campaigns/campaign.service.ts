@@ -37,6 +37,7 @@ import {
 } from './campaign-target.policy.js';
 import { campaignEligibleAddressSql } from '../validation/address-completeness.sql.js';
 import { verificationSessionExpiresAt } from '../reminders/reminder.policy.js';
+import { AUTO_APPROVAL_SCORE_MIN } from '../../config/validation-thresholds.js';
 import {
   campaignExportContentTypes,
   campaignExportStatusLabels,
@@ -180,7 +181,7 @@ export class CampaignService {
     query.set('gpsMaxAccuracyMeters', String(config.GPS_MAX_ACCURACY_METERS));
     query.set('manualReview', String(config.ENABLE_MANUAL_REVIEW));
     query.set('autoApprovalEnabled', String(config.ENABLE_AUTO_APPROVAL));
-    query.set('autoApprovalScoreThreshold', String(Math.max(0.9, config.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD)));
+    query.set('autoApprovalScoreThreshold', String(Math.max(AUTO_APPROVAL_SCORE_MIN, config.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD)));
     const verificationLink = `${getPublicWebOrigin()}/v/simulasi-${randomUUID()}?${query.toString()}`;
     return {
       simulation: true,

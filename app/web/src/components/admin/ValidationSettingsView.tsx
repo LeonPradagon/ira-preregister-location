@@ -303,16 +303,16 @@ export const ValidationSettingsView: React.FC = () => {
                 <input
                   type="number"
                   step="0.05"
-                  min="0.9"
+                  min="0.8"
                   max="1.0"
                   disabled={!canEditSettings}
                   value={formData.AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD}
                   onChange={(e) =>
-                    handleChangeNumber('AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD', parseFloat(e.target.value) || 0.9)
+                    handleChangeNumber('AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD', parseFloat(e.target.value) || 0.8)
                   }
                   className="w-32 p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
                 />
-                <span className="text-gray-500 dark:text-gray-400">ratio (min. 0.90)</span>
+                <span className="text-gray-500 dark:text-gray-400">ratio (min. 0.80)</span>
               </div>
               <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.autoApprovalScoreHelp')}</p>
             </div>

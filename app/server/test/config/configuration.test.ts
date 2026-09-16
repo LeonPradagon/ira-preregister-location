@@ -39,4 +39,12 @@ describe('runtime configuration', () => {
     expect(envSchema.parse({ ...required, WHATSAPP_DAILY_SEND_LIMIT: 10000 }).WHATSAPP_DAILY_SEND_LIMIT).toBe(10000);
     expect(() => envSchema.parse({ ...required, WHATSAPP_DAILY_SEND_LIMIT: 10001 })).toThrow();
   });
+
+  it('allows automatic approval thresholds from 80% through 100%', () => {
+    expect(
+      envSchema.parse({ ...required, AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: 0.8 })
+        .AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD,
+    ).toBe(0.8);
+    expect(() => envSchema.parse({ ...required, AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: 0.79 })).toThrow();
+  });
 });

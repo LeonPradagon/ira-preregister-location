@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AUTO_APPROVAL_SCORE_MIN } from '../config/validation-thresholds.js';
 
 export const coordinateSchema = z.object({
   latitude: z.number().finite().min(-90).max(90),
@@ -249,7 +250,7 @@ export const validationConfigSchema = z.object({
   STREET_MATCH_THRESHOLD: z.number().min(0).max(1).optional(),
   STREET_SOFT_MATCH_THRESHOLD: z.number().min(0).max(1).optional(),
   ADDRESS_SCORE_THRESHOLD: z.number().min(0).max(1).optional(),
-  AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: z.number().min(0.9).max(1).optional(),
+  AUTO_APPROVAL_ADDRESS_SCORE_THRESHOLD: z.number().min(AUTO_APPROVAL_SCORE_MIN).max(1).optional(),
   MAX_LOCATION_ATTEMPTS: z.number().int().min(1).max(3).optional(),
   MAX_REMINDERS_PER_SESSION: z.number().int().min(1).max(3).optional(),
   COORDINATE_DISPLAY_DECIMALS: z.number().int().min(0).max(8).optional(),
