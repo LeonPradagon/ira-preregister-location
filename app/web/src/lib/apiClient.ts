@@ -306,6 +306,7 @@ export interface AdminDashboardApi {
     sent: ApiNumeric;
     failed: ApiNumeric;
     cancelled: ApiNumeric;
+    cancelledByReason: Record<string, ApiNumeric>;
     byNumber: Record<string, ApiNumeric>;
   };
   outbox: {

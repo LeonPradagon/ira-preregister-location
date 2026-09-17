@@ -176,7 +176,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerificati
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('reminders.total')}</p>
           <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
@@ -204,6 +204,25 @@ export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerificati
             {reminderStats.failed.toLocaleString('en-US')}
           </p>
           <p className="mt-1 text-[11px] text-rose-700/80 dark:text-rose-300/80">{t('reminders.failedHelp')}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/50">
+          <p className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('reminders.cancelled')}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-700 dark:text-slate-200">
+            {reminderStats.cancelled.toLocaleString('en-US')}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-600/80 dark:text-slate-300/80">{t('reminders.cancelledHelp')}</p>
+          {Object.entries(dashboardSummary.reminders.cancelledByReason).length > 0 && (
+            <div className="mt-2 border-t border-slate-200 pt-2 text-[10px] leading-4 text-slate-600 dark:border-slate-700 dark:text-slate-300">
+              {Object.entries(dashboardSummary.reminders.cancelledByReason)
+                .slice(0, 2)
+                .map(([reason, count]) => (
+                  <div key={reason} className="flex justify-between gap-2">
+                    <span>{t(`reminders.cancellationReason.${reason}`)}</span>
+                    <span className="font-semibold tabular-nums">{count.toLocaleString('en-US')}</span>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -327,6 +346,13 @@ export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerificati
                 <div className="mt-1 text-[10px] leading-4 text-slate-500 dark:text-slate-400">
                   {t(`reminders.statusHelp.${reminder.status}`)}
                 </div>
+                {reminder.status === 'CANCELLED' && reminder.cancellationReason && (
+                  <div className="mt-1 text-[10px] leading-4 text-slate-600 dark:text-slate-300">
+                    {t('reminders.cancellationReasonLabel')}:{' '}
+                    {t(`reminders.cancellationReason.${reminder.cancellationReason}`)}
+                    {reminder.cancelledAt ? ` · ${formatAppDateTime(reminder.cancelledAt)}` : ''}
+                  </div>
+                )}
               </td>
               <td className="px-4 py-3.5 text-right align-top">
                 <button

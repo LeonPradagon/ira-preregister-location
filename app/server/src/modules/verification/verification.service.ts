@@ -21,7 +21,7 @@ import {
 } from '../../common/contracts.js';
 import { DomainError, NotFoundError } from '../../common/errors.js';
 import { GeocodingPort, GeocodingResult } from '../../integrations/geocoding/geocoding.port.js';
-import { decideValidation, AddressEvidence, ReverseGeocodeEvidence, isAddressIncomplete } from '../validation/engine.js';
+import { decideValidation, AddressEvidence, isAddressIncomplete } from '../validation/engine.js';
 import { assertTransition } from './state-machine.js';
 import {
   isReminderScheduledBeforeSessionExpiry,
@@ -29,6 +29,8 @@ import {
   isReusableCancelledReminder,
   canScheduleReminderFromLink,
   reminderCountAfterOpeningLink,
+  reminderCancellationAudit,
+  reminderCancellationFields,
   nextReminderNumber,
   ReminderPreference,
   scheduleReminderInTimezone,
@@ -168,10 +170,20 @@ export class VerificationService {
           });
         }
         if (reminder && firstReminderOpen) {
-          await tx
+          const cancelledReminders = await tx
             .update(reminders)
-            .set({ status: 'CANCELLED' })
-            .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
+            .set({
+              ...reminderCancellationFields('REMINDER_LINK_OPENED', timestamp, 'customer-token'),
+              processingStartedAt: null,
+            })
+            .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')))
+            .returning({ id: reminders.id });
+          if (cancelledReminders.length)
+            await tx.insert(auditLogs).values(
+              cancelledReminders.map(({ id }) =>
+                reminderCancellationAudit(id, 'REMINDER_LINK_OPENED', timestamp, 'customer-token', 'Customer'),
+              ),
+            );
           await tx
             .update(reminders)
             .set({ openedAt: timestamp })
@@ -210,14 +222,24 @@ export class VerificationService {
             });
           }
         } else if (!reminder) {
-          await tx
+          const cancelledReminders = await tx
             .update(reminders)
-            .set({ status: 'CANCELLED' })
+            .set({
+              ...reminderCancellationFields('INITIAL_LINK_OPENED', timestamp, 'customer-token'),
+              processingStartedAt: null,
+            })
             .where(
               and(
                 eq(reminders.sessionId, row.session.id),
                 eq(reminders.status, 'SCHEDULED'),
                 eq(reminders.reminderSource, 'UNOPENED_LINK'),
+              ),
+            )
+            .returning({ id: reminders.id });
+          if (cancelledReminders.length)
+            await tx.insert(auditLogs).values(
+              cancelledReminders.map(({ id }) =>
+                reminderCancellationAudit(id, 'INITIAL_LINK_OPENED', timestamp, 'customer-token', 'Customer'),
               ),
             );
         }
@@ -306,10 +328,20 @@ export class VerificationService {
         })
         .where(eq(verificationSessions.id, row.session.id));
       if (!confirmed) {
-        await tx
+        const cancelledReminders = await tx
           .update(reminders)
-          .set({ status: 'CANCELLED' })
-          .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
+          .set({
+            ...reminderCancellationFields('CUSTOMER_DATA_MISMATCH', timestamp, 'customer-token'),
+            processingStartedAt: null,
+          })
+          .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')))
+          .returning({ id: reminders.id });
+        if (cancelledReminders.length)
+          await tx.insert(auditLogs).values(
+            cancelledReminders.map(({ id }) =>
+              reminderCancellationAudit(id, 'CUSTOMER_DATA_MISMATCH', timestamp, 'customer-token', 'Customer'),
+            ),
+          );
       }
       await tx.insert(auditLogs).values({
         actorUserId: 'customer-token',
@@ -362,7 +394,20 @@ export class VerificationService {
     if (row.session.attemptCount >= maxLocationAttempts)
       throw new DomainError('Maximum GPS attempts reached. Please choose a reminder.', 409, 'ATTEMPT_LIMIT_REACHED');
     const bestSample = [...samples].sort((left, right) => left.accuracyMeters - right.accuracyMeters)[0];
-    let geocode: ReverseGeocodeEvidence;
+    let geocode: GeocodingResult;
+    const unavailableGeocode: GeocodingResult = {
+      latitude: bestSample.latitude,
+      longitude: bestSample.longitude,
+      precision: 'CITY',
+      confidence: 0,
+      provider: 'unavailable',
+      province: '',
+      city: '',
+      district: '',
+      subdistrict: '',
+      street: '',
+      formattedAddress: '',
+    };
     let geocodingAvailable = true;
     try {
       geocode = await this.geocoding.reverse(bestSample.latitude, bestSample.longitude);
@@ -373,12 +418,12 @@ export class VerificationService {
         // coordinate may intentionally be somewhere else. Treat unavailable
         // reverse-geocoding as unavailable evidence instead of a false match.
         geocodingAvailable = false;
-        geocode = { province: '', city: '', district: '', subdistrict: '', street: '', formattedAddress: '' };
+        geocode = unavailableGeocode;
       } else {
         // Live sessions fail closed: capture the GPS but route it to manual
         // review instead of returning 503 or treating it as address proof.
         geocodingAvailable = false;
-        geocode = { province: '', city: '', district: '', subdistrict: '', street: '', formattedAddress: '' };
+        geocode = unavailableGeocode;
       }
     }
     const decision = decideValidation(
@@ -409,6 +454,11 @@ export class VerificationService {
       geocodingAvailable,
       referencePrecision: decision.referencePrecision,
       houseNumberMatch: decision.houseNumberMatch,
+      reverseGeocodePrecision: geocode.precision,
+      provinceMatch: decision.provinceMatch,
+      cityMatch: decision.cityMatch,
+      districtMatch: decision.districtMatch,
+      subdistrictMatch: decision.subdistrictMatch,
       distanceFromReferenceMeters: decision.distanceFromReferenceMeters,
       homeRadiusMeters: config.HOME_RADIUS_METERS,
       gpsAccuracyMeters: decision.bestSample.accuracyMeters,
@@ -625,10 +675,20 @@ export class VerificationService {
           .update(customers)
           .set({ status: 'VERIFIED', updatedAt: timestamp })
           .where(eq(customers.id, row.customer.id));
-        await tx
+        const cancelledReminders = await tx
           .update(reminders)
-          .set({ status: 'CANCELLED' })
-          .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
+          .set({
+            ...reminderCancellationFields('LOCATION_VERIFIED', timestamp, 'system'),
+            processingStartedAt: null,
+          })
+          .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')))
+          .returning({ id: reminders.id });
+        if (cancelledReminders.length)
+          await tx.insert(auditLogs).values(
+            cancelledReminders.map(({ id }) =>
+              reminderCancellationAudit(id, 'LOCATION_VERIFIED', timestamp, 'system', 'Verification Service'),
+            ),
+          );
         const eventId = randomUUID();
         await tx
           .insert(integrationOutbox)
@@ -757,6 +817,10 @@ export class VerificationService {
             tokenInvalidatedAt: null,
             reminderSource: 'CUSTOMER_SELECTED',
             status: 'SCHEDULED',
+            cancelledAt: null,
+            cancellationReason: null,
+            cancelledBy: null,
+            processingStartedAt: null,
             messageText: reminderMessage,
             providerMessageId: null,
             retryCount: 0,
@@ -846,11 +910,22 @@ export class VerificationService {
         .update(verificationSessions)
         .set({ verificationStatus: nextStatus, updatedAt: timestamp })
         .where(eq(verificationSessions.id, row.session.id));
-      if (!sameAddress)
-        await tx
+      if (!sameAddress) {
+        const cancelledReminders = await tx
           .update(reminders)
-          .set({ status: 'CANCELLED' })
-          .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')));
+          .set({
+            ...reminderCancellationFields('ADDRESS_CHANGE_STARTED', timestamp, 'customer-token'),
+            processingStartedAt: null,
+          })
+          .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')))
+          .returning({ id: reminders.id });
+        if (cancelledReminders.length)
+          await tx.insert(auditLogs).values(
+            cancelledReminders.map(({ id }) =>
+              reminderCancellationAudit(id, 'ADDRESS_CHANGE_STARTED', timestamp, 'customer-token', 'Customer'),
+            ),
+          );
+      }
       await tx.insert(auditLogs).values({
         actorUserId: 'customer-token',
         actorName: 'Customer',

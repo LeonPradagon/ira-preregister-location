@@ -8,6 +8,51 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type ReminderSource = 'CUSTOMER_SELECTED' | 'UNOPENED_LINK' | 'ADMIN_MANUAL';
 
+export type ReminderCancellationReason =
+  | 'LEGACY_CANCELLED'
+  | 'SESSION_EXPIRED'
+  | 'UNOPENED_LINK_ALREADY_OPENED'
+  | 'CUSTOMER_OPTED_OUT'
+  | 'REMINDER_LINK_OPENED'
+  | 'INITIAL_LINK_OPENED'
+  | 'CUSTOMER_DATA_MISMATCH'
+  | 'LOCATION_VERIFIED'
+  | 'ADDRESS_CHANGE_STARTED'
+  | 'COORDINATE_AUDIT_AUTO_VERIFIED'
+  | 'VERIFICATION_CYCLE_RESTARTED'
+  | 'SESSION_REVOKED';
+
+export function reminderCancellationFields(
+  reason: ReminderCancellationReason,
+  cancelledAt: Date,
+  cancelledBy: string,
+) {
+  return {
+    status: 'CANCELLED' as const,
+    cancelledAt,
+    cancellationReason: reason,
+    cancelledBy,
+  };
+}
+
+export function reminderCancellationAudit(
+  reminderId: string,
+  reason: ReminderCancellationReason,
+  cancelledAt: Date,
+  actorUserId: string,
+  actorName: string,
+) {
+  return {
+    actorUserId,
+    actorName,
+    action: 'REMINDER_CANCELLED',
+    entityType: 'REMINDER',
+    entityId: reminderId,
+    after: { reason, cancelledAt: cancelledAt.toISOString() },
+    timestamp: cancelledAt,
+  };
+}
+
 export type ReminderPreference = 'IN_1_HOUR' | 'TONIGHT' | 'TOMORROW_MORNING' | 'DEFAULT';
 
 export function nextReminderNumber(current: number, max = MAX_REMINDERS_PER_SESSION): number | null {

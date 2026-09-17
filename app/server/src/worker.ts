@@ -33,6 +33,8 @@ import { ValidationConfigService } from './config/validation-config.service.js';
 import { getWhatsAppTemplate } from './integrations/whatsapp/whatsapp.templates.js';
 import {
   nextAutomaticReminderAt,
+  reminderCancellationAudit,
+  reminderCancellationFields,
   reminderLinkExpiresAt,
   unopenedLinkReminderAt,
   verificationSessionExpiresAt,
@@ -89,6 +91,7 @@ const positiveIntegerEnv = (value: string | undefined, fallback: number) => {
 };
 const coordinateAuditQueueBuffer = positiveIntegerEnv(process.env.COORDINATE_AUDIT_QUEUE_BUFFER, 2000);
 const coordinateAuditBatchSize = positiveIntegerEnv(process.env.COORDINATE_AUDIT_BATCH_SIZE, 500);
+const reminderProcessingTimeoutMinutes = positiveIntegerEnv(process.env.REMINDER_PROCESSING_TIMEOUT_MINUTES, 15);
 let coordinateAuditEnqueueInFlight = false;
 const whatsappProvider = process.env.WHATSAPP_PROVIDER ?? 'disabled';
 const invitationTemplate = getWhatsAppTemplate('INVITATION');
@@ -102,6 +105,25 @@ const whatsapp: WhatsAppPort =
 const campaigns = new CampaignService(new ValidationConfigService(), new ReadCacheService());
 const reminderConfig = new ValidationConfigService();
 const messagingConfig = new ValidationConfigService();
+
+const cancelClaimedReminder = async (
+  reminderId: string,
+  reason: Parameters<typeof reminderCancellationFields>[0],
+) => {
+  const cancelledAt = new Date();
+  const [cancelled] = await db
+    .update(reminders)
+    .set({
+      ...reminderCancellationFields(reason, cancelledAt, 'system'),
+      processingStartedAt: null,
+    })
+    .where(and(eq(reminders.id, reminderId), eq(reminders.status, 'PROCESSING')))
+    .returning({ id: reminders.id });
+  if (cancelled)
+    await db.insert(auditLogs).values(
+      reminderCancellationAudit(cancelled.id, reason, cancelledAt, 'system', 'Reminder Worker'),
+    );
+};
 
 const enqueuePendingCoordinateAudits = async () => {
   if (!runs('import') || coordinateAuditEnqueueInFlight) return 0;
@@ -288,9 +310,10 @@ const reminderWorker = runs('messaging')
       reminderQueueName,
       async (job) => {
         const reminderId = String(job.data.reminderId);
+        const processingStartedAt = new Date();
         const [claimed] = await db
           .update(reminders)
-          .set({ status: 'PROCESSING' })
+          .set({ status: 'PROCESSING', processingStartedAt })
           .where(and(eq(reminders.id, reminderId), eq(reminders.status, 'SCHEDULED')))
           .returning();
         if (!claimed) return;
@@ -303,15 +326,15 @@ const reminderWorker = runs('messaging')
           .limit(1);
         if (!target) return;
         if (target.session.revokedAt || target.session.expiresAt <= new Date()) {
-          await db.update(reminders).set({ status: 'CANCELLED' }).where(eq(reminders.id, reminderId));
+          await cancelClaimedReminder(reminderId, 'SESSION_EXPIRED');
           return;
         }
         if (target.reminder.reminderSource === 'UNOPENED_LINK' && target.session.openedAt) {
-          await db.update(reminders).set({ status: 'CANCELLED' }).where(eq(reminders.id, reminderId));
+          await cancelClaimedReminder(reminderId, 'UNOPENED_LINK_ALREADY_OPENED');
           return;
         }
         if (target.customer.whatsappOptOutAt) {
-          await db.update(reminders).set({ status: 'CANCELLED' }).where(eq(reminders.id, reminderId));
+          await cancelClaimedReminder(reminderId, 'CUSTOMER_OPTED_OUT');
           await db.insert(auditLogs).values({
             actorUserId: 'system',
             actorName: 'Reminder Worker',
@@ -328,6 +351,7 @@ const reminderWorker = runs('messaging')
             .update(reminders)
             .set({
               status: 'SCHEDULED',
+              processingStartedAt: null,
               scheduledAt: new Date(
                 Date.now() + Number(process.env.WHATSAPP_CIRCUIT_COOLDOWN_MINUTES ?? 15) * 60 * 1000,
               ),
@@ -339,7 +363,7 @@ const reminderWorker = runs('messaging')
         if (!safety.allowed) {
           await db
             .update(reminders)
-            .set({ status: 'SCHEDULED', scheduledAt: safety.retryAt! })
+            .set({ status: 'SCHEDULED', processingStartedAt: null, scheduledAt: safety.retryAt! })
             .where(eq(reminders.id, reminderId));
           return;
         }
@@ -407,6 +431,7 @@ const reminderWorker = runs('messaging')
               .update(reminders)
               .set({
                 status: 'SENT',
+                processingStartedAt: null,
                 sentAt,
                 providerMessageId: sent.providerMessageId,
                 tokenId: verificationToken.tokenId,
@@ -467,6 +492,7 @@ const reminderWorker = runs('messaging')
             .update(reminders)
             .set({
               status: retryCount >= 3 ? 'FAILED' : 'SCHEDULED',
+              processingStartedAt: null,
               retryCount,
               scheduledAt:
                 retryCount >= 3 ? target.reminder.scheduledAt : new Date(Date.now() + retryCount * 60 * 1000),
@@ -926,10 +952,26 @@ const coordinateAuditWorker = runs('import')
                   updatedAt: auditedAt,
                 })
                 .where(inArray(verificationSessions.id, sessionIds));
-              await tx
+              const cancelledReminders = await tx
                 .update(reminders)
-                .set({ status: 'CANCELLED' })
-                .where(and(inArray(reminders.sessionId, sessionIds), eq(reminders.status, 'SCHEDULED')));
+                .set({
+                  ...reminderCancellationFields('COORDINATE_AUDIT_AUTO_VERIFIED', auditedAt, 'system'),
+                  processingStartedAt: null,
+                })
+                .where(and(inArray(reminders.sessionId, sessionIds), eq(reminders.status, 'SCHEDULED')))
+                .returning({ id: reminders.id });
+              if (cancelledReminders.length)
+                await tx.insert(auditLogs).values(
+                  cancelledReminders.map(({ id }) =>
+                    reminderCancellationAudit(
+                      id,
+                      'COORDINATE_AUDIT_AUTO_VERIFIED',
+                      auditedAt,
+                      'system',
+                      'Coordinate Audit Worker',
+                    ),
+                  ),
+                );
             }
             await tx.insert(auditLogs).values({
               actorUserId: 'system',
@@ -1060,6 +1102,25 @@ const enqueueDueReminders = async () => {
   );
 };
 
+const recoverStaleReminderProcessing = async () => {
+  const staleBefore = new Date(Date.now() - reminderProcessingTimeoutMinutes * 60 * 1000);
+  const recovered = await db
+    .update(reminders)
+    .set({ status: 'SCHEDULED', scheduledAt: new Date(), processingStartedAt: null })
+    .where(
+      and(
+        eq(reminders.status, 'PROCESSING'),
+        or(isNull(reminders.processingStartedAt), lt(reminders.processingStartedAt, staleBefore)),
+      ),
+    )
+    .returning({ id: reminders.id });
+  if (recovered.length)
+    logEvent('info', 'reminder.processing_recovered', {
+      count: recovered.length,
+      timeoutMinutes: reminderProcessingTimeoutMinutes,
+    });
+};
+
 const enqueueDueCampaignItems = async () => {
   const due = await db
     .select({ id: verificationCampaignItems.id })
@@ -1175,7 +1236,7 @@ const enqueueMaintenance = async () => {
 
 const poll = async () => {
   const jobs: Promise<unknown>[] = [];
-  if (runs('messaging')) jobs.push(enqueuePendingOutbox(), enqueueDueReminders());
+  if (runs('messaging')) jobs.push(enqueuePendingOutbox(), recoverStaleReminderProcessing(), enqueueDueReminders());
   if (runs('campaign')) jobs.push(enqueueDueCampaignItems(), enqueueCampaignMaterialization());
   if (runs('import')) jobs.push(enqueuePendingCoordinateAudits());
   if (runs('maintenance')) jobs.push(enqueueMaintenance());

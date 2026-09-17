@@ -268,6 +268,7 @@ export interface DashboardSummary {
     sent: number;
     failed: number;
     cancelled: number;
+    cancelledByReason: Record<string, number>;
     byNumber: Record<string, number>;
   };
   outbox: {
@@ -338,6 +339,14 @@ export interface Reminder {
   reminderSource: ReminderSource;
   scheduledAt: string;
   sentAt?: string;
+  openedAt?: string;
+  tokenId?: string;
+  tokenExpiresAt?: string;
+  tokenInvalidatedAt?: string;
+  cancelledAt?: string;
+  cancellationReason?: string;
+  cancelledBy?: string;
+  processingStartedAt?: string;
   status: ReminderStatus;
   messageText: string;
   providerMessageId?: string;

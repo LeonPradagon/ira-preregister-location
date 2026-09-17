@@ -19,6 +19,7 @@ import { api } from '../../lib/apiClient';
 import { Customer, CustomerAddress, VerificationSession } from '../../types';
 import { formatAppDateTime } from '../../lib/dateTime';
 import { formatAddressForDisplay } from '../../lib/validationEngine';
+import { userFriendlyStatus } from '../../lib/statusLabels';
 import {
   AdminTable,
   SortableTableHeader,
@@ -43,26 +44,35 @@ interface VerificationListRow {
   address: CustomerAddress;
 }
 
-const statusLabels: Record<string, string> = {
-  LOCATION_VALID: 'Location matched',
-  MANUAL_REVIEW: 'Needs team review',
-  WAITING_FOR_HOME: 'Waiting for customer',
-  LOW_GPS_ACCURACY: 'Location signal is weak',
-  LOCATION_MISMATCH: 'Location does not match',
-  ADDRESS_PROPOSED: 'Address needs review',
-  ADDRESS_EDITING: 'Address is being updated',
-  CUSTOMER_DATA_MISMATCH: 'Customer data does not match',
-  REMINDER_REQUIRED: 'Reminder required',
-  REMINDER_LIMIT_REACHED: 'Reminder limit reached',
-  GPS_CAPTURING: 'Checking location',
-  CONSENTED: 'Waiting for location permission',
-  LINK_OPENED: 'Link opened',
-  MESSAGE_SENT: 'Invitation sent',
-  CREATED: 'Not started',
-  EXPIRED: 'Link expired',
-};
+const statusValues = [
+  'LOCATION_VALID',
+  'MANUAL_REVIEW',
+  'WAITING_FOR_HOME',
+  'LOW_GPS_ACCURACY',
+  'LOCATION_MISMATCH',
+  'ADDRESS_PROPOSED',
+  'ADDRESS_EDITING',
+  'CUSTOMER_DATA_MISMATCH',
+  'REMINDER_REQUIRED',
+  'REMINDER_LIMIT_REACHED',
+  'GPS_CAPTURING',
+  'CONSENTED',
+  'LINK_OPENED',
+  'MESSAGE_SENT',
+  'CREATED',
+  'EXPIRED',
+];
 
-const getStatusLabel = (status: string) => statusLabels[status] ?? 'In progress';
+const quickFilterValues = new Set([
+  'WAITING_FOR_CUSTOMER',
+  'NEEDS_ATTENTION',
+  'NEEDS_REVIEW',
+  'ADDRESS_CHANGED',
+  'LOCATION_VALID',
+  'REMINDER_LIMIT_REACHED',
+]);
+
+const getStatusLabel = (status: string) => userFriendlyStatus(status);
 
 const getStatusClassName = (status: string) => {
   if (status === 'LOCATION_VALID')
@@ -303,14 +313,23 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
               className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white"
             >
               <option value="ALL">{t('verifications.allStatuses')}</option>
-              {Object.entries(statusLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-              <option value="ADDRESS_CHANGED">{t('verifications.addressChangeFilter')}</option>
-              <option value="NEEDS_ATTENTION">{t('verifications.needsAttentionFilter')}</option>
-              <option value="NEEDS_REVIEW">{t('verifications.locationNeedsReviewFilter')}</option>
+              <optgroup label={t('verifications.quickFilters')}>
+                <option value="WAITING_FOR_CUSTOMER">{t('verifications.waitingForCustomerFilter')}</option>
+                <option value="NEEDS_ATTENTION">{t('verifications.teamActionFilter')}</option>
+                <option value="NEEDS_REVIEW">{t('verifications.locationNeedsReviewFilter')}</option>
+                <option value="ADDRESS_CHANGED">{t('verifications.addressChangeFilter')}</option>
+                <option value="LOCATION_VALID">{t('verifications.verifiedFilter')}</option>
+                <option value="REMINDER_LIMIT_REACHED">{t('verifications.reminderLimitFilter')}</option>
+              </optgroup>
+              <optgroup label={t('verifications.detailFilters')}>
+                {statusValues
+                  .filter((value) => !quickFilterValues.has(value))
+                  .map((value) => (
+                    <option key={value} value={value}>
+                      {getStatusLabel(value)}
+                    </option>
+                  ))}
+              </optgroup>
             </select>
           </label>
         </div>

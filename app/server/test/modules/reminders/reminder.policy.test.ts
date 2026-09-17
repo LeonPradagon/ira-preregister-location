@@ -8,6 +8,8 @@ import {
   nextAutomaticReminderAt,
   nextReminderNumber,
   reminderCountAfterOpeningLink,
+  reminderCancellationAudit,
+  reminderCancellationFields,
   reminderLinkExpiresAt,
   scheduleReminder,
   scheduleReminderInTimezone,
@@ -96,6 +98,25 @@ describe('reminder policy', () => {
     expect(isReusableCancelledReminder('CANCELLED', null, null)).toBe(true);
     expect(isReusableCancelledReminder('SENT', new Date('2026-09-09T00:00:00.000Z'), 'token')).toBe(false);
     expect(isReusableCancelledReminder('SCHEDULED', null, null)).toBe(false);
+  });
+
+  it('records cancellation metadata and an auditable reason', () => {
+    const cancelledAt = new Date('2026-09-17T10:00:00.000Z');
+    expect(reminderCancellationFields('LOCATION_VERIFIED', cancelledAt, 'system')).toEqual({
+      status: 'CANCELLED',
+      cancelledAt,
+      cancellationReason: 'LOCATION_VERIFIED',
+      cancelledBy: 'system',
+    });
+    expect(reminderCancellationAudit('reminder-1', 'LOCATION_VERIFIED', cancelledAt, 'system', 'Verification Service')).toEqual({
+      actorUserId: 'system',
+      actorName: 'Verification Service',
+      action: 'REMINDER_CANCELLED',
+      entityType: 'REMINDER',
+      entityId: 'reminder-1',
+      after: { reason: 'LOCATION_VERIFIED', cancelledAt: '2026-09-17T10:00:00.000Z' },
+      timestamp: cancelledAt,
+    });
   });
 
   it('does not allow the same reminder link to schedule another reminder twice', () => {

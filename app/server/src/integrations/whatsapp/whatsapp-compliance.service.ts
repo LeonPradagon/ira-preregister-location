@@ -13,6 +13,7 @@ import { NotFoundError } from '../../common/errors.js';
 import { hashPhone, isOptOutMessage } from './whatsapp.policy.js';
 import { classifyWhatsAppFailure, formatWhatsAppProviderError } from './whatsapp-status.js';
 import { CampaignItemState } from '../../modules/campaigns/campaign-item-state.js';
+import { reminderCancellationAudit, reminderCancellationFields } from '../../modules/reminders/reminder.policy.js';
 
 @Injectable()
 export class WhatsAppComplianceService {
@@ -52,7 +53,7 @@ export class WhatsAppComplianceService {
     const campaignItem = await CampaignItemState.applyDeliveryStatus(input.providerMessageId, input.status, occurredAt);
     const [reminder] = await db
       .update(reminders)
-      .set({ status: input.status === 'FAILED' ? 'FAILED' : 'SENT' })
+      .set({ status: input.status === 'FAILED' ? 'FAILED' : 'SENT', processingStartedAt: null })
       .where(eq(reminders.providerMessageId, input.providerMessageId))
       .returning({ id: reminders.id });
     if (delivery || campaignItem || reminder) {
@@ -89,13 +90,23 @@ export class WhatsAppComplianceService {
         .update(customers)
         .set({ whatsappOptOutAt: changedAt, updatedAt: changedAt })
         .where(eq(customers.id, customer.id));
-      await tx
+      const cancelledReminders = await tx
         .update(reminders)
-        .set({ status: 'CANCELLED' })
+        .set({
+          ...reminderCancellationFields('CUSTOMER_OPTED_OUT', changedAt, 'whatsapp-inbound'),
+          processingStartedAt: null,
+        })
         .where(
           and(
             eq(reminders.status, 'SCHEDULED'),
             sql`${reminders.sessionId} in (select id from verification_sessions where customer_id = ${customer.id})`,
+          ),
+        )
+        .returning({ id: reminders.id });
+      if (cancelledReminders.length)
+        await tx.insert(auditLogs).values(
+          cancelledReminders.map(({ id }) =>
+            reminderCancellationAudit(id, 'CUSTOMER_OPTED_OUT', changedAt, 'whatsapp-inbound', 'WhatsApp'),
           ),
         );
       const optedOutItems = await tx
@@ -141,13 +152,23 @@ export class WhatsAppComplianceService {
         .update(customers)
         .set({ whatsappOptOutAt: changedAt, updatedAt: changedAt })
         .where(eq(customers.id, customerId));
-      await tx
+      const cancelledReminders = await tx
         .update(reminders)
-        .set({ status: 'CANCELLED' })
+        .set({
+          ...reminderCancellationFields('CUSTOMER_OPTED_OUT', changedAt, adminId),
+          processingStartedAt: null,
+        })
         .where(
           and(
             eq(reminders.status, 'SCHEDULED'),
             sql`${reminders.sessionId} in (select id from verification_sessions where customer_id = ${customer.id})`,
+          ),
+        )
+        .returning({ id: reminders.id });
+      if (cancelledReminders.length)
+        await tx.insert(auditLogs).values(
+          cancelledReminders.map(({ id }) =>
+            reminderCancellationAudit(id, 'CUSTOMER_OPTED_OUT', changedAt, adminId, 'Admin'),
           ),
         );
       const optedOutItems = await tx

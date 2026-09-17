@@ -52,7 +52,12 @@ import {
   campaignRecipientReservationStatuses,
 } from '../campaigns/campaign-target.policy.js';
 import { campaignEligibleAddressSql, incompleteAddressSql } from '../validation/address-completeness.sql.js';
-import { unopenedLinkReminderAt, verificationSessionExpiresAt } from '../reminders/reminder.policy.js';
+import {
+  reminderCancellationAudit,
+  reminderCancellationFields,
+  unopenedLinkReminderAt,
+  verificationSessionExpiresAt,
+} from '../reminders/reminder.policy.js';
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
 const customerAuditActorIds = ['customer', 'customer-token'];
@@ -286,7 +291,14 @@ export class AdminService {
           })
           .from(verificationSessions);
 
-        const [reminderStats, outboxStats, verificationStatusRows, reminderNumberRows, coordinateAuditStatusRows] = await Promise.all([
+        const [
+          reminderStats,
+          reminderCancellationRows,
+          outboxStats,
+          verificationStatusRows,
+          reminderNumberRows,
+          coordinateAuditStatusRows,
+        ] = await Promise.all([
           db
             .select({
               total: sql<number>`count(*)`,
@@ -296,6 +308,11 @@ export class AdminService {
               cancelled: sql<number>`count(*) filter (where ${reminders.status} = 'CANCELLED')`,
             })
             .from(reminders),
+          db
+            .select({ reason: reminders.cancellationReason, total: sql<number>`count(*)` })
+            .from(reminders)
+            .where(eq(reminders.status, 'CANCELLED'))
+            .groupBy(reminders.cancellationReason),
           db
             .select({
               total: sql<number>`count(*)`,
@@ -330,6 +347,9 @@ export class AdminService {
         const coordinateAuditStatusCounts = Object.fromEntries(
           coordinateAuditStatusRows.map((row) => [row.status, toNumber(row.total)]),
         );
+        const cancelledByReason = Object.fromEntries(
+          reminderCancellationRows.map((row) => [row.reason ?? 'UNKNOWN', toNumber(row.total)]),
+        );
 
         const countAsOf = new Date().toISOString();
         return {
@@ -343,6 +363,7 @@ export class AdminService {
           coordinateAudits: { statusCounts: coordinateAuditStatusCounts },
           reminders: {
             ...Object.fromEntries(Object.entries(reminderStats[0]).map(([key, value]) => [key, toNumber(value)])),
+            cancelledByReason,
             byNumber,
           },
           outbox: Object.fromEntries(Object.entries(outboxStats[0]).map(([key, value]) => [key, toNumber(value)])),
@@ -1252,6 +1273,10 @@ export class AdminService {
       );
     } else if (query.status === 'ADDRESS_CHANGED') {
       filters.push(inArray(verificationSessions.verificationStatus, ['ADDRESS_EDITING', 'ADDRESS_PROPOSED']));
+    } else if (query.status === 'WAITING_FOR_CUSTOMER') {
+      filters.push(
+        inArray(verificationSessions.verificationStatus, ['WAITING_FOR_HOME', 'REMINDER_REQUIRED']),
+      );
     } else if (query.status === 'CUSTOMER_DATA_MISMATCH') {
       filters.push(
         or(
@@ -1412,7 +1437,7 @@ export class AdminService {
           ? null
           : { latitude: Number(row.referenceLatitude), longitude: Number(row.referenceLongitude) },
     };
-    const [results, reviews, sessionReminders, audits, captures] = await Promise.all([
+    const [results, reviews, sessionReminders, audits, captures, addressRows] = await Promise.all([
       db
         .select()
         .from(validationResults)
@@ -1436,11 +1461,28 @@ export class AdminService {
         .from(locationCaptures)
         .where(eq(locationCaptures.sessionId, id))
         .orderBy(desc(locationCaptures.createdAt)),
+      db
+        .select({
+          address: customerAddresses,
+          referenceLatitude: sql<number>`ST_Y(${customerAddresses.referenceLocation}::geometry)`,
+          referenceLongitude: sql<number>`ST_X(${customerAddresses.referenceLocation}::geometry)`,
+        })
+        .from(customerAddresses)
+        .where(eq(customerAddresses.customerId, row.customer.id))
+        .orderBy(desc(customerAddresses.createdAt)),
     ]);
+    const addresses = addressRows.map((item) => ({
+      ...item.address,
+      referenceLocation:
+        item.referenceLatitude == null || item.referenceLongitude == null
+          ? null
+          : { latitude: Number(item.referenceLatitude), longitude: Number(item.referenceLongitude) },
+    }));
     return {
       session: sanitizeSession(row.session),
       customer: row.customer,
       address,
+      addresses,
       results,
       reviews,
       reminders: sessionReminders,
@@ -1632,8 +1674,28 @@ export class AdminService {
         .where(eq(verificationSessions.id, id));
       await tx
         .update(reminders)
-        .set({ status: 'CANCELLED', tokenInvalidatedAt: restartedAt })
-        .where(and(eq(reminders.sessionId, id), or(eq(reminders.status, 'SCHEDULED'), isNull(reminders.tokenInvalidatedAt))));
+        .set({ tokenInvalidatedAt: restartedAt })
+        .where(and(eq(reminders.sessionId, id), isNotNull(reminders.tokenId), isNull(reminders.tokenInvalidatedAt)));
+      const cancelledReminders = await tx
+        .update(reminders)
+        .set({
+          ...reminderCancellationFields('VERIFICATION_CYCLE_RESTARTED', restartedAt, admin.id),
+          processingStartedAt: null,
+        })
+        .where(and(eq(reminders.sessionId, id), eq(reminders.status, 'SCHEDULED')))
+        .returning({ id: reminders.id });
+      if (cancelledReminders.length)
+        await tx.insert(auditLogs).values(
+          cancelledReminders.map(({ id: reminderId }) =>
+            reminderCancellationAudit(
+              reminderId,
+              'VERIFICATION_CYCLE_RESTARTED',
+              restartedAt,
+              admin.id,
+              admin.name,
+            ),
+          ),
+        );
       await tx.insert(auditLogs).values({
         actorUserId: admin.id,
         actorName: admin.name,
@@ -1664,10 +1726,20 @@ export class AdminService {
         .update(verificationSessions)
         .set({ revokedAt, verificationStatus: 'EXPIRED', updatedAt: revokedAt })
         .where(eq(verificationSessions.id, id));
-      await tx
+      const cancelledReminders = await tx
         .update(reminders)
-        .set({ status: 'CANCELLED' })
-        .where(and(eq(reminders.sessionId, id), eq(reminders.status, 'SCHEDULED')));
+        .set({
+          ...reminderCancellationFields('SESSION_REVOKED', revokedAt, admin.id),
+          processingStartedAt: null,
+        })
+        .where(and(eq(reminders.sessionId, id), eq(reminders.status, 'SCHEDULED')))
+        .returning({ id: reminders.id });
+      if (cancelledReminders.length)
+        await tx.insert(auditLogs).values(
+          cancelledReminders.map(({ id: reminderId }) =>
+            reminderCancellationAudit(reminderId, 'SESSION_REVOKED', revokedAt, admin.id, admin.name),
+          ),
+        );
       await tx.insert(auditLogs).values({
         actorUserId: admin.id,
         actorName: admin.name,

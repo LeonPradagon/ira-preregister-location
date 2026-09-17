@@ -16,6 +16,7 @@ const labels: Record<string, string> = {
   WAITING_FOR_HOME: 'Belum di rumah / perlu coba lagi',
   ADDRESS_EDITING: 'Sedang mengubah alamat',
   ADDRESS_PROPOSED: 'Alamat baru diajukan',
+  REMINDER_REQUIRED: 'Menunggu pengingat',
   REMINDER_LIMIT_REACHED: 'Batas pengingat tercapai',
   EXPIRED: 'Tautan kedaluwarsa',
   SCHEDULED: 'Menunggu dikirim',

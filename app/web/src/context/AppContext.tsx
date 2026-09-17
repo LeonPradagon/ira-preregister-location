@@ -93,7 +93,7 @@ const EMPTY_DASHBOARD_SUMMARY: DashboardSummary = {
     statusCounts: {},
   },
   coordinateAudits: { statusCounts: {} },
-  reminders: { total: 0, scheduled: 0, sent: 0, failed: 0, cancelled: 0, byNumber: {} },
+  reminders: { total: 0, scheduled: 0, sent: 0, failed: 0, cancelled: 0, cancelledByReason: {}, byNumber: {} },
   outbox: { total: 0, pending: 0, published: 0, failed: 0 },
 };
 
@@ -110,6 +110,7 @@ export interface VerificationDetailData {
   session: VerificationSession;
   customer: Customer;
   address: CustomerAddress;
+  addresses: CustomerAddress[];
 }
 
 interface AppContextType {
@@ -243,6 +244,7 @@ function mapApiDashboard(raw: AdminDashboardApi): DashboardSummary {
       sent: number(raw.reminders.sent),
       failed: number(raw.reminders.failed),
       cancelled: number(raw.reminders.cancelled),
+      cancelledByReason: numberMap(raw.reminders.cancelledByReason),
       byNumber: numberMap(raw.reminders.byNumber),
     },
     outbox: {
@@ -598,6 +600,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const session = mapApiSession(rawSession);
     const customer = mapApiCustomer(rawCustomer);
     const address = mapApiAddress(rawAddress);
+    const detailAddresses = (Array.isArray(raw.addresses) ? raw.addresses : [rawAddress]).map((row) =>
+      mapApiAddress(row as Record<string, unknown>),
+    );
     const customerWithAddress = { ...customer, activeAddress: address };
     const results = Array.isArray(raw.results) ? raw.results : [];
     const lastValidationResult = results[0] ? mapApiValidationResult(results[0] as Record<string, unknown>) : undefined;
@@ -606,7 +611,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...previous,
       items: previous.items.map((item) => (item.id === customer.id ? customerWithAddress : item)),
     }));
-    setAddresses((previous) => [address, ...previous.filter((item) => item.id !== address.id)]);
+    setAddresses((previous) => [
+      ...detailAddresses,
+      ...previous.filter((item) => !detailAddresses.some((detailAddress) => detailAddress.id === item.id)),
+    ]);
     setVerificationSessions((previous) => [
       { ...session, lastValidationResult },
       ...previous.filter((item) => item.id !== session.id),
@@ -631,7 +639,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...(raw.audits as AuditLog[]),
         ...previous.filter((item) => item.entityId !== session.id),
       ]);
-    return { session: { ...session, lastValidationResult }, customer: customerWithAddress, address };
+    return {
+      session: { ...session, lastValidationResult },
+      customer: customerWithAddress,
+      address,
+      addresses: detailAddresses,
+    };
   };
 
   const addCustomer = async (

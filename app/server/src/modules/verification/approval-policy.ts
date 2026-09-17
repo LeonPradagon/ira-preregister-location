@@ -48,6 +48,11 @@ export interface CoordinateMatchInput {
   geocodingAvailable: boolean;
   referencePrecision: string;
   houseNumberMatch?: boolean;
+  reverseGeocodePrecision?: string;
+  provinceMatch: boolean;
+  cityMatch: boolean;
+  districtMatch: boolean;
+  subdistrictMatch: boolean;
   distanceFromReferenceMeters: number | null;
   homeRadiusMeters: number;
   gpsAccuracyMeters: number;
@@ -56,17 +61,22 @@ export interface CoordinateMatchInput {
 }
 
 /**
- * A precise master coordinate can establish a location match only when the
- * reverse-geocoder also identifies the registered house number. A road-only,
- * missing, or different house number keeps the result in the review path.
+ * A precise master coordinate can establish a location match when the
+ * administrative hierarchy agrees and the point is inside the configured
+ * radius. A reverse-geocoder result that is explicitly road-only without a
+ * house number is not enough to auto-approve; sparse results at area/city
+ * precision can use the trusted coordinate fallback.
  */
 export function getCoordinateMatchScore(input: CoordinateMatchInput): number {
   const preciseReference = ['EXACT_MASTER', 'ROOFTOP', 'HOUSE'].includes(input.referencePrecision);
   const usableGps = input.gpsAccuracyMeters <= input.gpsMaxAccuracyMeters && input.sampleSpreadMeters <= 100;
   const insideHomeRadius =
     input.distanceFromReferenceMeters != null && input.distanceFromReferenceMeters <= input.homeRadiusMeters;
-  const identifiesResidentialPoint = input.houseNumberMatch === true;
-  return preciseReference && usableGps && insideHomeRadius && identifiesResidentialPoint ? 1 : 0;
+  const administrativeHierarchyMatches =
+    input.provinceMatch && input.cityMatch && input.districtMatch && input.subdistrictMatch;
+  const roadOnlyResult = input.reverseGeocodePrecision === 'STREET' && input.houseNumberMatch !== true;
+  const explicitHouseMismatch = input.houseNumberMatch === false;
+  return preciseReference && usableGps && insideHomeRadius && administrativeHierarchyMatches && !roadOnlyResult && !explicitHouseMismatch ? 1 : 0;
 }
 
 const canAutoApproveEngineResult = (result: string, reasonCodes: string[]): boolean =>
