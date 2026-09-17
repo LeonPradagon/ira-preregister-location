@@ -3,6 +3,7 @@ name: ira-preregister-dev
 services:
   postgres:
     image: postgis/postgis:16-3.4
+    command: ['postgres', '-c', 'shared_preload_libraries=pg_stat_statements', '-c', 'pg_stat_statements.track=all']
     environment:
       POSTGRES_DB: ira_preregist
       POSTGRES_USER: ira_preregist
@@ -15,10 +16,13 @@ services:
       test: ['CMD-SHELL', 'pg_isready -U ira_preregist -d ira_preregist']
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
     ports:
       - '127.0.0.1:${REDIS_PORT:-6379}:6379'
     volumes:
@@ -27,7 +31,9 @@ services:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
 
   worker:
     build:
@@ -38,6 +44,7 @@ services:
         required: false
     environment:
       NODE_ENV: development
+      DATABASE_SSL: 'false'
       IMPORT_STORAGE_DIR: /workspace/app/server/var/imports
       EXPORT_STORAGE_DIR: /workspace/app/server/var/exports
       WORKER_ROLE: all

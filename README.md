@@ -17,24 +17,26 @@ deploy/     Konfigurasi Nginx dan opsi deployment terpisah
 
 Prasyarat: Docker Engine/Desktop dengan Linux containers dan Docker Compose 2.24 atau lebih baru. Node.js di host tidak diperlukan untuk deployment.
 
-1. Salin konfigurasi dari root repository:
+1. Salin konfigurasi dari root repository. Untuk production yang mudah dibedakan dari environment lain, gunakan `.env.prod`:
 
    ```powershell
-   Copy-Item .env.example .env
+   Copy-Item .env.example .env.prod
    ```
 
-   Linux/macOS: `cp .env.example .env`.
+   Linux/macOS: `cp .env.example .env.prod`.
 
-2. Edit `.env`: isi `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET` (minimal 32 karakter acak), `SEED_ADMIN_EMAIL`, dan `SEED_ADMIN_PASSWORD`. Untuk password database gunakan karakter yang aman dalam URL, misalnya string hex acak, karena Compose menyusun `DATABASE_URL` dari nilai tersebut.
+2. Edit `.env.prod`: isi `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET` (minimal 32 karakter acak), `SEED_ADMIN_EMAIL`, dan `SEED_ADMIN_PASSWORD`. Ubah `COMPOSE_ENV_FILE=./.env` menjadi `COMPOSE_ENV_FILE=./.env.prod`. Untuk password database gunakan karakter yang aman dalam URL, misalnya string hex acak, karena Compose menyusun `DATABASE_URL` dari nilai tersebut.
 
    Untuk uji di komputer sendiri, URL contoh sudah memakai `http://localhost:8080`. Untuk server publik, ubah **keduanya**, `WEB_ORIGIN` dan `BETTER_AUTH_URL`, menjadi domain HTTPS aplikasi, misalnya `https://preregist.example.com`. Arahkan reverse proxy HTTPS ke `WEB_PORT` (default `8080`). Pertahankan `VITE_API_URL=/v1` agar browser memakai domain yang sama. GPS browser memerlukan HTTPS atau localhost.
 
-3. Jalankan seluruh stack:
+3. Jalankan seluruh stack dengan script environment production:
 
    ```bash
-   docker compose up --build -d
-   docker compose ps -a
+   npm run deploy:prod
+   npm run deploy:prod:ps
    ```
+
+   Untuk menjalankan stack menggunakan `.env`, gunakan `npm run deploy:local`. Tidak diperlukan webpack untuk pergantian environment; Vite menerima `VITE_API_URL` saat image frontend dibuild dan Compose meneruskan variable backend dari `COMPOSE_ENV_FILE`.
 
 Buka `http://localhost:8080` atau domain yang dikonfigurasi, lalu login dengan akun `SEED_ADMIN_*`. Tidak perlu menjalankan migration atau seed manual untuk instalasi baru.
 
@@ -77,7 +79,9 @@ npm run dev:server
 
 Jalankan `npm run dev` dan `npm run dev:worker` pada terminal terpisah. Frontend tersedia di `http://localhost:5173`, API di `http://localhost:3000`, PostgreSQL di `localhost:5433`, dan Redis di `localhost:6379`. Dengan `app/server/.env.example`, akun development default adalah `admin@surge.com` / `admin123`; ganti nilai `SEED_ADMIN_*` sebelum dipakai di lingkungan bersama.
 
-`docker-compose.dev.yaml` menjalankan dependency lokal. `npm run infra:worker` tersedia jika worker ingin dijalankan di Docker; untuk upload asynchronous gunakan API dan worker dengan direktori `IMPORT_STORAGE_DIR` yang sama. Cara paling sederhana untuk debugging import lokal adalah menjalankan keduanya di host. Perintah backend membuat `.env` lokal dari contoh bila belum tersedia. Jangan menimpa `.env` yang sudah berisi konfigurasi Anda.
+Untuk menjalankan frontend lokal dengan backend production, salin `app/web/.env.prod-api.example` menjadi `app/web/.env.prod-api`, isi `VITE_API_URL` dengan URL API production, lalu jalankan `npm run dev:prod-api`. Ini tidak melakukan deployment dan tidak menjalankan backend/database lokal. Backend production harus menambahkan `http://localhost:5173` ke `CORS_ORIGINS` agar request dan login dari frontend lokal diizinkan.
+
+`npm run infra:up` tetap tersedia untuk menjalankan dependency lokal saja, sedangkan `npm run infra:worker` dapat dipakai untuk menjalankan worker Docker bersama dependency yang diperlukan. Untuk upload asynchronous gunakan API dan worker dengan direktori `IMPORT_STORAGE_DIR` yang sama. Cara paling sederhana untuk debugging import lokal adalah menjalankan keduanya di host. Perintah backend membuat `.env` lokal dari contoh bila belum tersedia. Jangan menimpa `.env` yang sudah berisi konfigurasi Anda.
 
 Link undangan/reminder worker memakai `WEB_ORIGIN` dari `app/server/.env`. Saat worker dijalankan di host, perubahan tunnel akan dibaca saat job berikutnya. Saat worker dijalankan di Docker, jalankan ulang `npm run infra:worker` setelah mengubah env agar container dibuat ulang. Untuk tunnel yang sama, set `WEB_ORIGIN` dan `BETTER_AUTH_URL` ke origin publik yang sesuai.
 

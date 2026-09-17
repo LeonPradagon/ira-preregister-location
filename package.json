@@ -7,6 +7,7 @@
   ],
   "scripts": {
     "dev": "npm --workspace app/web run dev",
+    "dev:prod-api": "npm --workspace app/web run dev -- --mode prod-api",
     "dev:server": "npm --workspace app/server run dev",
     "dev:worker": "npm --workspace app/server run worker",
     "infra:up": "docker compose -p ira_preregist_dev -f docker-compose.dev.yaml up -d postgres redis",
@@ -19,6 +20,11 @@
     "db:migrate": "npm --workspace app/server run db:migrate",
     "db:seed": "npm --workspace app/server run db:seed",
     "deploy": "docker compose up --build -d",
+    "deploy:local": "docker compose --env-file .env -f docker-compose.yaml up --build -d",
+    "deploy:prod": "docker compose --env-file .env.prod -f docker-compose.yaml up --build -d",
+    "deploy:prod:ps": "docker compose --env-file .env.prod -f docker-compose.yaml ps -a",
+    "deploy:prod:logs": "docker compose --env-file .env.prod -f docker-compose.yaml logs -f",
+    "deploy:prod:migrate": "docker compose --env-file .env.prod -f docker-compose.yaml run --rm migrate",
     "deploy:logs": "docker compose logs -f",
     "format": "prettier --write \"app/**/*.{ts,tsx,mjs,css,html}\" \"scripts/*.{mjs,cjs}\" \"*.json\" \"*.yml\" \"deploy/*.yml\"",
     "format:check": "prettier --check \"app/**/*.{ts,tsx,mjs,css,html}\" \"scripts/*.{mjs,cjs}\" \"*.json\" \"*.yml\" \"deploy/*.yml\""

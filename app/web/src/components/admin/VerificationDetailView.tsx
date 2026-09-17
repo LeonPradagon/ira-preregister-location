@@ -4,6 +4,7 @@ import {
   Bell,
   Check,
   CheckCircle2,
+  ChevronDown,
   Compass,
   Copy,
   Edit3,
@@ -318,9 +319,9 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
     session.reminderCount >= validationConfig.MAX_REMINDERS_PER_SESSION;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Top Header with Back Navigation & Action Buttons */}
-      <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+      <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -413,11 +414,11 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
       )}
 
       {/* DUAL PANEL LAYOUT (PRD Section 33.4) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
         {/* LEFT PANEL: Customer & Address Evidence Data (5 Cols) */}
-        <div className="lg:col-span-5 space-y-4">
+        <div className="lg:col-span-5 space-y-3">
           {/* Customer Master Info Card */}
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-3 shadow-xs">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3.5 space-y-2.5 shadow-xs">
             <div className="flex items-center justify-between pb-2.5 border-b border-gray-100 dark:border-gray-800">
               <div className="text-xs font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                 <User className="w-4 h-4 text-gray-600 dark:text-gray-400" />
@@ -465,7 +466,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
           </div>
 
           {/* Master vs Proposed Address Card */}
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-3.5 shadow-xs">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3.5 space-y-3 shadow-xs">
             <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
               <div className="text-xs font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                 <Home className="w-4 h-4 text-gray-600 dark:text-gray-400" />
@@ -533,8 +534,8 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
           </div>
 
           {/* Address and device evidence summary */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3.5 dark:border-slate-800">
+          <details className="group overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
+            <summary className="flex cursor-pointer list-none items-start justify-between gap-3 border-b border-slate-200 px-4 py-3.5 marker:hidden [&::-webkit-details-marker]:hidden dark:border-slate-800">
               <div>
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-900 dark:text-white">
                   <Compass className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
@@ -544,10 +545,13 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                   Bandingkan alamat yang dipakai, perubahan alamat, dan bukti lokasi dari perangkat dalam satu tampilan.
                 </p>
               </div>
-              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                {addressHistory.length} riwayat alamat
-              </span>
-            </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  {addressHistory.length} riwayat alamat
+                </span>
+                <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" />
+              </div>
+            </summary>
 
             <div className="grid gap-px bg-slate-200 dark:bg-slate-800 md:grid-cols-3">
               <div className="bg-white p-4 dark:bg-slate-900">
@@ -648,10 +652,10 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                 </div>
               </div>
             )}
-          </div>
+          </details>
 
           {/* Reminder History & Policy (PRD Section 18) */}
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-3 shadow-xs">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3.5 space-y-3 shadow-xs">
             <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
               <div className="text-xs font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                 <Bell className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -671,93 +675,109 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
               </button>
             </div>
 
-            {sessionReminders.length > 0 ? (
-              <div className="space-y-2">
-                {sessionReminders.map((rem) => (
-                  <div
-                    key={rem.id}
-                    className="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700 text-xs space-y-1"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="flex flex-wrap items-center gap-1.5 font-semibold text-gray-900 dark:text-white">
-                        <span>Pengingat #{rem.reminderNumber} ({rem.channel})</span>
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                            rem.reminderSource === 'UNOPENED_LINK'
-                              ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300'
-                              : rem.reminderSource === 'ADMIN_MANUAL'
-                                ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
-                                : 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300'
-                          }`}
-                        >
-                          {t(`reminders.source.${rem.reminderSource ?? 'CUSTOMER_SELECTED'}`)}
-                        </span>
-                      </span>
-                      <span
-                        className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-medium ${
-                          rem.status === 'SENT'
-                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                            : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                        }`}
+            <details className="group">
+              <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-600 marker:hidden [&::-webkit-details-marker]:hidden dark:bg-gray-800/60 dark:text-gray-300">
+                <span>{sessionReminders.length > 0 ? 'Tampilkan detail pengingat' : 'Belum ada pengingat terjadwal'}</span>
+                <ChevronDown className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="mt-2">
+                {sessionReminders.length > 0 ? (
+                  <div className="space-y-2">
+                    {sessionReminders.map((rem) => (
+                      <div
+                        key={rem.id}
+                        className="space-y-1 rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-xs dark:border-gray-700 dark:bg-gray-800/60"
                       >
-                        {rem.status}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
-                      Jadwal: {formatAppDateTime(rem.scheduledAt)}
-                    </div>
-                    {rem.status === 'CANCELLED' && rem.cancellationReason && (
-                      <div className="text-[11px] text-gray-600 dark:text-gray-300">
-                        {t('reminders.cancellationReasonLabel')}: {t(`reminders.cancellationReason.${rem.cancellationReason}`)}
-                        {rem.cancelledAt ? ` · ${formatAppDateTime(rem.cancelledAt)}` : ''}
+                        <div className="flex items-center justify-between">
+                          <span className="flex flex-wrap items-center gap-1.5 font-semibold text-gray-900 dark:text-white">
+                            <span>Pengingat #{rem.reminderNumber} ({rem.channel})</span>
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                                rem.reminderSource === 'UNOPENED_LINK'
+                                  ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300'
+                                  : rem.reminderSource === 'ADMIN_MANUAL'
+                                    ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                                    : 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300'
+                              }`}
+                            >
+                              {t(`reminders.source.${rem.reminderSource ?? 'CUSTOMER_SELECTED'}`)}
+                            </span>
+                          </span>
+                          <span
+                            className={`rounded px-1.5 py-0.2 font-mono text-[10px] font-medium ${
+                              rem.status === 'SENT'
+                                ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                : 'border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                            }`}
+                          >
+                            {rem.status}
+                          </span>
+                        </div>
+                        <div className="font-mono text-[11px] text-gray-500 dark:text-gray-400">
+                          Jadwal: {formatAppDateTime(rem.scheduledAt)}
+                        </div>
+                        {rem.status === 'CANCELLED' && rem.cancellationReason && (
+                          <div className="text-[11px] text-gray-600 dark:text-gray-300">
+                            {t('reminders.cancellationReasonLabel')}: {t(`reminders.cancellationReason.${rem.cancellationReason}`)}
+                            {rem.cancelledAt ? ` · ${formatAppDateTime(rem.cancelledAt)}` : ''}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    ))}
                   </div>
-                ))}
+                ) : (
+                  <div className="py-2 text-center text-xs italic text-gray-400 dark:text-gray-500">
+                    Belum ada pengingat terjadwal untuk sesi ini.
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="text-xs text-gray-400 dark:text-gray-500 italic text-center py-2">
-                Belum ada pengingat terjadwal untuk sesi ini.
-              </div>
-            )}
+            </details>
           </div>
 
           {/* GPS attempt evidence, including raw multi-sample count */}
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-3 shadow-xs">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3.5 space-y-3 shadow-xs">
             <div className="text-xs font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               <Compass className="w-4 h-4 text-gray-600 dark:text-gray-300" />
               <span>Riwayat Capture GPS ({sessionCaptures.length})</span>
             </div>
-            {sessionCaptures.length > 0 ? (
-              <div className="space-y-2">
-                {sessionCaptures.map((capture, index) => (
-                  <div
-                    key={capture.id}
-                    className="p-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-700 text-[11px]"
-                  >
-                    <div className="flex items-center justify-between font-mono text-gray-900 dark:text-white">
-                      <span>Percobaan #{sessionCaptures.length - index}</span>
-                      <span>{capture.sampleCount} titik lokasi</span>
-                    </div>
-                    <div className="mt-1 text-gray-500 dark:text-gray-400">
-                      {capture.latitude.toFixed(6)}, {capture.longitude.toFixed(6)} · ±{capture.accuracyMeters}m ·{' '}
-                      {formatAppDateTime(capture.serverTimestamp)}
-                    </div>
+            <details className="group">
+              <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-600 marker:hidden [&::-webkit-details-marker]:hidden dark:bg-gray-800/60 dark:text-gray-300">
+                <span>{sessionCaptures.length > 0 ? 'Tampilkan detail percobaan' : 'Belum ada percobaan GPS'}</span>
+                <ChevronDown className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="mt-2">
+                {sessionCaptures.length > 0 ? (
+                  <div className="space-y-2">
+                    {sessionCaptures.map((capture, index) => (
+                      <div
+                        key={capture.id}
+                        className="rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-[11px] dark:border-gray-700 dark:bg-gray-800/60"
+                      >
+                        <div className="flex items-center justify-between font-mono text-gray-900 dark:text-white">
+                          <span>Percobaan #{sessionCaptures.length - index}</span>
+                          <span>{capture.sampleCount} titik lokasi</span>
+                        </div>
+                        <div className="mt-1 text-gray-500 dark:text-gray-400">
+                          {capture.latitude.toFixed(6)}, {capture.longitude.toFixed(6)} · ±{capture.accuracyMeters}m ·{' '}
+                          {formatAppDateTime(capture.serverTimestamp)}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                ) : (
+                  <div className="py-2 text-xs italic text-gray-400 dark:text-gray-500">
+                    Belum ada riwayat pengambilan lokasi.
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="text-xs text-gray-400 dark:text-gray-500 italic">
-                Belum ada riwayat pengambilan lokasi.
-              </div>
-            )}
+            </details>
           </div>
         </div>
 
         {/* RIGHT PANEL: Map / GPS / Validation Engine Breakdown (7 Cols) */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className="lg:col-span-7 space-y-3">
           {/* Explicit GPS Coordinates & Copyable Data (PRD Section 11.1 & AC-11) */}
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 space-y-4 shadow-xs">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3.5 space-y-3 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-100 dark:border-gray-800">
               <div>
                 <div className="text-xs font-semibold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
@@ -950,7 +970,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                 homeRadiusMeters={validationConfig.HOME_RADIUS_METERS}
                 distanceMeters={distanceToCurrentReference}
                 isMatch={lastVal?.result === 'LOCATION_VALID'}
-                heightClass="h-[340px]"
+                heightClass="h-[280px] sm:h-[320px]"
               />
             </div>
           </div>
@@ -984,16 +1004,17 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
               )}
             </div>
 
-            <AdminTable embedded minWidthClass="min-w-[760px]">
-              <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium border-b border-gray-200 dark:border-gray-700">
+            <div className="max-h-[420px] overflow-auto">
+              <AdminTable embedded minWidthClass="min-w-[760px]">
+                <thead className="sticky top-0 z-10 bg-gray-50 font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                 <tr>
                   <th className="px-3.5 py-2">{t('table.signal')}</th>
                   <th className="px-3.5 py-2">{t('table.masterReference')}</th>
                   <th className="px-3.5 py-2">{t('table.deviceGeo')}</th>
                   <th className="px-3.5 py-2 text-right">{t('table.evaluation')}</th>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-gray-700 dark:text-gray-300">
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-gray-700 dark:divide-gray-800 dark:text-gray-300">
                 <tr>
                   <td className="px-3.5 py-2 font-medium text-gray-900 dark:text-white">Latitude</td>
                   <td className="px-3.5 py-2 font-mono text-[11px]">
@@ -1137,8 +1158,9 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                         : 'Perlu dicek'}
                   </td>
                 </tr>
-              </tbody>
-            </AdminTable>
+                </tbody>
+              </AdminTable>
+            </div>
           </div>
         </div>
       </div>
