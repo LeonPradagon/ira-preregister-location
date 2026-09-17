@@ -31,6 +31,7 @@ import {
   reminderCountAfterOpeningLink,
   reminderCancellationAudit,
   reminderCancellationFields,
+  reminderScheduleFields,
   nextReminderNumber,
   ReminderPreference,
   scheduleReminderInTimezone,
@@ -806,37 +807,14 @@ export class VerificationService {
       if (reuseCancelledReminder) {
         await tx
           .update(reminders)
-          .set({
-            channel: 'WHATSAPP',
-            scheduledAt,
-            sentAt: null,
-            openedAt: null,
-            tokenId: null,
-            tokenHash: null,
-            tokenExpiresAt: null,
-            tokenInvalidatedAt: null,
-            reminderSource: 'CUSTOMER_SELECTED',
-            status: 'SCHEDULED',
-            cancelledAt: null,
-            cancellationReason: null,
-            cancelledBy: null,
-            processingStartedAt: null,
-            messageText: reminderMessage,
-            providerMessageId: null,
-            retryCount: 0,
-          })
+          .set(reminderScheduleFields('CUSTOMER_SELECTED', scheduledAt, reminderMessage))
           .where(eq(reminders.id, existingReminder.id));
       } else {
         await tx.insert(reminders).values({
           id: randomUUID(),
           sessionId: row.session.id,
           reminderNumber: finalReminderNumber,
-          channel: 'WHATSAPP',
-          scheduledAt,
-          status: 'SCHEDULED',
-          reminderSource: 'CUSTOMER_SELECTED',
-          messageText: reminderMessage,
-          retryCount: 0,
+          ...reminderScheduleFields('CUSTOMER_SELECTED', scheduledAt, reminderMessage),
           createdAt: timestamp,
         });
       }

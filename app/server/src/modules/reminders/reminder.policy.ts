@@ -6,7 +6,7 @@ const AUTOMATIC_REMINDER_INTERVAL_DAYS = 2;
 const REMINDER_EXPIRY_BUFFER_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export type ReminderSource = 'CUSTOMER_SELECTED' | 'UNOPENED_LINK' | 'ADMIN_MANUAL';
+export type ReminderSource = 'CUSTOMER_SELECTED' | 'UNOPENED_LINK' | 'ADMIN_MANUAL' | 'SYSTEM_RECOVERY';
 
 export type ReminderCancellationReason =
   | 'LEGACY_CANCELLED'
@@ -81,6 +81,28 @@ export function isReusableCancelledReminder(
   tokenId: string | null | undefined,
 ): boolean {
   return status.trim().toUpperCase() === 'CANCELLED' && !sentAt && !tokenId;
+}
+
+export function reminderScheduleFields(source: ReminderSource, scheduledAt: Date, messageText: string) {
+  return {
+    channel: 'WHATSAPP' as const,
+    scheduledAt,
+    sentAt: null,
+    openedAt: null,
+    tokenId: null,
+    tokenHash: null,
+    tokenExpiresAt: null,
+    tokenInvalidatedAt: null,
+    reminderSource: source,
+    status: 'SCHEDULED' as const,
+    cancelledAt: null,
+    cancellationReason: null,
+    cancelledBy: null,
+    processingStartedAt: null,
+    messageText,
+    providerMessageId: null,
+    retryCount: 0,
+  };
 }
 
 export function reminderLinkExpiresAt(

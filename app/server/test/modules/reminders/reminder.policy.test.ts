@@ -10,6 +10,7 @@ import {
   reminderCountAfterOpeningLink,
   reminderCancellationAudit,
   reminderCancellationFields,
+  reminderScheduleFields,
   reminderLinkExpiresAt,
   scheduleReminder,
   scheduleReminderInTimezone,
@@ -98,6 +99,29 @@ describe('reminder policy', () => {
     expect(isReusableCancelledReminder('CANCELLED', null, null)).toBe(true);
     expect(isReusableCancelledReminder('SENT', new Date('2026-09-09T00:00:00.000Z'), 'token')).toBe(false);
     expect(isReusableCancelledReminder('SCHEDULED', null, null)).toBe(false);
+  });
+
+  it('clears cancellation and delivery metadata when reusing a reminder slot', () => {
+    const scheduledAt = new Date('2026-09-17T10:00:00.000Z');
+    expect(reminderScheduleFields('SYSTEM_RECOVERY', scheduledAt, 'Recovery reminder')).toEqual({
+      channel: 'WHATSAPP',
+      scheduledAt,
+      sentAt: null,
+      openedAt: null,
+      tokenId: null,
+      tokenHash: null,
+      tokenExpiresAt: null,
+      tokenInvalidatedAt: null,
+      reminderSource: 'SYSTEM_RECOVERY',
+      status: 'SCHEDULED',
+      cancelledAt: null,
+      cancellationReason: null,
+      cancelledBy: null,
+      processingStartedAt: null,
+      messageText: 'Recovery reminder',
+      providerMessageId: null,
+      retryCount: 0,
+    });
   });
 
   it('records cancellation metadata and an auditable reason', () => {

@@ -5,7 +5,7 @@ import { rm } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { Queue, Worker } from 'bullmq';
-import { and, desc, eq, inArray, isNull, isNotNull, lte, lt, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, isNotNull, lte, lt, ne, or, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { db, pool } from './db/client.js';
 import {
@@ -36,6 +36,8 @@ import {
   reminderCancellationAudit,
   reminderCancellationFields,
   reminderLinkExpiresAt,
+  reminderScheduleFields,
+  isReusableCancelledReminder,
   unopenedLinkReminderAt,
   verificationSessionExpiresAt,
 } from './modules/reminders/reminder.policy.js';
@@ -92,6 +94,9 @@ const positiveIntegerEnv = (value: string | undefined, fallback: number) => {
 const coordinateAuditQueueBuffer = positiveIntegerEnv(process.env.COORDINATE_AUDIT_QUEUE_BUFFER, 2000);
 const coordinateAuditBatchSize = positiveIntegerEnv(process.env.COORDINATE_AUDIT_BATCH_SIZE, 500);
 const reminderProcessingTimeoutMinutes = positiveIntegerEnv(process.env.REMINDER_PROCESSING_TIMEOUT_MINUTES, 15);
+const reminderRecoveryIntervalSeconds = positiveIntegerEnv(process.env.REMINDER_RECOVERY_INTERVAL_SECONDS, 60);
+const reminderRecoveryBatchSize = positiveIntegerEnv(process.env.REMINDER_RECOVERY_BATCH_SIZE, 50);
+let lastReminderRecoveryBucket = -1;
 let coordinateAuditEnqueueInFlight = false;
 const whatsappProvider = process.env.WHATSAPP_PROVIDER ?? 'disabled';
 const invitationTemplate = getWhatsAppTemplate('INVITATION');
@@ -1121,6 +1126,137 @@ const recoverStaleReminderProcessing = async () => {
     });
 };
 
+const recoverMissingReminderSlots = async () => {
+  const recoveryBucket = Math.floor(Date.now() / (reminderRecoveryIntervalSeconds * 1000));
+  if (recoveryBucket === lastReminderRecoveryBucket) return;
+  lastReminderRecoveryBucket = recoveryBucket;
+  const runtimeConfig = await reminderConfig.get();
+  if (!runtimeConfig.ENABLE_REMINDERS) return;
+  const recoveryStartedAt = new Date();
+  const candidates = await db
+    .select({ id: verificationSessions.id, customerName: customers.name })
+    .from(verificationSessions)
+    .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
+    .where(
+      and(
+        eq(verificationSessions.verificationStatus, 'REMINDER_REQUIRED'),
+        lt(verificationSessions.reminderCount, runtimeConfig.MAX_REMINDERS_PER_SESSION),
+        gt(verificationSessions.expiresAt, recoveryStartedAt),
+        isNull(verificationSessions.revokedAt),
+        sql`not exists (
+          select 1
+          from reminders active_reminder
+          where active_reminder.session_id = ${verificationSessions.id}
+            and active_reminder.status in ('SCHEDULED', 'PROCESSING')
+        )`,
+      ),
+    )
+    .orderBy(verificationSessions.updatedAt, verificationSessions.id)
+    .limit(reminderRecoveryBatchSize);
+  let recovered = 0;
+  for (const candidate of candidates) {
+    try {
+      const didRecover = await db.transaction(async (tx) => {
+        const [session] = await tx
+          .select({
+            id: verificationSessions.id,
+            reminderCount: verificationSessions.reminderCount,
+          })
+          .from(verificationSessions)
+          .where(
+            and(
+              eq(verificationSessions.id, candidate.id),
+              eq(verificationSessions.verificationStatus, 'REMINDER_REQUIRED'),
+              lt(verificationSessions.reminderCount, runtimeConfig.MAX_REMINDERS_PER_SESSION),
+              gt(verificationSessions.expiresAt, new Date()),
+              isNull(verificationSessions.revokedAt),
+            ),
+          )
+          .limit(1);
+        if (!session) return false;
+
+        const reminderNumber = session.reminderCount + 1;
+        const [existingReminder] = await tx
+          .select({
+            id: reminders.id,
+            status: reminders.status,
+            sentAt: reminders.sentAt,
+            tokenId: reminders.tokenId,
+          })
+          .from(reminders)
+          .where(and(eq(reminders.sessionId, session.id), eq(reminders.reminderNumber, reminderNumber)))
+          .limit(1);
+        const messageText = `Halo ${candidate.customerName}, ini pengingat verifikasi lokasi Anda. Pengingat ${reminderNumber} dari ${runtimeConfig.MAX_REMINDERS_PER_SESSION}. Tautan baru berlaku maksimal ${runtimeConfig.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`;
+        const reusable = Boolean(
+          existingReminder &&
+            isReusableCancelledReminder(existingReminder.status, existingReminder.sentAt, existingReminder.tokenId),
+        );
+        if (existingReminder && !reusable) return false;
+
+        let reminderId: string | undefined;
+        if (reusable) {
+          const [updated] = await tx
+            .update(reminders)
+            .set(reminderScheduleFields('SYSTEM_RECOVERY', recoveryStartedAt, messageText))
+            .where(
+              and(
+                eq(reminders.id, existingReminder!.id),
+                eq(reminders.status, 'CANCELLED'),
+                isNull(reminders.sentAt),
+                isNull(reminders.tokenId),
+              ),
+            )
+            .returning({ id: reminders.id });
+          reminderId = updated?.id;
+        } else {
+          const [created] = await tx
+            .insert(reminders)
+            .values({
+              id: randomUUID(),
+              sessionId: session.id,
+              reminderNumber,
+              ...reminderScheduleFields('SYSTEM_RECOVERY', recoveryStartedAt, messageText),
+              createdAt: recoveryStartedAt,
+            })
+            .onConflictDoNothing({ target: [reminders.sessionId, reminders.reminderNumber] })
+            .returning({ id: reminders.id });
+          reminderId = created?.id;
+        }
+        if (!reminderId) return false;
+
+        await tx
+          .update(verificationSessions)
+          .set({
+            reminderCount: reminderNumber,
+            verificationStatus:
+              reminderNumber >= runtimeConfig.MAX_REMINDERS_PER_SESSION
+                ? 'REMINDER_LIMIT_REACHED'
+                : 'WAITING_FOR_HOME',
+            updatedAt: recoveryStartedAt,
+          })
+          .where(eq(verificationSessions.id, session.id));
+        await tx.insert(auditLogs).values({
+          actorUserId: 'system',
+          actorName: 'Reminder Recovery',
+          action: 'REMINDER_SCHEDULED',
+          entityType: 'REMINDER',
+          entityId: reminderId,
+          after: { reminderNumber, automaticRecovery: true, reusedCancelledReminder: reusable },
+          timestamp: recoveryStartedAt,
+        });
+        return true;
+      });
+      if (didRecover) recovered += 1;
+    } catch (error) {
+      logEvent('error', 'reminder.recovery_failed', {
+        sessionId: candidate.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  if (recovered) logEvent('info', 'reminder.recovered_missing_slots', { count: recovered });
+};
+
 const enqueueDueCampaignItems = async () => {
   const due = await db
     .select({ id: verificationCampaignItems.id })
@@ -1236,7 +1372,8 @@ const enqueueMaintenance = async () => {
 
 const poll = async () => {
   const jobs: Promise<unknown>[] = [];
-  if (runs('messaging')) jobs.push(enqueuePendingOutbox(), recoverStaleReminderProcessing(), enqueueDueReminders());
+  if (runs('messaging'))
+    jobs.push(enqueuePendingOutbox(), recoverStaleReminderProcessing(), recoverMissingReminderSlots(), enqueueDueReminders());
   if (runs('campaign')) jobs.push(enqueueDueCampaignItems(), enqueueCampaignMaterialization());
   if (runs('import')) jobs.push(enqueuePendingCoordinateAudits());
   if (runs('maintenance')) jobs.push(enqueueMaintenance());

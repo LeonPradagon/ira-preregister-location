@@ -328,7 +328,7 @@ export interface VerificationReview {
 }
 
 export type ReminderStatus = 'SCHEDULED' | 'PROCESSING' | 'SENT' | 'FAILED' | 'CANCELLED' | 'LIMIT_REACHED';
-export type ReminderSource = 'CUSTOMER_SELECTED' | 'UNOPENED_LINK' | 'ADMIN_MANUAL';
+export type ReminderSource = 'CUSTOMER_SELECTED' | 'UNOPENED_LINK' | 'ADMIN_MANUAL' | 'SYSTEM_RECOVERY';
 export type ReminderPreference = 'IN_1_HOUR' | 'TONIGHT' | 'TOMORROW_MORNING' | 'DEFAULT';
 
 export interface Reminder {

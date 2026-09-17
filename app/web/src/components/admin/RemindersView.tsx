@@ -54,10 +54,13 @@ const sourceClassName = (source: ReminderSource) => {
     return 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300';
   if (source === 'ADMIN_MANUAL')
     return 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200';
+  if (source === 'SYSTEM_RECOVERY')
+    return 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/30 dark:text-cyan-300';
   return 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300';
 };
 
-const sourceIcon = (source: ReminderSource) => (source === 'UNOPENED_LINK' ? '⚙' : source === 'ADMIN_MANUAL' ? '✦' : '✓');
+const sourceIcon = (source: ReminderSource) =>
+  source === 'UNOPENED_LINK' ? '⚙' : source === 'ADMIN_MANUAL' ? '✦' : source === 'SYSTEM_RECOVERY' ? '↻' : '✓';
 
 export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerification }) => {
   const { validationConfig, dashboardSummary } = useApp();

@@ -55,6 +55,8 @@ import { campaignEligibleAddressSql, incompleteAddressSql } from '../validation/
 import {
   reminderCancellationAudit,
   reminderCancellationFields,
+  reminderScheduleFields,
+  isReusableCancelledReminder,
   unopenedLinkReminderAt,
   verificationSessionExpiresAt,
 } from '../reminders/reminder.policy.js';
@@ -1770,30 +1772,56 @@ export class AdminService {
     const scheduledAt = timestamp();
     const nextStatus = reminderNumber >= max ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME';
     assertTransition(detail.session.verificationStatus, nextStatus);
+    const existingReminder = detail.reminders.find((reminder) => reminder.reminderNumber === reminderNumber);
+    const reuseCancelledReminder = Boolean(
+      existingReminder &&
+        isReusableCancelledReminder(existingReminder.status, existingReminder.sentAt, existingReminder.tokenId),
+    );
+    if (existingReminder && !reuseCancelledReminder)
+      throw new DomainError('Reminder slot has already been used', 409, 'REMINDER_SLOT_ALREADY_USED');
+    const messageText = `Halo ${detail.customer.name}, ini pengingat verifikasi lokasi Anda. Pengingat ${reminderNumber} dari ${max}. Tautan baru berlaku maksimal ${config.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`;
     await db.transaction(async (tx) => {
       await tx
         .update(verificationSessions)
         .set({ reminderCount: reminderNumber, verificationStatus: nextStatus, updatedAt: scheduledAt })
         .where(eq(verificationSessions.id, id));
-      await tx.insert(reminders).values({
-        id: randomUUID(),
-        sessionId: id,
-        reminderNumber,
-        channel: 'WHATSAPP',
-        scheduledAt,
-        status: 'SCHEDULED',
-        reminderSource: 'ADMIN_MANUAL',
-        messageText: `Halo ${detail.customer.name}, ini pengingat verifikasi lokasi Anda. Pengingat ${reminderNumber} dari ${max}. Tautan baru berlaku maksimal ${config.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`,
-        retryCount: 0,
-        createdAt: scheduledAt,
-      });
+      if (reuseCancelledReminder) {
+        const [reused] = await tx
+          .update(reminders)
+          .set(reminderScheduleFields('ADMIN_MANUAL', scheduledAt, messageText))
+          .where(
+            and(
+              eq(reminders.id, existingReminder!.id),
+              eq(reminders.status, 'CANCELLED'),
+              isNull(reminders.sentAt),
+              isNull(reminders.tokenId),
+            ),
+          )
+          .returning({ id: reminders.id });
+        if (!reused)
+          throw new DomainError('Reminder slot changed before it could be reused', 409, 'REMINDER_SLOT_BUSY');
+      } else {
+        const [created] = await tx
+          .insert(reminders)
+          .values({
+            id: randomUUID(),
+            sessionId: id,
+            reminderNumber,
+            ...reminderScheduleFields('ADMIN_MANUAL', scheduledAt, messageText),
+            createdAt: scheduledAt,
+          })
+          .onConflictDoNothing({ target: [reminders.sessionId, reminders.reminderNumber] })
+          .returning({ id: reminders.id });
+        if (!created)
+          throw new DomainError('Reminder slot changed before it could be scheduled', 409, 'REMINDER_SLOT_BUSY');
+      }
       await tx.insert(auditLogs).values({
         actorUserId: admin.id,
         actorName: admin.name,
         action: 'REMINDER_SCHEDULED',
         entityType: 'REMINDER',
         entityId: id,
-        after: { reminderNumber, manual: true, tokenRotated: true },
+        after: { reminderNumber, manual: true, tokenRotated: true, reusedCancelledReminder: reuseCancelledReminder },
         timestamp: scheduledAt,
       });
     });
