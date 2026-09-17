@@ -82,7 +82,7 @@ describe('API contracts', () => {
     }
   });
 
-  it('allows a missing postal code but requires a real house number', () => {
+  it('allows a missing postal code and optional house number', () => {
     const baseAddress = {
       province: 'DKI Jakarta',
       city: 'Jakarta Barat',
@@ -95,7 +95,16 @@ describe('API contracts', () => {
 
     expect(addressChangeSchema.safeParse({ ...baseAddress, houseNumber: '' }).success).toBe(true);
     expect(addressChangeSchema.safeParse({ ...baseAddress, houseNumber: undefined }).success).toBe(true);
-    expect(addressChangeSchema.safeParse({ ...baseAddress, houseNumber: 'TANPA NOMOR' }).success).toBe(false);
+    expect(addressChangeSchema.safeParse({ ...baseAddress, houseNumber: 'TANPA NOMOR' }).success).toBe(true);
+    expect(addressChangeSchema.parse({ ...baseAddress, houseNumber: 'TANPA NOMOR' }).houseNumber).toBe('');
+    expect(
+      customerCreateSchema.safeParse({
+        externalId: 'CUST-NO-HOUSE-NUMBER',
+        name: 'Customer Without House Number',
+        phoneE164: '+6281234567890',
+        address: { ...baseAddress, houseNumber: undefined },
+      }).success,
+    ).toBe(true);
     expect(addressChangeSchema.safeParse({ ...baseAddress, postalCode: '1154' }).success).toBe(false);
     expect(addressChangeSchema.safeParse({ ...baseAddress, postalCode: '' }).success).toBe(true);
     expect(addressChangeSchema.safeParse({ ...baseAddress, postalCode: undefined }).success).toBe(true);

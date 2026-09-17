@@ -285,6 +285,7 @@ export function decideValidation(
   else if (streetScore < streetSoftMatchThreshold) reasonCodes.push('STREET_MISMATCH');
   else if (streetScore < config.streetMatchThreshold) reasonCodes.push('STREET_VARIATION');
   if (houseNumberMatch === false) reasonCodes.push('HOUSE_NUMBER_MISMATCH');
+  else if (houseNumberMatch === undefined) reasonCodes.push('HOUSE_NUMBER_NOT_AVAILABLE');
   if (addressIncomplete) reasonCodes.push('ADDRESS_INCOMPLETE');
   if (outsideHomeRadius) reasonCodes.push('HOME_RADIUS_EXCEEDED');
 

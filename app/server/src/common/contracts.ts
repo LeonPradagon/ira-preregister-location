@@ -33,6 +33,12 @@ const addressTextSchema = (max: number) =>
     message: 'Alamat mengandung karakter yang tidak diizinkan',
   });
 const requiredAddressTextSchema = (max: number) => addressTextSchema(max).min(1);
+const noHouseNumberValues = new Set(['unknown', 'tidak diketahui', 'tanpa nomor', 'tanpa no', 'n/a', 'na', '-', '00000']);
+
+const optionalHouseNumberSchema = addressTextSchema(64)
+  .optional()
+  .transform((value) => (value && !noHouseNumberValues.has(value.toLowerCase()) ? value : ''))
+  .default('');
 
 export const campaignTargetFilterSchema = z.object({
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).default('UNVERIFIED'),
@@ -72,15 +78,7 @@ export const addressChangeSchema = z.object({
     .refine((value) => !value || /^\d{5}$/.test(value), 'Kode pos harus terdiri dari 5 digit')
     .default(''),
   street: requiredAddressTextSchema(255),
-  houseNumber: addressTextSchema(64)
-    .max(64)
-    .optional()
-    .refine(
-      (value) =>
-        !value || !['unknown', 'tidak diketahui', 'tanpa nomor', 'n/a', 'na', '-', '00000'].includes(value.toLowerCase()),
-      'Nomor rumah harus berupa nomor yang valid jika diisi',
-    )
-    .default(''),
+  houseNumber: optionalHouseNumberSchema,
   rt: addressTextSchema(8).optional(),
   rw: addressTextSchema(8).optional(),
   building: addressTextSchema(255).optional(),

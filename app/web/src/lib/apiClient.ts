@@ -63,7 +63,7 @@ export interface PublicVerificationContextApi {
     subdistrict: string;
     postalCode?: string;
     street: string;
-    houseNumber: string;
+    houseNumber?: string;
     rt?: string | null;
     rw?: string | null;
     building?: string | null;

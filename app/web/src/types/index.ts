@@ -77,7 +77,7 @@ export interface CustomerAddress {
   subdistrict: string;
   postalCode: string;
   street: string;
-  houseNumber: string;
+  houseNumber?: string;
   rt?: string;
   rw?: string;
   building?: string;
