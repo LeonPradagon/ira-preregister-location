@@ -35,7 +35,9 @@ import { confirmAction } from '../../lib/swal';
 import { AppLoader } from '../common/AppLoader';
 import { withTimeout } from '../../lib/async';
 import {
+  getDefaultManualReviewReason,
   getManualReviewDecisions,
+  getManualReviewReasonOptions,
   isManualActionAvailable,
 } from '../../lib/manualReviewAvailability';
 
@@ -325,19 +327,12 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
   const manualReviewDecisions = getManualReviewDecisions(session.verificationStatus, hasValidationResult).filter(
     (decision) => decision !== 'REQUEST_RETRY' || !cycleExhausted,
   );
+  const manualReviewReasonOptions = getManualReviewReasonOptions(reviewDecision);
 
   const openManualReview = () => {
     const initialDecision = manualReviewDecisions[0] ?? 'REQUEST_ADDRESS_UPDATE';
     setReviewDecision(initialDecision);
-    setReviewReasonCode(
-      initialDecision === 'APPROVE'
-        ? 'MANUAL_APPROVAL_PRECISION_PASS'
-        : initialDecision === 'REJECT'
-          ? 'LOCATION_MISMATCH_REJECTED'
-          : initialDecision === 'REQUEST_RETRY'
-            ? 'GPS_RETRY_REQUESTED_BY_OPS'
-            : 'ADDRESS_UPDATE_REQUIRED',
-    );
+    setReviewReasonCode(getDefaultManualReviewReason(initialDecision));
     setReviewError('');
     setReviewModalOpen(true);
   };
@@ -1227,7 +1222,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                       type="button"
                       onClick={() => {
                         setReviewDecision('APPROVE');
-                        setReviewReasonCode('MANUAL_APPROVAL_PRECISION_PASS');
+                        setReviewReasonCode(getDefaultManualReviewReason('APPROVE'));
                       }}
                       className={`p-2.5 rounded-lg border text-left transition-all ${
                         reviewDecision === 'APPROVE'
@@ -1252,7 +1247,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                     type="button"
                     onClick={() => {
                       setReviewDecision('REJECT');
-                      setReviewReasonCode('LOCATION_MISMATCH_REJECTED');
+                      setReviewReasonCode(getDefaultManualReviewReason('REJECT'));
                     }}
                     className={`p-2.5 rounded-lg border text-left transition-all ${
                       reviewDecision === 'REJECT'
@@ -1277,7 +1272,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                       type="button"
                       onClick={() => {
                         setReviewDecision('REQUEST_RETRY');
-                        setReviewReasonCode('GPS_RETRY_REQUESTED_BY_OPS');
+                        setReviewReasonCode(getDefaultManualReviewReason('REQUEST_RETRY'));
                       }}
                       className={`p-2.5 rounded-lg border text-left transition-all ${
                         reviewDecision === 'REQUEST_RETRY'
@@ -1302,7 +1297,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                     type="button"
                     onClick={() => {
                       setReviewDecision('REQUEST_ADDRESS_UPDATE');
-                      setReviewReasonCode('ADDRESS_UPDATE_REQUIRED');
+                      setReviewReasonCode(getDefaultManualReviewReason('REQUEST_ADDRESS_UPDATE'));
                     }}
                     className={`p-2.5 rounded-lg border text-left transition-all ${
                       reviewDecision === 'REQUEST_ADDRESS_UPDATE'
@@ -1331,12 +1326,15 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                   onChange={(e) => setReviewReasonCode(e.target.value)}
                   className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300"
                 >
-                  <option value="MANUAL_APPROVAL_PRECISION_PASS">Lokasi sesuai dengan alamat</option>
-                  <option value="STREET_ALIAS_VERIFIED">Nama jalan sesuai</option>
-                  <option value="LOCATION_MISMATCH_REJECTED">Lokasi terlalu jauh dari alamat</option>
-                  <option value="GPS_ACCURACY_INSUFFICIENT">Sinyal lokasi kurang akurat</option>
-                  <option value="ADDRESS_UPDATE_REQUIRED">Alamat perlu diperbarui</option>
+                  {manualReviewReasonOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
+                <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
+                  Pilih alasan yang mendukung keputusan reviewer. Alasan ini tersimpan sebagai catatan audit.
+                </p>
               </div>
 
               <div>

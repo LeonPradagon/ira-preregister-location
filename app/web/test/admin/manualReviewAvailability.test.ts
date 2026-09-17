@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getDefaultManualReviewReason,
   getManualReviewDecisions,
+  getManualReviewReasonOptions,
   isManualActionAvailable,
   isManualReviewAvailable,
 } from '../../src/lib/manualReviewAvailability';
@@ -52,5 +54,16 @@ describe('manual review availability', () => {
     expect(getManualReviewDecisions('REMINDER_LIMIT_REACHED', true)).toContain('APPROVE');
     expect(getManualReviewDecisions('REMINDER_LIMIT_REACHED', false)).not.toContain('APPROVE');
     expect(getManualReviewDecisions('ADDRESS_EDITING', true)).not.toContain('APPROVE');
+  });
+
+  it('keeps review reasons aligned with the selected decision', () => {
+    expect(getManualReviewReasonOptions('REQUEST_RETRY').map((option) => option.value)).not.toContain(
+      'MANUAL_APPROVAL_PRECISION_PASS',
+    );
+    expect(getManualReviewReasonOptions('REQUEST_ADDRESS_UPDATE').map((option) => option.value)).not.toContain(
+      'LOCATION_MISMATCH_REJECTED',
+    );
+    expect(getDefaultManualReviewReason('REQUEST_RETRY')).toBe('GPS_RETRY_REQUESTED_BY_OPS');
+    expect(getDefaultManualReviewReason('REQUEST_ADDRESS_UPDATE')).toBe('ADDRESS_UPDATE_REQUIRED');
   });
 });

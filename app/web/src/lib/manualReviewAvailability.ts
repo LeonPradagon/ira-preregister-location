@@ -76,3 +76,35 @@ export function getManualReviewDecisions(status: string, hasValidationResult: bo
   if (manualAddressUpdateStatuses.has(status)) decisions.push('REQUEST_ADDRESS_UPDATE');
   return decisions;
 }
+
+export type ManualReviewReasonOption = {
+  value: string;
+  label: string;
+};
+
+const manualReviewReasonOptions: Record<ReviewDecision, ManualReviewReasonOption[]> = {
+  APPROVE: [
+    { value: 'MANUAL_APPROVAL_PRECISION_PASS', label: 'Lokasi sesuai dengan alamat' },
+    { value: 'STREET_ALIAS_VERIFIED', label: 'Nama jalan sesuai atau merupakan alias' },
+  ],
+  REJECT: [
+    { value: 'LOCATION_MISMATCH_REJECTED', label: 'Lokasi tidak sesuai dengan alamat' },
+    { value: 'GPS_ACCURACY_INSUFFICIENT', label: 'Akurasi GPS tidak cukup untuk menyetujui' },
+  ],
+  REQUEST_RETRY: [
+    { value: 'GPS_RETRY_REQUESTED_BY_OPS', label: 'Titik GPS perlu diambil ulang' },
+    { value: 'GPS_ACCURACY_INSUFFICIENT', label: 'Akurasi GPS belum cukup meyakinkan' },
+  ],
+  REQUEST_ADDRESS_UPDATE: [
+    { value: 'ADDRESS_UPDATE_REQUIRED', label: 'Alamat perlu diperbarui oleh customer' },
+    { value: 'STREET_ALIAS_VERIFIED', label: 'Nama jalan atau nomor rumah perlu dikonfirmasi' },
+  ],
+};
+
+export function getManualReviewReasonOptions(decision: ReviewDecision): ManualReviewReasonOption[] {
+  return manualReviewReasonOptions[decision];
+}
+
+export function getDefaultManualReviewReason(decision: ReviewDecision): string {
+  return getManualReviewReasonOptions(decision)[0].value;
+}
