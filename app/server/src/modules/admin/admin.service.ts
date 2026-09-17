@@ -1287,26 +1287,38 @@ export class AdminService {
         ),
       );
     } else if (query.status === 'NEEDS_REVIEW') {
-      filters.push(sql`exists (
-        select 1
-        from validation_results latest_location_result
-        where latest_location_result.session_id = ${verificationSessions.id}
-          and latest_location_result.address_id = ${verificationSessions.currentAddressId}
-          and latest_location_result.result <> 'LOCATION_VALID'
-          and not exists (
+      filters.push(
+        and(
+          inArray(verificationSessions.verificationStatus, [
+            'MANUAL_REVIEW',
+            'GPS_CAPTURING',
+            'LOW_GPS_ACCURACY',
+            'LOCATION_MISMATCH',
+            'ADDRESS_PROPOSED',
+            'REMINDER_LIMIT_REACHED',
+          ]),
+          sql`exists (
             select 1
-            from validation_results newer_location_result
-            where newer_location_result.session_id = latest_location_result.session_id
-              and newer_location_result.address_id = latest_location_result.address_id
-              and (
-                newer_location_result.created_at > latest_location_result.created_at
-                or (
-                  newer_location_result.created_at = latest_location_result.created_at
-                  and newer_location_result.id > latest_location_result.id
-                )
+            from validation_results latest_location_result
+            where latest_location_result.session_id = ${verificationSessions.id}
+              and latest_location_result.address_id = ${verificationSessions.currentAddressId}
+              and latest_location_result.result <> 'LOCATION_VALID'
+              and not exists (
+                select 1
+                from validation_results newer_location_result
+                where newer_location_result.session_id = latest_location_result.session_id
+                  and newer_location_result.address_id = latest_location_result.address_id
+                  and (
+                    newer_location_result.created_at > latest_location_result.created_at
+                    or (
+                      newer_location_result.created_at = latest_location_result.created_at
+                      and newer_location_result.id > latest_location_result.id
+                    )
+                  )
               )
-          )
-      )`);
+          )`,
+        ),
+      );
     } else if (query.status)
       filters.push(
         eq(

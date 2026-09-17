@@ -34,6 +34,10 @@ import { useTranslation } from '../../i18n';
 import { confirmAction } from '../../lib/swal';
 import { AppLoader } from '../common/AppLoader';
 import { withTimeout } from '../../lib/async';
+import {
+  getManualReviewDecisions,
+  isManualActionAvailable,
+} from '../../lib/manualReviewAvailability';
 
 const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) =>
   props.className?.includes('animate-spin') ? <AppLoader size={18} label="Loading" /> : <RefreshCwIcon {...props} />;
@@ -162,6 +166,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
   }
 
   const lastVal = session.lastValidationResult;
+  const hasValidationResult = Boolean(lastVal);
   const capturedLoc = lastVal?.capturedLocation;
   const refLoc = address.referenceLocation;
   const reverseGeocode = lastVal?.reverseGeocode;
@@ -317,6 +322,25 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
   const cycleExhausted =
     session.attemptCount >= Math.min(3, validationConfig.MAX_LOCATION_ATTEMPTS) &&
     session.reminderCount >= validationConfig.MAX_REMINDERS_PER_SESSION;
+  const manualReviewDecisions = getManualReviewDecisions(session.verificationStatus, hasValidationResult).filter(
+    (decision) => decision !== 'REQUEST_RETRY' || !cycleExhausted,
+  );
+
+  const openManualReview = () => {
+    const initialDecision = manualReviewDecisions[0] ?? 'REQUEST_ADDRESS_UPDATE';
+    setReviewDecision(initialDecision);
+    setReviewReasonCode(
+      initialDecision === 'APPROVE'
+        ? 'MANUAL_APPROVAL_PRECISION_PASS'
+        : initialDecision === 'REJECT'
+          ? 'LOCATION_MISMATCH_REJECTED'
+          : initialDecision === 'REQUEST_RETRY'
+            ? 'GPS_RETRY_REQUESTED_BY_OPS'
+            : 'ADDRESS_UPDATE_REQUIRED',
+    );
+    setReviewError('');
+    setReviewModalOpen(true);
+  };
 
   return (
     <div className="space-y-3">
@@ -380,20 +404,16 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
           )}
 
           {/* Manual Review Button */}
-          {canPerformReview &&
-            (session.verificationStatus === 'MANUAL_REVIEW' ||
-              session.verificationStatus === 'CUSTOMER_DATA_MISMATCH' ||
-              session.verificationStatus === 'LOCATION_MISMATCH' ||
-              (session.verificationStatus === 'REMINDER_LIMIT_REACHED' && cycleExhausted)) && (
-              <button
-                type="button"
-                onClick={() => setReviewModalOpen(true)}
-                className="px-3.5 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg text-xs font-medium shadow-xs flex items-center gap-1.5 transition-all"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>Approval manual</span>
-              </button>
-            )}
+          {canPerformReview && isManualActionAvailable(session.verificationStatus) && manualReviewDecisions.length > 0 && (
+            <button
+              type="button"
+              onClick={openManualReview}
+              className="px-3.5 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg text-xs font-medium shadow-xs flex items-center gap-1.5 transition-all"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>{manualReviewDecisions.includes('APPROVE') ? 'Approval manual' : 'Tindakan manual'}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1202,30 +1222,33 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                   Pilih hasil pemeriksaan:
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReviewDecision('APPROVE');
-                      setReviewReasonCode('MANUAL_APPROVAL_PRECISION_PASS');
-                    }}
-                    className={`p-2.5 rounded-lg border text-left transition-all ${
-                      reviewDecision === 'APPROVE'
-                        ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-900 dark:text-emerald-200 font-semibold'
-                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span>Setujui - lokasi sesuai</span>
-                      {reviewDecision === 'APPROVE' && (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                      )}
-                    </div>
-                    <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                      Setujui lokasi &amp; alamat valid
-                    </div>
-                  </button>
+                  {manualReviewDecisions.includes('APPROVE') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReviewDecision('APPROVE');
+                        setReviewReasonCode('MANUAL_APPROVAL_PRECISION_PASS');
+                      }}
+                      className={`p-2.5 rounded-lg border text-left transition-all ${
+                        reviewDecision === 'APPROVE'
+                          ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-900 dark:text-emerald-200 font-semibold'
+                          : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span>Setujui - lokasi sesuai</span>
+                        {reviewDecision === 'APPROVE' && (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        )}
+                      </div>
+                      <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                        Setujui lokasi &amp; alamat valid
+                      </div>
+                    </button>
+                  )}
 
-                  <button
+                  {manualReviewDecisions.includes('REJECT') && (
+                    <button
                     type="button"
                     onClick={() => {
                       setReviewDecision('REJECT');
@@ -1246,9 +1269,10 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                     <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
                       Tolak hasil &amp; minta customer ke rumah
                     </div>
-                  </button>
+                    </button>
+                  )}
 
-                  {!cycleExhausted && (
+                  {manualReviewDecisions.includes('REQUEST_RETRY') && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1273,7 +1297,8 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                     </button>
                   )}
 
-                  <button
+                  {manualReviewDecisions.includes('REQUEST_ADDRESS_UPDATE') && (
+                    <button
                     type="button"
                     onClick={() => {
                       setReviewDecision('REQUEST_ADDRESS_UPDATE');
@@ -1294,7 +1319,8 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                     <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
                       Minta customer update alamat
                     </div>
-                  </button>
+                    </button>
+                  )}
                 </div>
               </div>
 
