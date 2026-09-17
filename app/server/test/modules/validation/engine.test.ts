@@ -122,6 +122,19 @@ describe('server validation engine', () => {
     expect(decision.result).toBe('LOCATION_VALID');
   });
 
+  it('treats missing reverse street and house number as neutral when GPS and administration match', () => {
+    const decision = decideValidation(
+      [sample(-6.884, 107.613), sample(-6.88401, 107.61301, 12, 1), sample(-6.88399, 107.61299, 14, 2)],
+      address,
+      { ...reverseGeocode, street: '', houseNumber: undefined, formattedAddress: 'Dago, Bandung' },
+      config,
+    );
+    expect(decision.addressScore).toBe(1);
+    expect(decision.result).toBe('LOCATION_VALID');
+    expect(decision.reasonCodes).toContain('STREET_NOT_AVAILABLE');
+    expect(decision.reasonCodes).not.toContain('STREET_MISMATCH');
+  });
+
   it('routes samples with excessive spread to manual review', () => {
     const decision = decideValidation(
       [sample(-6.884, 107.613), sample(-6.8855, 107.613, 12, 1), sample(-6.884, 107.6145, 14, 2)],

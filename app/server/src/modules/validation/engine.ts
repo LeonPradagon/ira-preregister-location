@@ -223,7 +223,11 @@ export function decideValidation(
   const streetScore = tokenScore(address.street, reverseGeocode.street);
   const streetSoftMatchThreshold = Math.min(config.streetMatchThreshold, config.streetSoftMatchThreshold ?? 0.7);
   const administrativeLevelsMatch = provinceMatch && cityMatch && districtMatch && subdistrictMatch;
-  const streetIsAcceptablySimilar = streetScore >= streetSoftMatchThreshold;
+  const reverseStreetAvailable = Boolean(reverseGeocode.street?.trim());
+  // Reverse-geocoders often omit the road name in Indonesian residential areas.
+  // A missing street is unknown evidence, not a mismatch; an explicitly
+  // different street remains a mismatch and is still visible to reviewers.
+  const streetIsAcceptablySimilar = !reverseStreetAvailable || streetScore >= streetSoftMatchThreshold;
   const registeredHouseNumber = isPlaceholderAddressValue(address.houseNumber) ? '' : address.houseNumber;
   const detectedHouseNumber = isPlaceholderAddressValue(reverseGeocode.houseNumber)
     ? ''
@@ -243,14 +247,14 @@ export function decideValidation(
         Number(cityMatch) * 0.15 +
         Number(districtMatch) * 0.2 +
         Number(subdistrictMatch) * 0.2 +
-        streetScore * 0.2 +
+        (reverseStreetAvailable ? streetScore : 1) * 0.2 +
         (houseNumberMatch === undefined ? 0.1 : Number(houseNumberMatch) * 0.1)) *
         100,
     ) / 100;
   const addressMatchPasses =
     !addressIncomplete &&
     administrativeLevelsMatch &&
-    streetScore >= config.streetMatchThreshold &&
+    (!reverseStreetAvailable || streetScore >= config.streetMatchThreshold) &&
     addressScore >= config.addressScoreThreshold;
   // A complete registered address can still be checked against reverse GPS
   // data even when its master coordinate is missing. Do not hide a clear
@@ -277,7 +281,8 @@ export function decideValidation(
   if (!cityMatch) reasonCodes.push('CITY_MISMATCH');
   if (!districtMatch) reasonCodes.push('DISTRICT_MISMATCH');
   if (!subdistrictMatch) reasonCodes.push('SUBDISTRICT_MISMATCH');
-  if (streetScore < streetSoftMatchThreshold) reasonCodes.push('STREET_MISMATCH');
+  if (!reverseStreetAvailable) reasonCodes.push('STREET_NOT_AVAILABLE');
+  else if (streetScore < streetSoftMatchThreshold) reasonCodes.push('STREET_MISMATCH');
   else if (streetScore < config.streetMatchThreshold) reasonCodes.push('STREET_VARIATION');
   if (houseNumberMatch === false) reasonCodes.push('HOUSE_NUMBER_MISMATCH');
   if (addressIncomplete) reasonCodes.push('ADDRESS_INCOMPLETE');
