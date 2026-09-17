@@ -219,4 +219,20 @@ describe('automatic approval policy', () => {
       autoApproved: false,
     });
   });
+
+  it('treats a road-only result as a blocking reason for automatic approval', () => {
+    expect(
+      applyApprovalPolicy({
+        ...base,
+        enableAutoApproval: true,
+        result: 'MANUAL_REVIEW',
+        addressScore: 1,
+        reasonCodes: ['ROAD_ONLY_LOCATION', 'MANUAL_REVIEW_REQUIRED'],
+      }),
+    ).toEqual({
+      result: 'MANUAL_REVIEW',
+      reasonCodes: ['ROAD_ONLY_LOCATION', 'MANUAL_REVIEW_REQUIRED'],
+      autoApproved: false,
+    });
+  });
 });

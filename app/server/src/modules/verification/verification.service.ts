@@ -466,6 +466,18 @@ export class VerificationService {
       gpsMaxAccuracyMeters: config.GPS_MAX_ACCURACY_METERS,
       sampleSpreadMeters: decision.sampleSpreadMeters,
     });
+    // A reverse-geocoder result that only identifies a road is not proof that
+    // the customer is at the house. Keep it in manual review unless a house
+    // number was actually confirmed, including when the registered house
+    // number is optional and absent.
+    if (geocode.precision === 'STREET' && decision.houseNumberMatch !== true) {
+      decision.result = 'MANUAL_REVIEW';
+      decision.reasonCodes = [
+        ...decision.reasonCodes.filter((reasonCode) => reasonCode !== 'LOCATION_VALID'),
+        'ROAD_ONLY_LOCATION',
+        'MANUAL_REVIEW_REQUIRED',
+      ];
+    }
     if (coordinateMatchScore >= 0.9) {
       decision.result = 'LOCATION_VALID';
       decision.addressScore = Math.max(decision.addressScore, coordinateMatchScore);
