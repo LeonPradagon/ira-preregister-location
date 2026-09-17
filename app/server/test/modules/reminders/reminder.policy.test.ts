@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   automaticReminderTimes,
   canScheduleReminderFromLink,
+  isSystemFollowUpStatus,
   isReminderLinkFirstOpen,
   isReusableCancelledReminder,
   isReminderScheduledBeforeSessionExpiry,
@@ -14,12 +15,68 @@ import {
   reminderLinkExpiresAt,
   scheduleReminder,
   scheduleReminderInTimezone,
+  shouldScheduleSystemFollowUp,
   spreadReminderTimes,
   unopenedLinkReminderAt,
   verificationSessionExpiresAt,
 } from '../../../src/modules/reminders/reminder.policy.js';
 
 describe('reminder policy', () => {
+  it.each(['LINK_OPENED', 'GPS_CAPTURING', 'LOCATION_MISMATCH', 'ADDRESS_EDITING', 'ADDRESS_PROPOSED'])(
+    'recognizes %s as a system follow-up state',
+    (status) => {
+      expect(isSystemFollowUpStatus(status)).toBe(true);
+    },
+  );
+
+  it.each(['LOCATION_VALID', 'EXPIRED', 'MANUAL_REVIEW', 'CUSTOMER_DATA_MISMATCH'])(
+    'does not treat %s as an automatic follow-up state',
+    (status) => {
+      expect(isSystemFollowUpStatus(status)).toBe(false);
+    },
+  );
+
+  it('schedules a follow-up for an inactive address update without an active reminder', () => {
+    const now = new Date('2026-09-17T12:00:00.000Z');
+    expect(
+      shouldScheduleSystemFollowUp({
+        status: 'ADDRESS_EDITING',
+        reminderCount: 1,
+        maxReminders: 3,
+        updatedAt: new Date('2026-09-16T11:59:00.000Z'),
+        expiresAt: new Date('2026-09-20T12:00:00.000Z'),
+        now,
+        hasActiveReminder: false,
+        whatsappOptedOut: false,
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    { reason: 'active reminder', hasActiveReminder: true },
+    { reason: 'reminder limit', reminderCount: 3 },
+    { reason: 'expired session', expiresAt: new Date('2026-09-17T11:59:00.000Z') },
+    { reason: 'recent activity', updatedAt: new Date('2026-09-17T11:59:00.000Z') },
+    { reason: 'opted out', whatsappOptedOut: true },
+  ])(
+    'does not schedule a follow-up for $reason',
+    ({ hasActiveReminder, reminderCount, expiresAt, updatedAt, whatsappOptedOut }) => {
+      const now = new Date('2026-09-17T12:00:00.000Z');
+      expect(
+        shouldScheduleSystemFollowUp({
+          status: 'ADDRESS_EDITING',
+          reminderCount: reminderCount ?? 1,
+          maxReminders: 3,
+          updatedAt: updatedAt ?? new Date('2026-09-16T11:59:00.000Z'),
+          expiresAt: expiresAt ?? new Date('2026-09-20T12:00:00.000Z'),
+          now,
+          hasActiveReminder: hasActiveReminder ?? false,
+          whatsappOptedOut: whatsappOptedOut ?? false,
+        }),
+      ).toBe(false);
+    },
+  );
+
   it('caps reminders at three per session', () => {
     expect(nextReminderNumber(0)).toBe(1);
     expect(nextReminderNumber(2)).toBe(3);

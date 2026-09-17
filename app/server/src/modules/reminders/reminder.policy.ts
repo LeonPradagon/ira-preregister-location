@@ -8,6 +8,46 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type ReminderSource = 'CUSTOMER_SELECTED' | 'UNOPENED_LINK' | 'ADMIN_MANUAL' | 'SYSTEM_RECOVERY';
 
+export const SYSTEM_FOLLOW_UP_STATUSES = [
+  'LINK_OPENED',
+  'CONSENTED',
+  'GPS_CAPTURING',
+  'LOW_GPS_ACCURACY',
+  'LOCATION_MISMATCH',
+  'WAITING_FOR_HOME',
+  'ADDRESS_EDITING',
+  'ADDRESS_PROPOSED',
+];
+const systemFollowUpStatuses = new Set(SYSTEM_FOLLOW_UP_STATUSES);
+
+export interface SystemFollowUpEligibility {
+  status: string;
+  reminderCount: number;
+  maxReminders: number;
+  updatedAt: Date;
+  expiresAt: Date;
+  now: Date;
+  hasActiveReminder: boolean;
+  whatsappOptedOut: boolean;
+}
+
+export function isSystemFollowUpStatus(status: string): boolean {
+  return systemFollowUpStatuses.has(status.trim().toUpperCase());
+}
+
+export function shouldScheduleSystemFollowUp(
+  input: SystemFollowUpEligibility,
+  inactivityHours = 24,
+): boolean {
+  if (!isSystemFollowUpStatus(input.status)) return false;
+  if (!Number.isFinite(inactivityHours) || inactivityHours <= 0) return false;
+  if (!Number.isFinite(input.reminderCount) || input.reminderCount >= input.maxReminders) return false;
+  if (input.hasActiveReminder || input.whatsappOptedOut) return false;
+  if (input.expiresAt <= input.now) return false;
+  const inactiveBefore = new Date(input.now.getTime() - inactivityHours * 60 * 60 * 1000);
+  return input.updatedAt <= inactiveBefore;
+}
+
 export type ReminderCancellationReason =
   | 'LEGACY_CANCELLED'
   | 'SESSION_EXPIRED'
