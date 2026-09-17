@@ -158,6 +158,26 @@ describe('automatic approval policy', () => {
     ).toBe(1);
   });
 
+  it('tolerates a reverse-geocoded house number mismatch with trusted coordinates', () => {
+    expect(
+      getCoordinateMatchScore({
+        geocodingAvailable: true,
+        referencePrecision: 'HOUSE',
+        reverseGeocodePrecision: 'HOUSE',
+        houseNumberMatch: false,
+        provinceMatch: true,
+        cityMatch: true,
+        districtMatch: true,
+        subdistrictMatch: true,
+        distanceFromReferenceMeters: 8,
+        homeRadiusMeters: 300,
+        gpsAccuracyMeters: 12,
+        gpsMaxAccuracyMeters: 50,
+        sampleSpreadMeters: 20,
+      }),
+    ).toBe(1);
+  });
+
   it('does not use the coordinate fallback when an administrative level differs', () => {
     expect(
       getCoordinateMatchScore({

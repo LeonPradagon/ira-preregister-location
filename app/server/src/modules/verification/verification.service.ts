@@ -483,6 +483,7 @@ export class VerificationService {
       decision.addressScore = Math.max(decision.addressScore, coordinateMatchScore);
       decision.reasonCodes = [
         'COORDINATE_MATCHED',
+        ...(decision.houseNumberMatch === false ? ['HOUSE_NUMBER_MISMATCH_TOLERATED'] : []),
         ...(geocodingAvailable ? [] : ['GEOCODING_UNAVAILABLE']),
         'LOCATION_VALID',
       ];
