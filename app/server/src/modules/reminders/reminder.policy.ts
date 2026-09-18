@@ -58,6 +58,7 @@ export type ReminderCancellationReason =
   | 'CUSTOMER_DATA_MISMATCH'
   | 'LOCATION_VERIFIED'
   | 'ADDRESS_CHANGE_STARTED'
+  | 'VERIFICATION_RESUMED'
   | 'COORDINATE_AUDIT_AUTO_VERIFIED'
   | 'VERIFICATION_CYCLE_RESTARTED'
   | 'SESSION_REVOKED';
@@ -109,6 +110,19 @@ export function reminderCountAfterOpeningLink(currentCount: number, reminderNumb
 
 export function isReminderLinkFirstOpen(openedAt: Date | null | undefined): boolean {
   return !openedAt;
+}
+
+export function shouldCancelFutureRemindersOnLinkOpen(reminderSource: string): boolean {
+  return reminderSource.trim().toUpperCase() === 'CUSTOMER_SELECTED';
+}
+
+export function verificationStatusAfterReminderSend(
+  currentStatus: string,
+  nextScheduledAt: Date | null,
+  nextReminderNumber: number,
+  maxReminders: number,
+): string {
+  return !nextScheduledAt && nextReminderNumber > maxReminders ? 'REMINDER_LIMIT_REACHED' : currentStatus;
 }
 
 export function canScheduleReminderFromLink(reminderCount: number, reminderNumber: number): boolean {

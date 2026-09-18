@@ -12,7 +12,7 @@ const labels: Record<string, string> = {
   LOW_GPS_ACCURACY: 'Sinyal lokasi kurang akurat',
   LOCATION_MISMATCH: 'Lokasi tidak sesuai',
   CUSTOMER_DATA_MISMATCH: 'Data tidak sesuai',
-  MANUAL_REVIEW: 'Perlu diperiksa tim',
+  MANUAL_REVIEW: 'Menunggu keputusan tim',
   WAITING_FOR_HOME: 'Belum di rumah / perlu coba lagi',
   ADDRESS_EDITING: 'Sedang mengubah alamat',
   ADDRESS_PROPOSED: 'Alamat baru diajukan',

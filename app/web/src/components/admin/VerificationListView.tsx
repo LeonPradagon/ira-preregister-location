@@ -66,7 +66,6 @@ const statusValues = [
 const quickFilterValues = new Set([
   'WAITING_FOR_CUSTOMER',
   'NEEDS_ATTENTION',
-  'NEEDS_REVIEW',
   'ADDRESS_CHANGED',
   'LOCATION_VALID',
   'REMINDER_LIMIT_REACHED',
@@ -316,7 +315,6 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
               <optgroup label={t('verifications.quickFilters')}>
                 <option value="WAITING_FOR_CUSTOMER">{t('verifications.waitingForCustomerFilter')}</option>
                 <option value="NEEDS_ATTENTION">{t('verifications.teamActionFilter')}</option>
-                <option value="NEEDS_REVIEW">{t('verifications.locationNeedsReviewFilter')}</option>
                 <option value="ADDRESS_CHANGED">{t('verifications.addressChangeFilter')}</option>
                 <option value="LOCATION_VALID">{t('verifications.verifiedFilter')}</option>
                 <option value="REMINDER_LIMIT_REACHED">{t('verifications.reminderLimitFilter')}</option>

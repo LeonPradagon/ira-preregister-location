@@ -118,7 +118,7 @@ const AttentionCard: React.FC<AttentionCardProps> = ({
 const statusText: Record<string, string> = {
   LOCATION_VALID: 'Location matched',
   WAITING_FOR_HOME: 'Waiting for customer',
-  MANUAL_REVIEW: 'Needs team review',
+  MANUAL_REVIEW: 'Awaiting team decision',
   LOW_GPS_ACCURACY: 'Location signal is weak',
   ADDRESS_PROPOSED: 'Address needs review',
   CUSTOMER_DATA_MISMATCH: 'Customer data does not match',

@@ -236,7 +236,9 @@ Saat customer sudah berada di alamat:
 3. Izinkan akses lokasi.
 4. Diam sampai pemeriksaan selesai.
 
-Saat link reminder dibuka, reminder terjadwal berikutnya untuk sesi tersebut dibatalkan. Customer melanjutkan dari link yang baru dibuka.
+Saat link reminder yang dipilih customer dibuka, reminder customer-selected berikutnya untuk sesi tersebut dibatalkan. Jika customer belum melanjutkan pemeriksaan dalam 24 jam, sistem dapat mengirim reminder recovery otomatis selama sesi masih aktif dan batas reminder belum tercapai.
+
+Link recovery otomatis tidak langsung membatalkan reminder terjadwal berikutnya hanya karena link dibuka. Begitu customer melanjutkan pemeriksaan, reminder yang masih terjadwal dibatalkan agar tidak terkirim saat customer sudah aktif memproses verifikasi.
 
 ### C. Reminder otomatis karena link belum dibuka
 

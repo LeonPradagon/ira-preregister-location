@@ -15,9 +15,11 @@ import {
   reminderLinkExpiresAt,
   scheduleReminder,
   scheduleReminderInTimezone,
+  shouldCancelFutureRemindersOnLinkOpen,
   shouldScheduleSystemFollowUp,
   spreadReminderTimes,
   unopenedLinkReminderAt,
+  verificationStatusAfterReminderSend,
   verificationSessionExpiresAt,
 } from '../../../src/modules/reminders/reminder.policy.js';
 
@@ -81,6 +83,32 @@ describe('reminder policy', () => {
     expect(nextReminderNumber(0)).toBe(1);
     expect(nextReminderNumber(2)).toBe(3);
     expect(nextReminderNumber(3)).toBeNull();
+  });
+
+  it.each(['SYSTEM_RECOVERY', 'UNOPENED_LINK', 'ADMIN_MANUAL'])(
+    'does not cancel future reminders when a %s link is opened',
+    (source) => {
+      expect(shouldCancelFutureRemindersOnLinkOpen(source)).toBe(false);
+    },
+  );
+
+  it('cancels future reminders for a customer-selected reminder link', () => {
+    expect(shouldCancelFutureRemindersOnLinkOpen('CUSTOMER_SELECTED')).toBe(true);
+  });
+
+  it('keeps the session status while the final reminder is only scheduled', () => {
+    expect(
+      verificationStatusAfterReminderSend(
+        'WAITING_FOR_HOME',
+        new Date('2026-09-19T13:09:02.321Z'),
+        3,
+        3,
+      ),
+    ).toBe('WAITING_FOR_HOME');
+  });
+
+  it('marks the session as limit reached only after the final reminder is sent', () => {
+    expect(verificationStatusAfterReminderSend('WAITING_FOR_HOME', null, 4, 3)).toBe('REMINDER_LIMIT_REACHED');
   });
 
   it.each([

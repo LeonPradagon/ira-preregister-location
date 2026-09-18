@@ -39,6 +39,7 @@ import {
   reminderScheduleFields,
   isReusableCancelledReminder,
   shouldScheduleSystemFollowUp,
+  verificationStatusAfterReminderSend,
   SYSTEM_FOLLOW_UP_STATUSES,
   unopenedLinkReminderAt,
   verificationSessionExpiresAt,
@@ -425,10 +426,12 @@ const reminderWorker = runs('messaging')
                 tokenId: verificationToken.tokenId,
                 tokenHash: verificationToken.tokenHash,
                 reminderCount: nextScheduledAt ? nextReminderNumber : target.session.reminderCount,
-                verificationStatus:
-                  nextScheduledAt && nextReminderNumber >= runtimeConfig.MAX_REMINDERS_PER_SESSION
-                    ? 'REMINDER_LIMIT_REACHED'
-                    : target.session.verificationStatus,
+                verificationStatus: verificationStatusAfterReminderSend(
+                  target.session.verificationStatus,
+                  nextScheduledAt,
+                  nextReminderNumber,
+                  runtimeConfig.MAX_REMINDERS_PER_SESSION,
+                ),
                 updatedAt: sentAt,
               })
               .where(eq(verificationSessions.id, target.session.id));

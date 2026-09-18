@@ -35,6 +35,7 @@ import {
   nextReminderNumber,
   ReminderPreference,
   scheduleReminderInTimezone,
+  shouldCancelFutureRemindersOnLinkOpen,
 } from '../reminders/reminder.policy.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
 import { parseVerificationToken, verifyVerificationToken } from './verification-token.js';
@@ -171,14 +172,22 @@ export class VerificationService {
           });
         }
         if (reminder && firstReminderOpen) {
-          const cancelledReminders = await tx
-            .update(reminders)
-            .set({
-              ...reminderCancellationFields('REMINDER_LINK_OPENED', timestamp, 'customer-token'),
-              processingStartedAt: null,
-            })
-            .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')))
-            .returning({ id: reminders.id });
+          const cancelledReminders = shouldCancelFutureRemindersOnLinkOpen(reminder.reminderSource)
+            ? await tx
+                .update(reminders)
+                .set({
+                  ...reminderCancellationFields('REMINDER_LINK_OPENED', timestamp, 'customer-token'),
+                  processingStartedAt: null,
+                })
+                .where(
+                  and(
+                    eq(reminders.sessionId, row.session.id),
+                    eq(reminders.status, 'SCHEDULED'),
+                    eq(reminders.reminderSource, 'CUSTOMER_SELECTED'),
+                  ),
+                )
+                .returning({ id: reminders.id })
+            : [];
           if (cancelledReminders.length)
             await tx.insert(auditLogs).values(
               cancelledReminders.map(({ id }) =>
@@ -197,7 +206,7 @@ export class VerificationService {
             entityId: reminder.id,
             after: {
               reminderNumber: reminder.reminderNumber,
-              futureRemindersCancelled: true,
+              futureRemindersCancelled: cancelledReminders.length > 0,
               reminderCountBefore: row.session.reminderCount,
               reminderCountAfter: effectiveReminderCount,
             },
@@ -901,22 +910,27 @@ export class VerificationService {
         .update(verificationSessions)
         .set({ verificationStatus: nextStatus, updatedAt: timestamp })
         .where(eq(verificationSessions.id, row.session.id));
-      if (!sameAddress) {
-        const cancelledReminders = await tx
-          .update(reminders)
-          .set({
-            ...reminderCancellationFields('ADDRESS_CHANGE_STARTED', timestamp, 'customer-token'),
-            processingStartedAt: null,
-          })
-          .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')))
-          .returning({ id: reminders.id });
-        if (cancelledReminders.length)
-          await tx.insert(auditLogs).values(
-            cancelledReminders.map(({ id }) =>
-              reminderCancellationAudit(id, 'ADDRESS_CHANGE_STARTED', timestamp, 'customer-token', 'Customer'),
+      const reminderCancellationReason = sameAddress ? 'VERIFICATION_RESUMED' : 'ADDRESS_CHANGE_STARTED';
+      const cancelledReminders = await tx
+        .update(reminders)
+        .set({
+          ...reminderCancellationFields(reminderCancellationReason, timestamp, 'customer-token'),
+          processingStartedAt: null,
+        })
+        .where(and(eq(reminders.sessionId, row.session.id), eq(reminders.status, 'SCHEDULED')))
+        .returning({ id: reminders.id });
+      if (cancelledReminders.length)
+        await tx.insert(auditLogs).values(
+          cancelledReminders.map(({ id }) =>
+            reminderCancellationAudit(
+              id,
+              reminderCancellationReason,
+              timestamp,
+              'customer-token',
+              'Customer',
             ),
-          );
-      }
+          ),
+        );
       await tx.insert(auditLogs).values({
         actorUserId: 'customer-token',
         actorName: 'Customer',
