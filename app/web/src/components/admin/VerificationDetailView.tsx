@@ -27,7 +27,7 @@ import {
   formatAddressForDisplay,
   isIncompleteAddress,
 } from '../../lib/validationEngine';
-import { userFriendlyStatus } from '../../lib/statusLabels';
+import { isLocationMatched, userFriendlyStatus } from '../../lib/statusLabels';
 import { getManualReviewCaseKeys } from '../../lib/manualReviewCases';
 import { hasCapability } from '../../lib/accessControl';
 import { AdminTable } from '../common/AdminTable';
@@ -177,6 +177,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
   const coordinateText = (location: { latitude: number; longitude: number } | null | undefined) =>
     location ? `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}` : 'Belum tersedia';
   const reverseGeocodeUnavailable = lastVal?.reasonCodes.includes('GEOCODING_UNAVAILABLE') ?? false;
+  const locationMatched = isLocationMatched(session.verificationStatus, lastVal?.result);
   const administrativeCheckResult = (matches: boolean | undefined) =>
     lastVal == null
       ? 'Belum ada hasil'
@@ -192,13 +193,15 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
   const automatedPassed = lastVal?.reasonCodes.includes('AUTOMATED_VALIDATION_PASSED') ?? false;
   const overallResultLabel = !lastVal
     ? 'Belum ada hasil'
+    : locationMatched
+      ? userFriendlyStatus('LOCATION_VALID')
     : automatedPassed
       ? 'Sesuai secara otomatis — menunggu tinjauan manual'
       : userFriendlyStatus(lastVal.result);
   const overallResultClass =
-    !lastVal || automatedPassed
+    !lastVal || automatedPassed && !locationMatched
       ? 'text-amber-700 dark:text-amber-400'
-      : lastVal.result === 'LOCATION_VALID'
+      : locationMatched
         ? 'text-emerald-700 dark:text-emerald-400'
         : 'text-rose-700 dark:text-rose-400';
 
@@ -986,7 +989,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                 capturedLabel={`Customer: ${customer.name}`}
                 homeRadiusMeters={validationConfig.HOME_RADIUS_METERS}
                 distanceMeters={distanceToCurrentReference}
-                isMatch={lastVal?.result === 'LOCATION_VALID'}
+                isMatch={locationMatched}
                 heightClass="h-[280px] sm:h-[320px]"
               />
             </div>

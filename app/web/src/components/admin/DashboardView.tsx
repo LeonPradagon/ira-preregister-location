@@ -30,6 +30,7 @@ import {
 import { useTranslation } from '../../i18n';
 import { AppLoader } from '../common/AppLoader';
 import { formatAppDateTime } from '../../lib/dateTime';
+import { isLocationMatched } from '../../lib/statusLabels';
 
 const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) =>
   props.className?.includes('animate-spin') ? <AppLoader size={18} label="Loading" /> : <RefreshCwIcon {...props} />;
@@ -170,7 +171,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
       const customer = customers.find((item) => item.id === session.customerId);
       if (sessionSortKey === 'customer') return customer?.name || session.registeredPhoneSnapshot;
       if (sessionSortKey === 'status') return session.verificationStatus;
-      return session.lastValidationResult?.result;
+      return isLocationMatched(session.verificationStatus, session.lastValidationResult?.result)
+        ? 'LOCATION_VALID'
+        : session.lastValidationResult?.result;
     },
     sessionSortDirection,
   );
@@ -533,6 +536,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
               const lastVal = session.lastValidationResult;
               const status = session.verificationStatus;
               const result = lastVal?.result ?? '';
+              const locationMatched = isLocationMatched(status, result);
               return (
                 <tr key={session.id} className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
                   <td className="px-4 py-3">
@@ -561,9 +565,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
                     {lastVal ? (
                       <div>
                         <div
-                          className={`text-xs font-semibold ${result === 'LOCATION_VALID' ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}
+                          className={`text-xs font-semibold ${locationMatched ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}
                         >
-                          {result === 'LOCATION_VALID'
+                          {locationMatched
                             ? t('dashboard.locationMatched')
                             : t('dashboard.locationNeedsReview')}
                         </div>

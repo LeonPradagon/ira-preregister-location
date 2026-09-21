@@ -30,6 +30,9 @@ const labels: Record<string, string> = {
   PUBLISHED: 'Sudah diteruskan',
 };
 
+export const isLocationMatched = (verificationStatus?: string | null, validationResult?: string | null) =>
+  verificationStatus === 'LOCATION_VALID' || validationResult === 'LOCATION_VALID';
+
 const reasonLabels: Record<string, string> = {
   LOCATION_VALID: 'Lokasi sesuai',
   LOW_GPS_ACCURACY: 'Sinyal lokasi kurang akurat',

@@ -23,7 +23,7 @@ import { api } from '../../lib/apiClient';
 import { Customer, CustomerAddress, VerificationSession } from '../../types';
 import { formatAppDateTime } from '../../lib/dateTime';
 import { formatAddressForDisplay } from '../../lib/validationEngine';
-import { userFriendlyReason, userFriendlyStatus } from '../../lib/statusLabels';
+import { isLocationMatched, userFriendlyReason, userFriendlyStatus } from '../../lib/statusLabels';
 import { getManualReviewCaseKeys } from '../../lib/manualReviewCases';
 import {
   AdminTable,
@@ -207,7 +207,10 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
               ? 1
               : 0;
           if (sortKey === 'status') return row.session.verificationStatus;
-          if (sortKey === 'location') return row.session.lastValidationResult?.result;
+          if (sortKey === 'location')
+            return isLocationMatched(row.session.verificationStatus, row.session.lastValidationResult?.result)
+              ? 'LOCATION_VALID'
+              : row.session.lastValidationResult?.result;
           return row.session.attemptCount;
         },
         sortDirection,
@@ -432,6 +435,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {sortedRows.map(({ session, customer, address }) => {
               const lastVal = session.lastValidationResult;
+              const locationMatched = isLocationMatched(session.verificationStatus, lastVal?.result);
               const manualCaseKeys = getManualReviewCaseKeys(session.verificationStatus, lastVal?.reasonCodes);
               const addressChangeStatus =
                 session.verificationStatus === 'ADDRESS_EDITING'
@@ -503,9 +507,9 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
                     {lastVal ? (
                       <div>
                         <div
-                          className={`text-xs font-semibold ${lastVal.result === 'LOCATION_VALID' ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}
+                          className={`text-xs font-semibold ${locationMatched ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}
                         >
-                          {lastVal.result === 'LOCATION_VALID'
+                          {locationMatched
                             ? t('verifications.locationMatched')
                             : t('verifications.locationNeedsReview')}
                         </div>
@@ -614,7 +618,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
                             )}
                           </div>
                           <div className="mt-2 grid gap-2 text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
-                            <div><span className="font-medium">{t('verifications.result')}:</span> {getStatusLabel(lastVal.result, t)}</div>
+                            <div><span className="font-medium">{t('verifications.result')}:</span> {getStatusLabel(locationMatched ? 'LOCATION_VALID' : lastVal.result, t)}</div>
                             <div><span className="font-medium">{t('verifications.distance')}:</span> {lastVal.distanceFromReferenceMeters == null ? t('verifications.noReference') : `${lastVal.distanceFromReferenceMeters.toFixed(1)}m`}</div>
                             <div><span className="font-medium">{t('verifications.gpsAccuracy')}:</span> ±{lastVal.gpsAccuracyM}m</div>
                             <div><span className="font-medium">{t('verifications.reasonCodes')}:</span> {lastVal.reasonCodes.length ? lastVal.reasonCodes.map(userFriendlyReason).join(', ') : '—'}</div>
