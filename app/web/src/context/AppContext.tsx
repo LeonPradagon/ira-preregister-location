@@ -91,6 +91,7 @@ const EMPTY_DASHBOARD_SUMMARY: DashboardSummary = {
     manualReview: 0,
     locationValid: 0,
     statusCounts: {},
+    manualCaseCounts: {},
   },
   coordinateAudits: { statusCounts: {} },
   reminders: { total: 0, scheduled: 0, sent: 0, failed: 0, cancelled: 0, cancelledByReason: {}, byNumber: {} },
@@ -234,6 +235,7 @@ function mapApiDashboard(raw: AdminDashboardApi): DashboardSummary {
       manualReview: number(raw.verifications.manualReview),
       locationValid: number(raw.verifications.locationValid),
       statusCounts: numberMap(raw.verifications.statusCounts),
+      manualCaseCounts: numberMap(raw.verifications.manualCaseCounts),
     },
     coordinateAudits: {
       statusCounts: numberMap(raw.coordinateAudits?.statusCounts),

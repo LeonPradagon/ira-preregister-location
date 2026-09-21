@@ -28,6 +28,7 @@ import {
   isIncompleteAddress,
 } from '../../lib/validationEngine';
 import { userFriendlyStatus } from '../../lib/statusLabels';
+import { getManualReviewCaseKeys } from '../../lib/manualReviewCases';
 import { hasCapability } from '../../lib/accessControl';
 import { AdminTable } from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
@@ -328,6 +329,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
     (decision) => decision !== 'REQUEST_RETRY' || !cycleExhausted,
   );
   const manualReviewReasonOptions = getManualReviewReasonOptions(reviewDecision);
+  const manualReviewCaseKeys = getManualReviewCaseKeys(session.verificationStatus, lastVal?.reasonCodes);
 
   const openManualReview = () => {
     const initialDecision = manualReviewDecisions[0] ?? 'REQUEST_ADDRESS_UPDATE';
@@ -989,6 +991,34 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
               />
             </div>
           </div>
+
+          {manualReviewCaseKeys.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 shadow-xs dark:border-amber-900 dark:bg-amber-950/20">
+              <div className="flex items-start gap-2.5">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" />
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                    {t('verifications.manualCaseTitle')}
+                  </h3>
+                  <p className="mt-1 text-[11px] leading-5 text-amber-800/90 dark:text-amber-200/90">
+                    {t('verifications.manualCaseDescription')}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {manualReviewCaseKeys.map((caseKey) => (
+                  <div key={caseKey} className="rounded-lg border border-amber-200/80 bg-white/70 p-3 dark:border-amber-900/70 dark:bg-amber-950/20">
+                    <p className="text-xs font-semibold text-amber-900 dark:text-amber-100">
+                      {t(`verifications.case.${caseKey}`)}
+                    </p>
+                    <p className="mt-1 text-[11px] leading-4 text-amber-800/80 dark:text-amber-200/80">
+                      {t(`verifications.caseHelp.${caseKey}`)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Validation Engine Signals Breakdown (PRD Section 15 & Section 33.4 Table) */}
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-xs">

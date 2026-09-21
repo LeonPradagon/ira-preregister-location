@@ -12,6 +12,7 @@ import {
   Megaphone,
   Moon,
   Radio,
+  Wifi,
   Settings,
   Sun,
   type LucideIcon,
@@ -31,6 +32,7 @@ export type AdminTab =
   | 'audit-logs'
   | 'settings'
   | 'integrations'
+  | 'coverage'
   | 'users';
 
 interface AdminLayoutProps {
@@ -96,6 +98,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           badge: pendingReviewsCount > 0 ? pendingReviewsCount : undefined,
           badgeColor: 'bg-amber-500 text-white',
         },
+        { id: 'coverage', label: t('nav.coverageCheck'), icon: Wifi },
       ],
     },
     {

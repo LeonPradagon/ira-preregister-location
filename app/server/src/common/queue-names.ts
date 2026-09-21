@@ -8,4 +8,5 @@ export const queueNames = {
   imports: 'ira_preregist-imports',
   coordinateAudit: 'ira_preregist-coordinate-audit',
   exports: 'ira_preregist-exports',
+  coverage: 'ira_preregist-coverage',
 } as const;

@@ -398,6 +398,59 @@ export const integrationConfigs = pgTable('integration_configs', {
   updatedAt: updatedAt(),
 });
 
+export const coverageCheckBatches = pgTable('coverage_check_batches', {
+  id: id(),
+  providerKey: varchar('provider_key', { length: 64 }).notNull().default('FWA'),
+  status: varchar('status', { length: 32 }).notNull().default('QUEUED'),
+  totalCount: integer('total_count').notNull(),
+  completedCount: integer('completed_count').notNull().default(0),
+  failedCount: integer('failed_count').notNull().default(0),
+  requestedBy: text('requested_by')
+    .notNull()
+    .references(() => authUsers.id),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const coverageChecks = pgTable(
+  'coverage_checks',
+  {
+    id: id(),
+    batchId: uuid('batch_id')
+      .notNull()
+      .references(() => coverageCheckBatches.id, { onDelete: 'cascade' }),
+    providerKey: varchar('provider_key', { length: 64 }).notNull().default('FWA'),
+    verificationSessionId: uuid('verification_session_id')
+      .notNull()
+      .references(() => verificationSessions.id),
+    customerId: uuid('customer_id')
+      .notNull()
+      .references(() => customers.id),
+    addressId: uuid('address_id')
+      .notNull()
+      .references(() => customerAddresses.id),
+    latitude: numeric('latitude', { precision: 10, scale: 7 }).notNull(),
+    longitude: numeric('longitude', { precision: 10, scale: 7 }).notNull(),
+    status: varchar('status', { length: 32 }).notNull().default('QUEUED'),
+    providerStatus: varchar('provider_status', { length: 32 }),
+    response: jsonb('response'),
+    error: text('error'),
+    requestedBy: text('requested_by')
+      .notNull()
+      .references(() => authUsers.id),
+    requestedAt: timestamp('requested_at', { withTimezone: true }).notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('coverage_checks_session_provider_created_idx').on(table.verificationSessionId, table.providerKey, table.createdAt),
+    index('coverage_checks_batch_status_idx').on(table.batchId, table.status),
+  ],
+);
+
 export const validationConfigs = pgTable('validation_configs', {
   id: id(),
   configVersion: varchar('config_version', { length: 64 }).notNull(),

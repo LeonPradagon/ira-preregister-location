@@ -2,16 +2,20 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
+  BarChart3,
   CheckCircle2,
+  CircleHelp,
+  ChevronDown,
   Clock3,
   Compass,
   Edit3,
+  ExternalLink,
   Filter,
-  Info,
+  MapPin,
   RefreshCw as RefreshCwIcon,
   Search,
+  Send,
   ShieldCheck,
-  Users,
   XCircle,
 } from 'lucide-react';
 import { mapApiAddress, mapApiCustomer, mapApiSession, useApp } from '../../context/AppContext';
@@ -19,7 +23,8 @@ import { api } from '../../lib/apiClient';
 import { Customer, CustomerAddress, VerificationSession } from '../../types';
 import { formatAppDateTime } from '../../lib/dateTime';
 import { formatAddressForDisplay } from '../../lib/validationEngine';
-import { userFriendlyStatus } from '../../lib/statusLabels';
+import { userFriendlyReason, userFriendlyStatus } from '../../lib/statusLabels';
+import { getManualReviewCaseKeys } from '../../lib/manualReviewCases';
 import {
   AdminTable,
   SortableTableHeader,
@@ -34,6 +39,25 @@ import { AppLoader } from '../common/AppLoader';
 const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) =>
   props.className?.includes('animate-spin') ? <AppLoader size={18} label="Loading" /> : <RefreshCwIcon {...props} />;
 
+const numberFormat = new Intl.NumberFormat('id-ID');
+
+const Metric: React.FC<{ label: string; value: number; icon: React.ReactNode; tone: string }> = ({
+  label,
+  value,
+  icon,
+  tone,
+}) => (
+  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+        <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{numberFormat.format(value)}</p>
+      </div>
+      <span className={`rounded-xl p-2.5 ${tone}`}>{icon}</span>
+    </div>
+  </div>
+);
+
 interface VerificationListViewProps {
   onSelectVerification: (sessionId: string) => void;
 }
@@ -46,7 +70,6 @@ interface VerificationListRow {
 
 const statusValues = [
   'LOCATION_VALID',
-  'MANUAL_REVIEW',
   'WAITING_FOR_HOME',
   'LOW_GPS_ACCURACY',
   'LOCATION_MISMATCH',
@@ -71,7 +94,27 @@ const quickFilterValues = new Set([
   'REMINDER_LIMIT_REACHED',
 ]);
 
-const getStatusLabel = (status: string) => userFriendlyStatus(status);
+const getStatusLabel = (status: string, t: (key: string) => string) => {
+  const translated = t(`customers.checkStatus.${status}`);
+  return translated === `customers.checkStatus.${status}` ? userFriendlyStatus(status) : translated;
+};
+
+const getFilterLabel = (status: string, t: (key: string) => string) => {
+  const quickFilterLabels: Record<string, string> = {
+    WAITING_FOR_CUSTOMER: t('verifications.waitingForCustomerFilter'),
+    NEEDS_ATTENTION: t('verifications.teamActionFilter'),
+    ADDRESS_CHANGED: t('verifications.addressChangeFilter'),
+    LOCATION_VALID: t('verifications.verifiedFilter'),
+    REMINDER_LIMIT_REACHED: t('verifications.reminderLimitFilter'),
+  };
+  return quickFilterLabels[status] ?? getStatusLabel(status, t);
+};
+
+const getEnumLabel = (value: string | null | undefined, key: string, t: (key: string) => string) => {
+  if (!value) return '—';
+  const translated = t(`${key}.${value}`);
+  return translated === `${key}.${value}` ? value.replaceAll('_', ' ') : translated;
+};
 
 const getStatusClassName = (status: string) => {
   if (status === 'LOCATION_VALID')
@@ -85,7 +128,7 @@ const getStatusClassName = (status: string) => {
 
 const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
   if (status === 'LOCATION_VALID') return <CheckCircle2 className="h-3.5 w-3.5" />;
-  if (['LOW_GPS_ACCURACY', 'CUSTOMER_DATA_MISMATCH'].includes(status)) return <XCircle className="h-3.5 w-3.5" />;
+  if (['LOW_GPS_ACCURACY', 'CUSTOMER_DATA_MISMATCH', 'LOCATION_MISMATCH'].includes(status)) return <XCircle className="h-3.5 w-3.5" />;
   if (status === 'MANUAL_REVIEW') return <ShieldCheck className="h-3.5 w-3.5" />;
   return <Clock3 className="h-3.5 w-3.5" />;
 };
@@ -107,6 +150,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
     'customer' | 'address' | 'addressChange' | 'status' | 'location' | 'activity'
   >('customer');
   const [sortDirection, setSortDirection] = useState<TableSortDirection>('asc');
+  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     setPage(1);
@@ -190,156 +234,151 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
     verificationStats.waitingForHome +
     verificationStats.addressChanged +
     verificationStats.customersMismatch;
-  const attentionBreakdown = [
-    ['verifications.needsAttentionManualReview', verificationStats.manualReview],
-    ['verifications.needsAttentionLowGpsAccuracy', verificationStats.lowGpsAccuracy],
-    ['verifications.needsAttentionWaitingForHome', verificationStats.waitingForHome],
-    ['verifications.needsAttentionAddressChanged', verificationStats.addressChanged],
-    ['verifications.needsAttentionCustomerMismatch', verificationStats.customersMismatch],
-  ] as const;
-
   return (
-    <div className="mx-auto max-w-7xl space-y-5">
-      {loading && (
-        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-          <AppLoader size={28} label={t('table.loadingSessions')} />
-          <span>{t('table.loadingSessions')}</span>
-        </div>
-      )}
-      <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-indigo-50/60 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/30">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto max-w-[1500px] space-y-5">
+      <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-indigo-50/70 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/20">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-3">
-            <span className="rounded-xl bg-indigo-100 p-2 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
-              <Compass className="h-5 w-5" />
-            </span>
+            <div className="rounded-xl bg-indigo-100 p-2.5 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+              <BarChart3 className="h-5 w-5" />
+            </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-                {t('verifications.title')}
-              </h1>
-              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-                {t('verifications.description')}
-              </p>
+              <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">{t('verifications.title')}</h1>
+              <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">{t('verifications.description')}</p>
+              {dashboardSummary.generatedAt && (
+                <p className="mt-2 text-[11px] text-slate-400">
+                  {t('verifications.updated')}: {formatAppDateTime(dashboardSummary.generatedAt)}
+                </p>
+              )}
             </div>
           </div>
           <button
             type="button"
             onClick={() => void load()}
             disabled={loading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             {t('verifications.refresh')}
           </button>
         </div>
-      </section>
-
-      <section className="grid gap-3 sm:grid-cols-2 sm:items-stretch">
-        <div className="grid h-full grid-rows-2 gap-3">
-          <div className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-              <Users className="h-4 w-4" />
-              {t('verifications.totalChecks')}
+        <div className="mt-4 grid gap-2 border-t border-slate-200 pt-4 dark:border-slate-800 sm:grid-cols-3">
+          <div className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
+            <Compass className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-300" />
+            <div>
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{t('verifications.step1Title')}</p>
+              <p className="mt-0.5 text-[11px] leading-4 text-slate-500 dark:text-slate-400">{t('verifications.step1Text')}</p>
             </div>
-            <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
-              {total.toLocaleString('en-US')}
-            </p>
-            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-              {t('verifications.totalChecksHelp')}
-            </p>
           </div>
-          <div className="flex h-full flex-col rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/20">
-            <div className="flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2 className="h-4 w-4" />
-              {t('verifications.matched')}
+          <div className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
+            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-cyan-600 dark:text-cyan-300" />
+            <div>
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{t('verifications.step2Title')}</p>
+              <p className="mt-0.5 text-[11px] leading-4 text-slate-500 dark:text-slate-400">{t('verifications.step2Text')}</p>
             </div>
-            <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-300">
-              {verificationStats.locationValid.toLocaleString('en-US')}
-            </p>
-            <p className="mt-1 text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
-              {t('verifications.matchedHelp')}
-            </p>
           </div>
-        </div>
-        <div className="flex h-full flex-col rounded-2xl border border-amber-200 bg-amber-50/60 p-4 shadow-sm dark:border-amber-900 dark:bg-amber-950/20">
-          <div className="flex items-center gap-2 text-xs font-medium text-amber-700 dark:text-amber-300">
-            <AlertTriangle className="h-4 w-4" />
-            {t('verifications.needsAttention')}
-          </div>
-          <p className="mt-2 text-2xl font-bold text-amber-700 dark:text-amber-300">
-            {attentionCount.toLocaleString('en-US')}
-          </p>
-          <p className="mt-1 text-[11px] text-amber-700/80 dark:text-amber-300/80">
-            {t('verifications.needsAttentionHelp')}
-          </p>
-          <div className="mt-3 rounded-xl border border-amber-200/80 bg-white/60 p-3 dark:border-amber-900/70 dark:bg-amber-950/20">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800 dark:text-amber-200">
-              <Info className="h-3.5 w-3.5" />
-              <span>{t('verifications.needsAttentionBreakdown')}</span>
+          <div className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
+            <CircleHelp className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
+            <div>
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{t('verifications.step3Title')}</p>
+              <p className="mt-0.5 text-[11px] leading-4 text-slate-500 dark:text-slate-400">{t('verifications.step3Text')}</p>
             </div>
-            <ul className="mt-2 space-y-1 text-[11px] text-amber-800/90 dark:text-amber-200/90">
-              {attentionBreakdown.map(([label, value]) => (
-                <li key={label} className="flex items-start justify-between gap-3">
-                  <span>{t(label)}</span>
-                  <span className="font-semibold tabular-nums">{value.toLocaleString('en-US')}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-2 border-t border-amber-200/70 pt-2 text-[10px] leading-4 text-amber-700/80 dark:border-amber-900/60 dark:text-amber-300/80">
-              {t('verifications.needsAttentionCountNote')}
-            </p>
           </div>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="relative min-w-0 flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder={t('verifications.search')}
-              className="w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-            />
-          </div>
-          <label className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-            <Filter className="h-3.5 w-3.5" />
-            <span>{t('verifications.filterStatus')}</span>
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-            >
-              <option value="ALL">{t('verifications.allStatuses')}</option>
-              <optgroup label={t('verifications.quickFilters')}>
-                <option value="WAITING_FOR_CUSTOMER">{t('verifications.waitingForCustomerFilter')}</option>
-                <option value="NEEDS_ATTENTION">{t('verifications.teamActionFilter')}</option>
-                <option value="ADDRESS_CHANGED">{t('verifications.addressChangeFilter')}</option>
-                <option value="LOCATION_VALID">{t('verifications.verifiedFilter')}</option>
-                <option value="REMINDER_LIMIT_REACHED">{t('verifications.reminderLimitFilter')}</option>
-              </optgroup>
-              <optgroup label={t('verifications.detailFilters')}>
-                {statusValues
-                  .filter((value) => !quickFilterValues.has(value))
-                  .map((value) => (
-                    <option key={value} value={value}>
-                      {getStatusLabel(value)}
-                    </option>
-                  ))}
-              </optgroup>
-            </select>
-          </label>
+      <section className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+          <CircleHelp className="h-4 w-4 text-slate-400" />
+          {t('verifications.statusGuideTitle')}
         </div>
+        <div className="flex flex-wrap gap-2 text-[11px]">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+            <CheckCircle2 className="h-3.5 w-3.5" /> {t('verifications.statusGuideMatched')}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+            <Clock3 className="h-3.5 w-3.5" /> {t('verifications.statusGuideWaiting')}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 font-medium text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">
+            <AlertTriangle className="h-3.5 w-3.5" /> {t('verifications.statusGuideAction')}
+          </span>
+        </div>
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Metric label={t('verifications.totalChecks')} value={verificationStats.total} icon={<Compass className="h-5 w-5" />} tone="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" />
+        <Metric label={t('verifications.invitationsSent')} value={verificationStats.invitationsSent} icon={<Send className="h-5 w-5" />} tone="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300" />
+        <Metric label={t('verifications.linksOpened')} value={verificationStats.linksOpened} icon={<ExternalLink className="h-5 w-5" />} tone="bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300" />
+        <Metric label={t('verifications.gpsCaptured')} value={verificationStats.gpsCaptured} icon={<MapPin className="h-5 w-5" />} tone="bg-cyan-50 text-cyan-600 dark:bg-cyan-950/40 dark:text-cyan-300" />
+        <Metric label={t('verifications.matched')} value={verificationStats.locationValid} icon={<CheckCircle2 className="h-5 w-5" />} tone="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300" />
+        <Metric label={t('verifications.needsAttention')} value={attentionCount} icon={<AlertTriangle className="h-5 w-5" />} tone="bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300" />
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('verifications.listTitle')}</h2>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('verifications.listDescription')}</p>
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t('verifications.listTitle')}</h2>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('verifications.listDescription')}</p>
+            <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{t('verifications.filterStatusHelp')}</p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder={t('verifications.search')}
+                className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 sm:w-64"
+              />
+            </label>
+          </div>
+        </div>
+        <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+              <Filter className="h-3.5 w-3.5 text-slate-400" />
+              <span>{t('verifications.detailFilterHeading')}</span>
+              <select
+                aria-label={t('verifications.detailFilterHeading')}
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                <option value="ALL">{t('verifications.allStatuses')}</option>
+                <optgroup label={t('verifications.detailFilters')}>
+                  <option value="WAITING_FOR_CUSTOMER">{t('verifications.waitingForCustomerFilter')}</option>
+                  <option value="NEEDS_ATTENTION">{t('verifications.teamActionFilter')}</option>
+                  <option value="ADDRESS_CHANGED">{t('verifications.addressChangeFilter')}</option>
+                  <option value="LOCATION_VALID">{t('verifications.verifiedFilter')}</option>
+                  <option value="REMINDER_LIMIT_REACHED">{t('verifications.reminderLimitFilter')}</option>
+                  {statusValues
+                    .filter((value) => !quickFilterValues.has(value))
+                    .map((value) => (
+                      <option key={value} value={value}>
+                        {getStatusLabel(value, t)}
+                      </option>
+                    ))}
+                </optgroup>
+              </select>
+            </label>
+            {statusFilter !== 'ALL' && (
+              <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <span>
+                  {t('verifications.activeFilter')}: <strong className="font-semibold text-slate-700 dark:text-slate-200">{getFilterLabel(statusFilter, t)}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('ALL')}
+                  className="font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
+                >
+                  {t('verifications.clearFilter')}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <AdminTable
-          minWidthClass="min-w-[1400px]"
+          minWidthClass="min-w-[1750px]"
           footer={
             <TablePagination
               page={page}
@@ -376,12 +415,14 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
               >
                 {t('verifications.addressChange')}
               </SortableTableHeader>
+              <th className="px-4 py-3">{t('verifications.linkAndConfirmation')}</th>
               <SortableTableHeader active={sortKey === 'status'} direction={sortDirection} onClick={() => toggleSort('status')} className="px-4 py-3">
                 {t('verifications.status')}
               </SortableTableHeader>
               <SortableTableHeader active={sortKey === 'location'} direction={sortDirection} onClick={() => toggleSort('location')} className="px-4 py-3">
                 {t('verifications.location')}
               </SortableTableHeader>
+              <th className="px-4 py-3">{t('verifications.manualCase')}</th>
               <SortableTableHeader active={sortKey === 'activity'} direction={sortDirection} onClick={() => toggleSort('activity')} className="px-4 py-3">
                 {t('verifications.activity')}
               </SortableTableHeader>
@@ -391,19 +432,31 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {sortedRows.map(({ session, customer, address }) => {
               const lastVal = session.lastValidationResult;
+              const manualCaseKeys = getManualReviewCaseKeys(session.verificationStatus, lastVal?.reasonCodes);
               const addressChangeStatus =
                 session.verificationStatus === 'ADDRESS_EDITING'
                   ? t('verifications.addressChangeInProgress')
                   : session.verificationStatus === 'ADDRESS_PROPOSED' || address.addressType === 'PROPOSED'
                     ? t('verifications.addressChangePending')
                     : null;
+              const expanded = expandedSessionId === session.id;
               return (
-                <tr key={session.id} className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                <React.Fragment key={session.id}>
+                <tr className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
                   <td className="px-4 py-3">
                     <div className="font-semibold text-slate-900 dark:text-white">{customer.name}</div>
                     <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                       {customer.externalId} · {customer.phoneE164}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedSessionId(expanded ? null : session.id)}
+                      aria-expanded={expanded}
+                      className="mt-2 inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                    >
+                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                      {expanded ? t('monitoring.hideDetails') : t('monitoring.showDetails')}
+                    </button>
                   </td>
                   <td className="max-w-[320px] px-4 py-3">
                     <div className="line-clamp-2 text-xs font-medium leading-5 text-slate-900 dark:text-white">
@@ -426,19 +479,25 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
                     )}
                   </td>
                   <td className="px-4 py-3">
+                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                      {session.openedAt ? t('verifications.opened') : t('verifications.notOpened')}
+                    </div>
+                    {session.openedAt && <div className="mt-1 text-[10px] text-slate-400">{formatAppDateTime(session.openedAt)}</div>}
+                    <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      {session.customerConfirmationStatus === 'CONFIRMED'
+                        ? t('verifications.confirmed')
+                        : session.customerConfirmationStatus === 'MISMATCH'
+                          ? t('verifications.customerMismatch')
+                          : t('verifications.notConfirmed')}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${getStatusClassName(session.verificationStatus)}`}
                     >
                       <StatusIcon status={session.verificationStatus} />
-                      {getStatusLabel(session.verificationStatus)}
+                            {getStatusLabel(session.verificationStatus, t)}
                     </span>
-                    <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                      {session.customerConfirmationStatus === 'CONFIRMED'
-                        ? 'Data customer sesuai'
-                        : session.customerConfirmationStatus === 'MISMATCH'
-                          ? 'Data customer berbeda'
-                          : 'Belum dikonfirmasi'}
-                    </div>
                   </td>
                   <td className="px-4 py-3">
                     {lastVal ? (
@@ -459,6 +518,23 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
                       </div>
                     ) : (
                       <span className="text-xs italic text-slate-400">{t('verifications.noLocation')}</span>
+                    )}
+                  </td>
+                  <td className="max-w-[260px] px-4 py-3">
+                    {manualCaseKeys.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {manualCaseKeys.map((caseKey) => (
+                          <span
+                            key={caseKey}
+                            className="inline-flex rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold leading-4 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+                            title={t(`verifications.caseHelp.${caseKey}`)}
+                          >
+                            {t(`verifications.case.${caseKey}`)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400 dark:text-slate-500">{t('verifications.manualCaseNone')}</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
@@ -487,25 +563,87 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
                     </button>
                   </td>
                 </tr>
+                {expanded && (
+                  <tr className="bg-indigo-50/40 dark:bg-indigo-950/10">
+                    <td colSpan={9} className="px-4 py-4">
+                      <div className="grid gap-3 text-xs md:grid-cols-3">
+                        <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                          <h3 className="font-semibold text-slate-900 dark:text-white">{t('verifications.customerDetails')}</h3>
+                          <dl className="mt-2 space-y-1.5 text-slate-600 dark:text-slate-300">
+                            <div><dt className="inline font-medium">{t('verifications.customerName')}:</dt> <dd className="inline">{customer.name}</dd></div>
+                            <div><dt className="inline font-medium">{t('verifications.customerId')}:</dt> <dd className="inline">{customer.externalId}</dd></div>
+                            <div><dt className="inline font-medium">{t('verifications.phoneNumber')}:</dt> <dd className="inline">{customer.phoneE164}</dd></div>
+                            <div><dt className="inline font-medium">{t('verifications.sessionId')}:</dt> <dd className="inline break-all">{session.id}</dd></div>
+                          </dl>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                          <h3 className="font-semibold text-slate-900 dark:text-white">{t('verifications.addressDetails')}</h3>
+                          <div className="mt-2 space-y-2 text-slate-600 dark:text-slate-300">
+                            <div>
+                              <div className="font-medium text-slate-500 dark:text-slate-400">{t('verifications.currentAddress')}</div>
+                              <div className="mt-1 leading-relaxed">{formatAddressForDisplay(address.rawAddress)}</div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-[11px]">
+                              <div><span className="font-medium">{t('verifications.addressType')}:</span> {getEnumLabel(address.addressType, 'verifications.addressTypeValue', t)}</div>
+                              <div><span className="font-medium">{t('verifications.referencePrecision')}:</span> {getEnumLabel(address.referencePrecision, 'verifications.referencePrecisionValue', t)}</div>
+                              <div><span className="font-medium">{t('verifications.addressVerification')}:</span> {address.isVerified ? t('verifications.verified') : t('verifications.notVerified')}</div>
+                              <div><span className="font-medium">{t('verifications.auditStatus')}:</span> {getEnumLabel(address.coordinateAuditStatus, 'verifications.auditStatusValue', t)}</div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                          <h3 className="font-semibold text-slate-900 dark:text-white">{t('verifications.checkDetails')}</h3>
+                          <dl className="mt-2 space-y-1.5 text-slate-600 dark:text-slate-300">
+                            <div><dt className="inline font-medium">{t('verifications.status')}:</dt> <dd className="inline">{getStatusLabel(session.verificationStatus, t)}</dd></div>
+                            <div><dt className="inline font-medium">{t('verifications.linkStatus')}:</dt> <dd className="inline">{session.openedAt ? `${t('verifications.opened')} · ${formatAppDateTime(session.openedAt)}` : t('verifications.notOpened')}</dd></div>
+                            <div><dt className="inline font-medium">{t('verifications.confirmation')}:</dt> <dd className="inline">{session.customerConfirmationStatus === 'CONFIRMED' ? t('verifications.confirmed') : session.customerConfirmationStatus === 'MISMATCH' ? t('verifications.customerMismatch') : t('verifications.notConfirmed')}</dd></div>
+                            <div><dt className="inline font-medium">{t('verifications.createdAt')}:</dt> <dd className="inline">{formatAppDateTime(session.createdAt)}</dd></div>
+                            <div><dt className="inline font-medium">{t('verifications.updatedAt')}:</dt> <dd className="inline">{formatAppDateTime(session.updatedAt)}</dd></div>
+                            <div><dt className="inline font-medium">{t('verifications.linkExpiresAt')}:</dt> <dd className="inline">{formatAppDateTime(session.expiresAt)}</dd></div>
+                          </dl>
+                        </div>
+                      </div>
+                      {lastVal && (
+                        <div className="mt-3 rounded-xl border border-indigo-200 bg-white p-3 text-xs dark:border-indigo-900/60 dark:bg-slate-900">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h3 className="font-semibold text-slate-900 dark:text-white">{t('verifications.locationEvidence')}</h3>
+                            {lastVal.capturedLocation?.googleMapsUrl && (
+                              <a href={lastVal.capturedLocation.googleMapsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-indigo-700 hover:underline dark:text-indigo-300">
+                                {t('verifications.openGoogleMaps')} <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            )}
+                          </div>
+                          <div className="mt-2 grid gap-2 text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
+                            <div><span className="font-medium">{t('verifications.result')}:</span> {getStatusLabel(lastVal.result, t)}</div>
+                            <div><span className="font-medium">{t('verifications.distance')}:</span> {lastVal.distanceFromReferenceMeters == null ? t('verifications.noReference') : `${lastVal.distanceFromReferenceMeters.toFixed(1)}m`}</div>
+                            <div><span className="font-medium">{t('verifications.gpsAccuracy')}:</span> ±{lastVal.gpsAccuracyM}m</div>
+                            <div><span className="font-medium">{t('verifications.reasonCodes')}:</span> {lastVal.reasonCodes.length ? lastVal.reasonCodes.map(userFriendlyReason).join(', ') : '—'}</div>
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
             {loading && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-500">
                   {t('table.loadingSessions')}
                 </td>
               </tr>
             )}
             {!loading && error && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-rose-600">
+                <td colSpan={9} className="px-4 py-10 text-center text-sm text-rose-600">
                   {error}
                 </td>
               </tr>
             )}
             {!loading && !error && !rows.length && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-500">
                   {t('table.noMatchingSessions')}
                 </td>
               </tr>

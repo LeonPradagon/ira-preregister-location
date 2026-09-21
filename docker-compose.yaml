@@ -172,6 +172,21 @@ services:
       redis:
         condition: service_healthy
 
+  coverage-worker:
+    <<: *server-defaults
+    environment:
+      <<: *server-environment
+      WORKER_ROLE: coverage
+    volumes:
+      - prod_imports:/workspace/app/server/var/imports
+    command: ['node', 'dist/worker.js']
+    restart: unless-stopped
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
   import-worker:
     <<: *server-defaults
     environment:

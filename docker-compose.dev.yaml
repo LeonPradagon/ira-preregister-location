@@ -50,7 +50,6 @@ services:
       WORKER_ROLE: all
       DATABASE_URL: postgresql://ira_preregist:ira_preregist@postgres:5432/ira_preregist
       REDIS_URL: redis://redis:6379
-      ENABLE_IRA_COVERAGE: 'false'
       ENABLE_TICKETING: 'false'
     volumes:
       # Keep host API uploads visible to the Docker worker during local development.

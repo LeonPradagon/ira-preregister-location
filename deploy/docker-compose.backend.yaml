@@ -55,6 +55,10 @@ services:
       STREET_MATCH_THRESHOLD: ${STREET_MATCH_THRESHOLD:-0.90}
       ENABLE_CUSTOMER_OTP: ${ENABLE_CUSTOMER_OTP:-false}
       ENABLE_IRA_COVERAGE: ${ENABLE_IRA_COVERAGE:-false}
+      FWA_COVERAGE_BASE_URL: ${FWA_COVERAGE_BASE_URL:-http://182.160.54.8}
+      FWA_COVERAGE_API_KEY: ${FWA_COVERAGE_API_KEY:-}
+      FWA_COVERAGE_TIMEOUT_MS: ${FWA_COVERAGE_TIMEOUT_MS:-10000}
+      FWA_COVERAGE_BATCH_SIZE: ${FWA_COVERAGE_BATCH_SIZE:-100}
       ENABLE_TICKETING: ${ENABLE_TICKETING:-false}
       ENABLE_MANUAL_REVIEW: ${ENABLE_MANUAL_REVIEW:-true}
       ENABLE_AUTO_APPROVAL: ${ENABLE_AUTO_APPROVAL:-false}
@@ -216,6 +220,25 @@ services:
     restart: unless-stopped
     deploy:
       replicas: 2
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  coverage-worker:
+    build:
+      context: ..
+      dockerfile: app/server/Dockerfile
+    environment:
+      <<: *server_environment
+      WORKER_ROLE: coverage
+    command: ['node', 'dist/worker.js']
+    volumes:
+      - backend_imports:/workspace/app/server/var/imports
+    deploy:
+      replicas: 2
+    restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully

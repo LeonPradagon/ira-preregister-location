@@ -25,6 +25,8 @@ import { ReadCacheService } from './common/read-cache.service.js';
 import { MetricsService } from './common/metrics.service.js';
 import { RequestMetricsMiddleware } from './common/request-metrics.middleware.js';
 import { RedisRateLimitMiddleware } from './common/redis-rate-limit.middleware.js';
+import { CoverageController } from './modules/coverage/coverage.controller.js';
+import { CoverageService } from './modules/coverage/coverage.service.js';
 
 @Module({
   imports: [AuthModule],
@@ -35,6 +37,7 @@ import { RedisRateLimitMiddleware } from './common/redis-rate-limit.middleware.j
     AdminController,
     CampaignController,
     WhatsAppWebhookController,
+    CoverageController,
   ],
   providers: [
     VerificationService,
@@ -48,6 +51,7 @@ import { RedisRateLimitMiddleware } from './common/redis-rate-limit.middleware.j
     MetricsService,
     RequestMetricsMiddleware,
     RedisRateLimitMiddleware,
+    CoverageService,
     ValidationConfigService,
     RolesGuard,
     {

@@ -296,6 +296,7 @@ export interface AdminDashboardApi {
     manualReview: ApiNumeric;
     locationValid: ApiNumeric;
     statusCounts: Record<string, ApiNumeric>;
+    manualCaseCounts: Record<string, ApiNumeric>;
   };
   coordinateAudits: {
     statusCounts: Record<string, ApiNumeric>;
@@ -401,6 +402,51 @@ export interface AdminListQuery {
   sortBy?: string;
   sortDirection?: 'asc' | 'desc';
   cursor?: string;
+}
+
+export interface CoverageCandidateQuery {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: 'NOT_CHECKED' | 'QUEUED' | 'PROCESSING' | 'COVERED' | 'UNCOVERED' | 'FAILED';
+}
+
+export interface CoverageCandidateApi {
+  verificationId: string;
+  customerId: string;
+  customerExternalId: string;
+  customerName: string;
+  addressId: string;
+  address: string;
+  verificationStatus: string;
+  latitude: number;
+  longitude: number;
+  coverageStatus: 'NOT_CHECKED' | 'QUEUED' | 'PROCESSING' | 'COVERED' | 'UNCOVERED' | 'FAILED';
+  lastCheckedAt: string | null;
+  importedCoverageStatus: string | null;
+}
+
+export interface CoverageBatchApi {
+  batch: {
+    id: string;
+    providerKey: string;
+    status: string;
+    totalCount: number;
+    completedCount: number;
+    failedCount: number;
+    createdAt: string;
+    completedAt: string | null;
+  };
+}
+
+function coverageQueryString(query: CoverageCandidateQuery): string {
+  const params = new URLSearchParams();
+  if (query.page) params.set('page', String(query.page));
+  if (query.pageSize) params.set('pageSize', String(query.pageSize));
+  if (query.search) params.set('search', query.search);
+  if (query.status) params.set('status', query.status);
+  const value = params.toString();
+  return value ? `?${value}` : '';
 }
 
 function queryString(query: AdminListQuery): string {
@@ -708,6 +754,14 @@ const adminApi = {
   updateSettings: (body: unknown) =>
     request<Record<string, unknown>>('/admin/settings/validation', { method: 'PUT', body: JSON.stringify(body) }),
   integrations: () => request<Array<Record<string, unknown>>>('/admin/integrations'),
+  coverageCandidates: (query: CoverageCandidateQuery = {}) =>
+    request<AdminPageApi<CoverageCandidateApi>>(`/admin/coverage/candidates${coverageQueryString(query)}`),
+  enqueueCoverageChecks: (verificationIds: string[]) =>
+    request<{ batchId: string; queuedCount: number; skippedCount: number }>('/admin/coverage/checks', {
+      method: 'POST',
+      body: JSON.stringify({ verificationIds }),
+    }),
+  coverageBatch: (id: string) => request<CoverageBatchApi>(`/admin/coverage/batches/${encodeURIComponent(id)}`),
   outbox: (query: AdminListQuery = {}) =>
     request<AdminPageApi<Record<string, unknown>>>(`/admin/outbox${queryString(query)}`),
   campaigns: (query: AdminListQuery = {}) =>

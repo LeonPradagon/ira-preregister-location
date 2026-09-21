@@ -228,6 +228,21 @@ export const adminListQuerySchema = z.object({
   cursor: z.string().max(255).optional(),
 });
 
+export const coverageCandidateQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  search: z.string().trim().max(128).default(''),
+  status: z.enum(['NOT_CHECKED', 'QUEUED', 'PROCESSING', 'COVERED', 'UNCOVERED', 'FAILED']).optional(),
+  cursor: z.string().max(255).optional(),
+});
+
+export const coverageCheckCreateSchema = z.object({
+  verificationIds: z.array(z.string().uuid()).min(1).max(5000).transform((ids) => [...new Set(ids)]),
+});
+
+export type CoverageCandidateQueryInput = z.infer<typeof coverageCandidateQuerySchema>;
+export type CoverageCheckCreateInput = z.infer<typeof coverageCheckCreateSchema>;
+
 export const whatsappDeliveryStatusSchema = z.object({
   providerMessageId: z.string().trim().min(1).max(255),
   status: z.enum(['SENT', 'DELIVERED', 'READ', 'FAILED']),

@@ -14,6 +14,8 @@ import {
   customerAddresses,
   importJobs,
   integrationOutbox,
+  coverageCheckBatches,
+  coverageChecks,
   reminders,
   verificationShortLinks,
   verificationCampaignItems,
@@ -58,6 +60,8 @@ import {
 } from './modules/validation/coordinate-audit.policy.js';
 import { coordinateAuditEnqueueLimit } from './modules/validation/coordinate-audit-queue.policy.js';
 import { AdminExportService } from './modules/admin/admin-export.service.js';
+import { FwaCoverageAdapter } from './integrations/coverage/fwa-coverage.adapter.js';
+import type { CoveragePort } from './integrations/coverage/coverage.port.js';
 
 const connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null }).on(
   'error',
@@ -78,6 +82,7 @@ const {
   imports: importQueueName,
   coordinateAudit: coordinateAuditQueueName,
   exports: exportQueueName,
+  coverage: coverageQueueName,
 } = queueNames;
 const queueSafeJobId = (...parts: Array<string | number>) =>
   parts.map((part) => String(part).replace(/[^a-zA-Z0-9_-]/g, '-')).join('-');
@@ -89,6 +94,7 @@ const metricsQueue = new Queue(metricsQueueName, { connection });
 const importQueue = new Queue(importQueueName, { connection });
 const coordinateAuditQueue = new Queue(coordinateAuditQueueName, { connection });
 const exportQueue = new Queue(exportQueueName, { connection });
+const coverageQueue = new Queue(coverageQueueName, { connection });
 const adminExportService = runs('maintenance') ? new AdminExportService() : null;
 const positiveIntegerEnv = (value: string | undefined, fallback: number) => {
   const parsed = Number(value ?? fallback);
@@ -118,6 +124,7 @@ const whatsapp: WhatsAppPort =
 const campaigns = new CampaignService(new ValidationConfigService(), new ReadCacheService());
 const reminderConfig = new ValidationConfigService();
 const messagingConfig = new ValidationConfigService();
+const fwaCoverage: CoveragePort = new FwaCoverageAdapter();
 
 const cancelClaimedReminder = async (
   reminderId: string,
@@ -315,6 +322,88 @@ const outboxWorker = runs('messaging')
         }
       },
       { connection, concurrency: 5 },
+    )
+  : null;
+
+const coverageWorker = runs('coverage')
+  ? new Worker(
+      coverageQueueName,
+      async (job) => {
+        const batchId = String(job.data.batchId);
+        const [batch] = await db.select().from(coverageCheckBatches).where(eq(coverageCheckBatches.id, batchId)).limit(1);
+        if (!batch || ['COMPLETED', 'PARTIAL_FAILED', 'FAILED'].includes(batch.status)) return;
+        const startedAt = new Date();
+        await db
+          .update(coverageCheckBatches)
+          .set({ status: 'PROCESSING', startedAt, updatedAt: startedAt })
+          .where(eq(coverageCheckBatches.id, batchId));
+
+        const checks = await db
+          .select()
+          .from(coverageChecks)
+          .where(and(eq(coverageChecks.batchId, batchId), eq(coverageChecks.status, 'QUEUED')))
+          .orderBy(coverageChecks.createdAt, coverageChecks.id);
+        const batchSize = positiveIntegerEnv(process.env.FWA_COVERAGE_BATCH_SIZE, 100);
+        for (let offset = 0; offset < checks.length; offset += batchSize) {
+          const chunk = checks.slice(offset, offset + batchSize);
+          const chunkIds = chunk.map((check) => check.id);
+          await db
+            .update(coverageChecks)
+            .set({ status: 'PROCESSING', updatedAt: new Date() })
+            .where(inArray(coverageChecks.id, chunkIds));
+          try {
+            const results = await fwaCoverage.checkCoverage(
+              chunk.map((check) => ({
+                id: check.id,
+                latitude: Number(check.latitude),
+                longitude: Number(check.longitude),
+              })),
+            );
+            await Promise.all(
+              chunk.map((check, index) => {
+                const result = results[index];
+                if (!result) throw new Error(`Coverage provider did not return result for ${check.id}`);
+                return db
+                  .update(coverageChecks)
+                  .set({
+                    status: result.status,
+                    providerStatus: result.status,
+                    response: { coverageStatus: result.status },
+                    error: null,
+                    completedAt: new Date(),
+                    updatedAt: new Date(),
+                  })
+                  .where(eq(coverageChecks.id, check.id));
+              }),
+            );
+          } catch (error) {
+            const message = (error instanceof Error ? error.message : String(error)).slice(0, 1000);
+            await db
+              .update(coverageChecks)
+              .set({ status: 'FAILED', error: message, completedAt: new Date(), updatedAt: new Date() })
+              .where(inArray(coverageChecks.id, chunkIds));
+          }
+        }
+
+        const [completedRows, failedRows] = await Promise.all([
+          db
+            .select({ completedCount: sql<number>`count(*)` })
+            .from(coverageChecks)
+            .where(and(eq(coverageChecks.batchId, batchId), inArray(coverageChecks.status, ['COVERED', 'UNCOVERED']))),
+          db
+            .select({ failedCount: sql<number>`count(*)` })
+            .from(coverageChecks)
+            .where(and(eq(coverageChecks.batchId, batchId), eq(coverageChecks.status, 'FAILED'))),
+        ]);
+        const completed = Number(completedRows[0]?.completedCount ?? 0);
+        const failed = Number(failedRows[0]?.failedCount ?? 0);
+        const finalStatus = failed === 0 ? 'COMPLETED' : completed === 0 ? 'FAILED' : 'PARTIAL_FAILED';
+        await db
+          .update(coverageCheckBatches)
+          .set({ status: finalStatus, completedCount: completed, failedCount: failed, completedAt: new Date(), updatedAt: new Date() })
+          .where(eq(coverageCheckBatches.id, batchId));
+      },
+      { connection, concurrency: 2 },
     )
   : null;
 
@@ -1552,7 +1641,7 @@ const enqueueMaintenance = async () => {
   const analyzeLock = await connection.set('maintenance:analyze', randomUUID(), 'EX', 3500, 'NX');
   if (analyzeLock)
     await db.execute(
-      sql`ANALYZE customers, customer_addresses, verification_sessions, verification_campaign_items, reminders, audit_logs, integration_outbox, export_jobs`,
+      sql`ANALYZE customers, customer_addresses, verification_sessions, verification_campaign_items, reminders, audit_logs, integration_outbox, export_jobs, coverage_check_batches, coverage_checks`,
     );
   await adminExportService?.cleanupExpiredJobs();
 };
@@ -1607,6 +1696,10 @@ exportWorker?.on('completed', (job) => logEvent('info', 'export.worker_completed
 exportWorker?.on('failed', (job, error) =>
   logEvent('error', 'export.worker_failed', { jobId: job?.id, error: error.message }),
 );
+coverageWorker?.on('completed', (job) => logEvent('info', 'coverage.worker_completed', { jobId: job.id }));
+coverageWorker?.on('failed', (job, error) =>
+  logEvent('error', 'coverage.worker_failed', { jobId: job?.id, error: error.message }),
+);
 
 const shutdown = async () => {
   clearInterval(poller);
@@ -1618,6 +1711,7 @@ const shutdown = async () => {
   await recoveryWorker?.close();
   await coordinateAuditWorker?.close();
   await exportWorker?.close();
+  await coverageWorker?.close();
   await outboxQueue.close();
   await reminderQueue.close();
   await campaignMaterializationQueue.close();
@@ -1626,6 +1720,7 @@ const shutdown = async () => {
   await importQueue.close();
   await coordinateAuditQueue.close();
   await exportQueue.close();
+  await coverageQueue.close();
   await adminExportService?.onModuleDestroy();
   if (coordinateGeocoder && 'onModuleDestroy' in coordinateGeocoder)
     await (coordinateGeocoder as { onModuleDestroy?: () => Promise<void> }).onModuleDestroy?.();

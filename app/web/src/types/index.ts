@@ -258,6 +258,7 @@ export interface DashboardSummary {
     manualReview: number;
     locationValid: number;
     statusCounts: Record<string, number>;
+    manualCaseCounts: Record<string, number>;
   };
   coordinateAudits: {
     statusCounts: Record<string, number>;
@@ -448,6 +449,23 @@ export interface IntegrationConfigs {
     description: string;
     status: string;
   };
+}
+
+export type CoverageCandidateStatus = 'NOT_CHECKED' | 'QUEUED' | 'PROCESSING' | 'COVERED' | 'UNCOVERED' | 'FAILED';
+
+export interface CoverageCandidate {
+  verificationId: string;
+  customerId: string;
+  customerExternalId: string;
+  customerName: string;
+  addressId: string;
+  address: string;
+  verificationStatus: string;
+  latitude: number;
+  longitude: number;
+  coverageStatus: CoverageCandidateStatus;
+  lastCheckedAt: string | null;
+  importedCoverageStatus: string | null;
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system';

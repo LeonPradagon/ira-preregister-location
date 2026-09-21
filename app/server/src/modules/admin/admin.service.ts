@@ -300,6 +300,7 @@ export class AdminService {
           verificationStatusRows,
           reminderNumberRows,
           coordinateAuditStatusRows,
+          manualReviewCaseRows,
         ] = await Promise.all([
           db
             .select({
@@ -339,6 +340,56 @@ export class AdminService {
             .from(customerAddresses)
             .where(and(eq(customerAddresses.isActive, true), eq(customerAddresses.referenceSource, 'PREREG_IMPORT')))
             .groupBy(customerAddresses.coordinateAuditStatus),
+          db.execute(sql`
+            with latest_validation as (
+              select distinct on (vs.id)
+                vs.id as session_id,
+                vs.verification_status,
+                vr.reason_codes
+              from verification_sessions vs
+              left join validation_results vr on vr.session_id = vs.id
+              where vs.verification_status in (
+                'MANUAL_REVIEW',
+                'LOW_GPS_ACCURACY',
+                'WAITING_FOR_HOME',
+                'LOCATION_MISMATCH',
+                'ADDRESS_EDITING',
+                'ADDRESS_PROPOSED',
+                'CUSTOMER_DATA_MISMATCH',
+                'REMINDER_LIMIT_REACHED',
+                'GPS_CAPTURING'
+              )
+              order by vs.id, vr.created_at desc nulls last
+            )
+            select
+              case
+                when verification_status = 'CUSTOMER_DATA_MISMATCH' then 'CUSTOMER_DATA_MISMATCH'
+                when verification_status in ('ADDRESS_EDITING', 'ADDRESS_PROPOSED') then 'ADDRESS_CHANGE'
+                when verification_status = 'LOW_GPS_ACCURACY' or reason_codes ? 'LOW_GPS_ACCURACY' then 'GPS_ACCURACY'
+                when verification_status = 'WAITING_FOR_HOME' or reason_codes ? 'GPS_SAMPLE_INCONSISTENT' then 'GPS_INCONSISTENT'
+                when reason_codes ? 'HOME_RADIUS_EXCEEDED' then 'LOCATION_OUTSIDE_RADIUS'
+                when reason_codes ?| array[
+                  'PROVINCE_MISMATCH',
+                  'CITY_MISMATCH',
+                  'DISTRICT_MISMATCH',
+                  'SUBDISTRICT_MISMATCH',
+                  'STREET_MISMATCH',
+                  'STREET_VARIATION',
+                  'HOUSE_NUMBER_MISMATCH'
+                ] then 'ADDRESS_MISMATCH'
+                when reason_codes ? 'ADDRESS_INCOMPLETE' then 'ADDRESS_INCOMPLETE'
+                when reason_codes ? 'REFERENCE_LOCATION_MISSING' then 'REFERENCE_MISSING'
+                when reason_codes ? 'REFERENCE_LOCATION_NOT_PRECISE' then 'REFERENCE_IMPRECISE'
+                when reason_codes ? 'GEOCODING_UNAVAILABLE' then 'GEOCODING_UNAVAILABLE'
+                when reason_codes ? 'ROAD_ONLY_LOCATION' then 'ROAD_ONLY_LOCATION'
+                when verification_status = 'REMINDER_LIMIT_REACHED' then 'RETRY_LIMIT_REACHED'
+                when verification_status = 'GPS_CAPTURING' then 'GPS_CAPTURE_PENDING'
+                else 'REVIEW_REQUIRED'
+              end as case_key,
+              count(*)::int as total
+            from latest_validation
+            group by case_key
+          `),
         ]);
 
         const toNumber = (value: number | string | null | undefined) => Number(value ?? 0);
@@ -352,6 +403,9 @@ export class AdminService {
         const cancelledByReason = Object.fromEntries(
           reminderCancellationRows.map((row) => [row.reason ?? 'UNKNOWN', toNumber(row.total)]),
         );
+        const manualCaseCounts = Object.fromEntries(
+          manualReviewCaseRows.rows.map((row) => [String(row.case_key), toNumber(row.total as number)]),
+        );
 
         const countAsOf = new Date().toISOString();
         return {
@@ -361,6 +415,7 @@ export class AdminService {
           verifications: {
             ...Object.fromEntries(Object.entries(verificationStats).map(([key, value]) => [key, toNumber(value)])),
             statusCounts,
+            manualCaseCounts,
           },
           coordinateAudits: { statusCounts: coordinateAuditStatusCounts },
           reminders: {
