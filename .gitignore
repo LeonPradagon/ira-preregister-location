@@ -2,6 +2,10 @@ node_modules/
 build/
 dist/
 coverage/
+!app/server/src/modules/coverage/
+!app/server/src/modules/coverage/**
+!app/server/src/integrations/coverage/
+!app/server/src/integrations/coverage/**
 app/server/var/
 *.dump
 .DS_Store
