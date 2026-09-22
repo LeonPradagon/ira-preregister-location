@@ -379,6 +379,13 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
               </div>
             )}
           </div>
+          <div className="mt-3 flex items-start gap-2 rounded-lg bg-indigo-50/70 px-3 py-2.5 text-[11px] text-indigo-800 dark:bg-indigo-950/20 dark:text-indigo-200">
+            <CircleHelp className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-600 dark:text-indigo-300" />
+            <div>
+              <p className="font-semibold">{t('verifications.statusExplanationTitle')}</p>
+              <p className="mt-0.5 leading-4">{t(`verifications.statusExplanation.${statusFilter}`)}</p>
+            </div>
+          </div>
         </div>
         <AdminTable
           minWidthClass="min-w-[1750px]"
