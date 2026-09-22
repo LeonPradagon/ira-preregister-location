@@ -41,22 +41,49 @@ const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) 
 
 const numberFormat = new Intl.NumberFormat('id-ID');
 
-const Metric: React.FC<{ label: string; value: number; icon: React.ReactNode; tone: string }> = ({
+const Metric: React.FC<{
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  tone: string;
+  onClick?: () => void;
+  expanded?: boolean;
+}> = ({
   label,
   value,
   icon,
   tone,
-}) => (
-  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+  onClick,
+  expanded = false,
+}) => {
+  const content = (
     <div className="flex items-start justify-between gap-3">
       <div>
         <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
         <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{numberFormat.format(value)}</p>
       </div>
-      <span className={`rounded-xl p-2.5 ${tone}`}>{icon}</span>
+      <div className="flex items-center gap-2">
+        <span className={`rounded-xl p-2.5 ${tone}`}>{icon}</span>
+        {onClick && <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />}
+      </div>
     </div>
-  </div>
-);
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-expanded={expanded}
+        className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-colors hover:border-amber-300 hover:bg-amber-50/30 focus:outline-none focus:ring-2 focus:ring-amber-400 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-amber-700 dark:hover:bg-amber-950/20"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">{content}</div>;
+};
 
 interface VerificationListViewProps {
   onSelectVerification: (sessionId: string) => void;
@@ -151,6 +178,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
   >('customer');
   const [sortDirection, setSortDirection] = useState<TableSortDirection>('asc');
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
+  const [showAttentionBreakdown, setShowAttentionBreakdown] = useState(false);
 
   useEffect(() => {
     setPage(1);
@@ -237,6 +265,44 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
     verificationStats.waitingForHome +
     verificationStats.addressChanged +
     verificationStats.customersMismatch;
+  const attentionBreakdown = [
+    {
+      label: t('verifications.needsAttentionManualReview'),
+      value: verificationStats.manualReview,
+      action: t('verifications.caseAction.REVIEW_REQUIRED'),
+      filter: 'MANUAL_REVIEW',
+    },
+    {
+      label: t('verifications.needsAttentionLowGpsAccuracy'),
+      value: verificationStats.lowGpsAccuracy,
+      action: t('verifications.caseAction.GPS_ACCURACY'),
+      filter: 'LOW_GPS_ACCURACY',
+    },
+    {
+      label: t('verifications.needsAttentionWaitingForHome'),
+      value: verificationStats.waitingForHome,
+      action: t('verifications.caseAction.GPS_INCONSISTENT'),
+      filter: 'WAITING_FOR_HOME',
+    },
+    {
+      label: t('verifications.needsAttentionAddressChanged'),
+      value: verificationStats.addressChanged,
+      action: t('verifications.caseAction.ADDRESS_CHANGE'),
+      filter: 'ADDRESS_CHANGED',
+    },
+    {
+      label: t('verifications.needsAttentionCustomerMismatch'),
+      value: verificationStats.customersMismatch,
+      action: t('verifications.caseAction.CUSTOMER_DATA_MISMATCH'),
+      filter: 'CUSTOMER_DATA_MISMATCH',
+    },
+  ];
+
+  const openAttentionCase = (filter: string) => {
+    setStatusFilter(filter);
+    setShowAttentionBreakdown(false);
+  };
+
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
       <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-indigo-50/70 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/20">
@@ -314,8 +380,58 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
         <Metric label={t('verifications.linksOpened')} value={verificationStats.linksOpened} icon={<ExternalLink className="h-5 w-5" />} tone="bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300" />
         <Metric label={t('verifications.gpsCaptured')} value={verificationStats.gpsCaptured} icon={<MapPin className="h-5 w-5" />} tone="bg-cyan-50 text-cyan-600 dark:bg-cyan-950/40 dark:text-cyan-300" />
         <Metric label={t('verifications.matched')} value={verificationStats.locationValid} icon={<CheckCircle2 className="h-5 w-5" />} tone="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300" />
-        <Metric label={t('verifications.needsAttention')} value={attentionCount} icon={<AlertTriangle className="h-5 w-5" />} tone="bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300" />
+        <Metric
+          label={t('verifications.needsAttention')}
+          value={attentionCount}
+          icon={<AlertTriangle className="h-5 w-5" />}
+          tone="bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300"
+          onClick={() => setShowAttentionBreakdown((current) => !current)}
+          expanded={showAttentionBreakdown}
+        />
       </section>
+
+      {showAttentionBreakdown && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 shadow-sm dark:border-amber-900 dark:bg-amber-950/20">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div>
+              <h2 className="text-sm font-bold text-amber-900 dark:text-amber-100">
+                {t('verifications.needsAttentionDetailsTitle')}
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-amber-800/80 dark:text-amber-200/80">
+                {t('verifications.needsAttentionDetailsText')}
+              </p>
+            </div>
+            <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+              {numberFormat.format(attentionCount)} {t('verifications.needsAttentionDetailsCount')}
+            </span>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {attentionBreakdown.map((item) => (
+              <button
+                key={item.filter}
+                type="button"
+                onClick={() => openAttentionCase(item.filter)}
+                className="rounded-xl border border-amber-200/80 bg-white/80 p-3 text-left transition-colors hover:border-amber-400 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-900/70 dark:bg-amber-950/20 dark:hover:border-amber-700 dark:hover:bg-amber-950/40"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-xs font-semibold leading-4 text-amber-950 dark:text-amber-100">{item.label}</span>
+                  <span className="shrink-0 text-lg font-bold tabular-nums text-amber-700 dark:text-amber-300">
+                    {numberFormat.format(item.value)}
+                  </span>
+                </div>
+                <p className="mt-2 text-[11px] leading-4 text-amber-800/80 dark:text-amber-200/80">{item.action}</p>
+                <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">
+                  {t('verifications.viewDetails')}
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] leading-4 text-amber-800/80 dark:text-amber-200/80">
+            {t('verifications.needsAttentionCountNote')}
+          </p>
+        </section>
+      )}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-3 border-b border-slate-200 p-4 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
