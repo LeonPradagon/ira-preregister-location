@@ -1103,7 +1103,8 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'dashboard.dataMismatchDescription': 'Customer menyatakan data atau alamat berbeda.',
     'dashboard.noAttention': 'Tidak ada pekerjaan yang perlu ditangani saat ini.',
     'dashboard.progressTitle': 'Progress pemeriksaan lokasi',
-    'dashboard.progressDescription': 'Ikuti berapa banyak undangan yang sudah sampai ke tahap berikutnya.',
+    'dashboard.progressDescription':
+      'Lihat posisi terakhir setiap pemeriksaan dari seluruh data. Satu sesi hanya dihitung satu kali.',
     'dashboard.invitationsSent': 'Undangan dikirim',
     'dashboard.gpsReceived': 'Lokasi diterima',
     'dashboard.locationsMatched': 'Lokasi sesuai',
@@ -1766,7 +1767,8 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'dashboard.dataMismatchDescription': 'The customer says the data or address is different.',
     'dashboard.noAttention': 'There is nothing that needs attention right now.',
     'dashboard.progressTitle': 'Location check progress',
-    'dashboard.progressDescription': 'See how many invitations have reached each step.',
+    'dashboard.progressDescription':
+      'See the latest stage of every check across the full dataset. Each session is counted once.',
     'dashboard.invitationsSent': 'Invitations sent',
     'dashboard.gpsReceived': 'Location received',
     'dashboard.locationsMatched': 'Locations matched',

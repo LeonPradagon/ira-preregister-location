@@ -19,18 +19,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import {
-  AdminTable,
-  SortableTableHeader,
-  sortTableRows,
-  TablePagination,
-  TablePageSize,
-  TableSortDirection,
-} from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
 import { AppLoader } from '../common/AppLoader';
 import { formatAppDateTime } from '../../lib/dateTime';
-import { isLocationMatched } from '../../lib/statusLabels';
 
 const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) =>
   props.className?.includes('animate-spin') ? <AppLoader size={18} label="Loading" /> : <RefreshCwIcon {...props} />;
@@ -38,7 +29,6 @@ const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) 
 type DashboardDestination = 'customers' | 'campaigns' | 'verifications' | 'reminders';
 
 interface DashboardViewProps {
-  onSelectVerification: (sessionId: string) => void;
   onNavigate: (destination: DashboardDestination) => void;
 }
 
@@ -116,40 +106,12 @@ const AttentionCard: React.FC<AttentionCardProps> = ({
   </button>
 );
 
-const statusText: Record<string, string> = {
-  LOCATION_VALID: 'Location matched',
-  WAITING_FOR_HOME: 'Waiting for customer',
-  MANUAL_REVIEW: 'Awaiting team decision',
-  LOW_GPS_ACCURACY: 'Location signal is weak',
-  ADDRESS_PROPOSED: 'Address needs review',
-  CUSTOMER_DATA_MISMATCH: 'Customer data does not match',
-  GPS_CAPTURING: 'Checking location',
-  CONSENTED: 'Waiting for location permission',
-  CREATED: 'Not started',
-};
-
-const getStatusText = (status: string) => statusText[status] ?? 'In progress';
-
-const getStatusClassName = (status: string) => {
-  if (status === 'LOCATION_VALID')
-    return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300';
-  if (['MANUAL_REVIEW', 'ADDRESS_PROPOSED', 'WAITING_FOR_HOME'].includes(status))
-    return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300';
-  if (['LOW_GPS_ACCURACY', 'CUSTOMER_DATA_MISMATCH'].includes(status))
-    return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300';
-  return 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300';
-};
-
 const progressPercent = (value: number, total: number) =>
   total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerification, onNavigate }) => {
-  const { customers, verificationSessions, dashboardSummary, refreshDashboard, integrationConfigs } = useApp();
+export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
+  const { dashboardSummary, refreshDashboard, integrationConfigs } = useApp();
   const { t } = useTranslation();
-  const [sessionPage, setSessionPage] = useState(1);
-  const [sessionPageSize, setSessionPageSize] = useState<TablePageSize>(10);
-  const [sessionSortKey, setSessionSortKey] = useState<'customer' | 'status' | 'location'>('customer');
-  const [sessionSortDirection, setSessionSortDirection] = useState<TableSortDirection>('asc');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const customerStats = dashboardSummary.customers;
@@ -159,29 +121,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
   const totalCustomers = customerStats.total;
   const totalChecks = verificationStats.total;
   const locationValidCount = verificationStats.locationValid;
-  const needsAttentionCount =
-    verificationStats.manualReview +
-    verificationStats.lowGpsAccuracy +
-    verificationStats.addressChanged +
-    verificationStats.customersMismatch;
+  const workflowStages = verificationStats.workflowStages;
+  const workflowStageTotal = Object.values(workflowStages).reduce((sum, value) => sum + value, 0);
+  const needsAttentionCount = workflowStages.teamAction;
   const matchRate = progressPercent(locationValidCount, totalChecks);
-  const sortedVerificationSessions = sortTableRows(
-    verificationSessions,
-    (session) => {
-      const customer = customers.find((item) => item.id === session.customerId);
-      if (sessionSortKey === 'customer') return customer?.name || session.registeredPhoneSnapshot;
-      if (sessionSortKey === 'status') return session.verificationStatus;
-      return isLocationMatched(session.verificationStatus, session.lastValidationResult?.result)
-        ? 'LOCATION_VALID'
-        : session.lastValidationResult?.result;
-    },
-    sessionSortDirection,
-  );
-  const pagedVerificationSessions = sortedVerificationSessions.slice(
-    (sessionPage - 1) * sessionPageSize,
-    sessionPage * sessionPageSize,
-  );
-
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
@@ -193,30 +136,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
 
   const progressSteps = [
     {
-      label: t('dashboard.invitationsSent'),
-      value: verificationStats.invitationsSent,
-      percent: 100,
+      label: t('verifications.workflowNotStarted'),
+      value: workflowStages.notStarted,
+      percent: progressPercent(workflowStages.notStarted, totalChecks),
+      icon: Clock3,
+      color: 'bg-slate-400',
+    },
+    {
+      label: t('verifications.workflowInvitationSent'),
+      value: workflowStages.invitationSent,
+      percent: progressPercent(workflowStages.invitationSent, totalChecks),
       icon: MessageSquare,
       color: 'bg-indigo-500',
     },
     {
-      label: t('dashboard.linksOpened'),
-      value: verificationStats.linksOpened,
-      percent: progressPercent(verificationStats.linksOpened, verificationStats.invitationsSent),
+      label: t('verifications.workflowLinkOpened'),
+      value: workflowStages.linkOpened,
+      percent: progressPercent(workflowStages.linkOpened, totalChecks),
       icon: CheckCircle2,
       color: 'bg-blue-500',
     },
     {
-      label: t('dashboard.gpsReceived'),
-      value: verificationStats.gpsCaptured,
-      percent: progressPercent(verificationStats.gpsCaptured, verificationStats.invitationsSent),
+      label: t('verifications.workflowGpsReceived'),
+      value: workflowStages.gpsReceived,
+      percent: progressPercent(workflowStages.gpsReceived, totalChecks),
       icon: Compass,
       color: 'bg-violet-500',
     },
     {
-      label: t('dashboard.locationsMatched'),
-      value: locationValidCount,
-      percent: progressPercent(locationValidCount, verificationStats.invitationsSent),
+      label: t('verifications.workflowTeamAction'),
+      value: workflowStages.teamAction,
+      percent: progressPercent(workflowStages.teamAction, totalChecks),
+      icon: AlertTriangle,
+      color: 'bg-amber-500',
+    },
+    {
+      label: t('verifications.workflowMatched'),
+      value: workflowStages.matched,
+      percent: progressPercent(workflowStages.matched, totalChecks),
       icon: MapPin,
       color: 'bg-emerald-500',
     },
@@ -267,7 +224,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
         <DashboardMetricCard
           label={t('dashboard.totalChecks')}
           value={totalChecks}
-          detail={`${locationValidCount.toLocaleString('en-US')} ${t('dashboard.locationsMatched').toLowerCase()}`}
+          detail={`${workflowStages.matched.toLocaleString('en-US')} ${t('dashboard.locationsMatched').toLowerCase()}`}
           icon={MapPin}
           iconClassName="text-indigo-600 dark:text-indigo-300"
           onClick={() => onNavigate('verifications')}
@@ -308,7 +265,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
           </button>
         </div>
         {needsAttentionCount > 0 ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <AttentionCard
               label={t('dashboard.teamReview')}
               description={t('dashboard.teamReviewDescription')}
@@ -323,6 +280,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
               value={verificationStats.lowGpsAccuracy}
               icon={AlertTriangle}
               colorClassName="bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300"
+              onClick={() => onNavigate('verifications')}
+            />
+            <AttentionCard
+              label={t('verifications.needsAttentionWaitingForHome')}
+              description={t('verifications.caseAction.GPS_INCONSISTENT')}
+              value={verificationStats.waitingForHome}
+              icon={Clock3}
+              colorClassName="bg-cyan-50 text-cyan-600 dark:bg-cyan-950/40 dark:text-cyan-300"
               onClick={() => onNavigate('verifications')}
             />
             <AttentionCard
@@ -357,9 +322,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
               <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('dashboard.progressTitle')}</h2>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('dashboard.progressDescription')}</p>
             </div>
-            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
-              {matchRate}% {t('dashboard.matched')}
-            </span>
+            <div className="flex flex-wrap justify-end gap-2 text-xs font-semibold">
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {workflowStageTotal.toLocaleString('en-US')} / {totalChecks.toLocaleString('en-US')}
+              </span>
+              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                {matchRate}% {t('dashboard.matched')}
+              </span>
+            </div>
           </div>
           <div className="mt-5 space-y-4">
             {progressSteps.map((step) => (
@@ -450,161 +420,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectVerificati
         </section>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-1 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('dashboard.recentSessions')}</h2>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('dashboard.recentDescription')}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('verifications')}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
-          >
-            {t('dashboard.viewAllChecks')}
-            <ArrowRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <AdminTable
-          minWidthClass="min-w-[760px]"
-          footer={
-            <TablePagination
-              page={sessionPage}
-              pageSize={sessionPageSize}
-              total={verificationSessions.length}
-              onPageChange={setSessionPage}
-              onPageSizeChange={(size) => {
-                setSessionPageSize(size);
-                setSessionPage(1);
-              }}
-            />
-          }
-        >
-          <thead className="border-b border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-400">
-            <tr>
-              <SortableTableHeader
-                active={sessionSortKey === 'customer'}
-                direction={sessionSortDirection}
-                onClick={() => {
-                  if (sessionSortKey === 'customer') setSessionSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
-                  else {
-                    setSessionSortKey('customer');
-                    setSessionSortDirection('asc');
-                  }
-                  setSessionPage(1);
-                }}
-                className="px-4 py-3"
-              >
-                {t('dashboard.customer')}
-              </SortableTableHeader>
-              <SortableTableHeader
-                active={sessionSortKey === 'status'}
-                direction={sessionSortDirection}
-                onClick={() => {
-                  if (sessionSortKey === 'status') setSessionSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
-                  else {
-                    setSessionSortKey('status');
-                    setSessionSortDirection('asc');
-                  }
-                  setSessionPage(1);
-                }}
-                className="px-4 py-3"
-              >
-                {t('dashboard.verificationStatus')}
-              </SortableTableHeader>
-              <SortableTableHeader
-                active={sessionSortKey === 'location'}
-                direction={sessionSortDirection}
-                onClick={() => {
-                  if (sessionSortKey === 'location') setSessionSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
-                  else {
-                    setSessionSortKey('location');
-                    setSessionSortDirection('asc');
-                  }
-                  setSessionPage(1);
-                }}
-                className="px-4 py-3"
-              >
-                {t('dashboard.locationResult')}
-              </SortableTableHeader>
-              <th className="px-4 py-3 text-right">{t('dashboard.action')}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {pagedVerificationSessions.map((session) => {
-              const customer = customers.find((item) => item.id === session.customerId);
-              const lastVal = session.lastValidationResult;
-              const status = session.verificationStatus;
-              const result = lastVal?.result ?? '';
-              const locationMatched = isLocationMatched(status, result);
-              return (
-                <tr key={session.id} className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                  <td className="px-4 py-3">
-                    <div className="font-semibold text-slate-900 dark:text-white">
-                      {customer?.name || t('dashboard.unknownCustomer')}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                      {customer?.externalId || session.registeredPhoneSnapshot}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${getStatusClassName(status)}`}
-                    >
-                      {status === 'LOCATION_VALID' ? (
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                      ) : status === 'CUSTOMER_DATA_MISMATCH' ? (
-                        <XCircle className="h-3.5 w-3.5" />
-                      ) : (
-                        <Clock3 className="h-3.5 w-3.5" />
-                      )}
-                      {getStatusText(status)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {lastVal ? (
-                      <div>
-                        <div
-                          className={`text-xs font-semibold ${locationMatched ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}
-                        >
-                          {locationMatched
-                            ? t('dashboard.locationMatched')
-                            : t('dashboard.locationNeedsReview')}
-                        </div>
-                        <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                          {lastVal.distanceFromReferenceMeters == null
-                            ? t('dashboard.noReference')
-                            : `${lastVal.distanceFromReferenceMeters.toFixed(1)}m away`}{' '}
-                          · ±{lastVal.gpsAccuracyM}m accuracy
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-xs italic text-slate-400">{t('dashboard.noLocation')}</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => onSelectVerification(session.id)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
-                    >
-                      {t('dashboard.viewDetails')}
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-            {!pagedVerificationSessions.length && (
-              <tr>
-                <td colSpan={4} className="px-4 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
-                  {t('dashboard.noSessions')}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </AdminTable>
-      </section>
     </div>
   );
 };

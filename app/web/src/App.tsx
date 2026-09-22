@@ -56,7 +56,7 @@ const MainAppContent: React.FC = () => {
 
   const renderBaseTabContent = () => {
     const tabViews: Array<[AdminTab, React.ReactNode]> = [
-      ['dashboard', <DashboardView onSelectVerification={setSelectedVerificationId} onNavigate={setCurrentTab} />],
+      ['dashboard', <DashboardView onNavigate={setCurrentTab} />],
       [
         'customers',
         <CustomerListView
