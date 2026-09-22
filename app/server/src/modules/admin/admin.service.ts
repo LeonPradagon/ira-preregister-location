@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, lt, ne, not, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import {
   auditLogs,
@@ -291,6 +291,11 @@ export class AdminService {
               where ${verificationSessions.verificationStatus} <> 'CREATED'
                 and ${verificationSessions.verificationStatus} <> 'LOCATION_VALID'
                 and ${verificationSessions.openedAt} is null
+                and ${verificationSessions.verificationStatus} not in (
+                  'MANUAL_REVIEW', 'LOW_GPS_ACCURACY', 'WAITING_FOR_HOME',
+                  'ADDRESS_EDITING', 'ADDRESS_PROPOSED', 'CUSTOMER_DATA_MISMATCH'
+                )
+                and coalesce(${verificationSessions.customerConfirmationStatus}, '') <> 'MISMATCH'
             )`,
             workflowLinkOpened: sql<number>`count(*) filter (
               where ${verificationSessions.verificationStatus} <> 'LOCATION_VALID'
@@ -1352,6 +1357,16 @@ export class AdminService {
 
   async verifications(query: AdminListQueryInput) {
     const filters = [];
+    const workflowTeamActionFilter = or(
+      inArray(verificationSessions.verificationStatus, [
+        'MANUAL_REVIEW',
+        'LOW_GPS_ACCURACY',
+        'WAITING_FOR_HOME',
+        'ADDRESS_EDITING',
+        'ADDRESS_PROPOSED',
+      ]),
+      eq(verificationSessions.customerConfirmationStatus, 'MISMATCH'),
+    )!;
     if (query.search) {
       const pattern = `%${query.search}%`;
       filters.push(
@@ -1363,18 +1378,41 @@ export class AdminService {
         ),
       );
     }
-    if (query.status === 'NEEDS_ATTENTION') {
+    if (query.status === 'WORKFLOW_NOT_STARTED') {
+      filters.push(eq(verificationSessions.verificationStatus, 'CREATED'));
+    } else if (query.status === 'WORKFLOW_INVITATION_SENT') {
       filters.push(
-        or(
-          inArray(verificationSessions.verificationStatus, [
-            'MANUAL_REVIEW',
-            'LOW_GPS_ACCURACY',
-            'WAITING_FOR_HOME',
-            'ADDRESS_EDITING',
-            'ADDRESS_PROPOSED',
-          ]),
-          eq(verificationSessions.customerConfirmationStatus, 'MISMATCH'),
+        and(
+          ne(verificationSessions.verificationStatus, 'CREATED'),
+          ne(verificationSessions.verificationStatus, 'LOCATION_VALID'),
+          isNull(verificationSessions.openedAt),
+          not(workflowTeamActionFilter),
         ),
+      );
+    } else if (query.status === 'WORKFLOW_LINK_OPENED') {
+      filters.push(
+        and(
+          ne(verificationSessions.verificationStatus, 'LOCATION_VALID'),
+          isNotNull(verificationSessions.openedAt),
+          eq(verificationSessions.attemptCount, 0),
+          not(workflowTeamActionFilter),
+        ),
+      );
+    } else if (query.status === 'WORKFLOW_GPS_RECEIVED') {
+      filters.push(
+        and(
+          ne(verificationSessions.verificationStatus, 'LOCATION_VALID'),
+          sql`${verificationSessions.attemptCount} > 0`,
+          not(workflowTeamActionFilter),
+        ),
+      );
+    } else if (query.status === 'WORKFLOW_TEAM_ACTION') {
+      filters.push(and(ne(verificationSessions.verificationStatus, 'LOCATION_VALID'), workflowTeamActionFilter));
+    } else if (query.status === 'WORKFLOW_MATCHED') {
+      filters.push(eq(verificationSessions.verificationStatus, 'LOCATION_VALID'));
+    } else if (query.status === 'NEEDS_ATTENTION') {
+      filters.push(
+        workflowTeamActionFilter,
       );
     } else if (query.status === 'ADDRESS_CHANGED') {
       filters.push(inArray(verificationSessions.verificationStatus, ['ADDRESS_EDITING', 'ADDRESS_PROPOSED']));

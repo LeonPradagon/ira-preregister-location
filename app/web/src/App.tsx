@@ -26,6 +26,7 @@ const MainAppContent: React.FC = () => {
   const [visitedTabs, setVisitedTabs] = useState<AdminTab[]>(['dashboard']);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedVerificationId, setSelectedVerificationId] = useState<string | null>(null);
+  const [verificationFilterRequest, setVerificationFilterRequest] = useState({ value: 'ALL', key: 0 });
   const tokenMatch = window.location.pathname.match(/^\/(?:v|s)\/([^/]+)$/);
   const customerToken = tokenMatch ? decodeURIComponent(tokenMatch[1]) : null;
   const simulationRoute = Boolean(customerToken?.startsWith('simulasi-'));
@@ -54,9 +55,16 @@ const MainAppContent: React.FC = () => {
     }
   };
 
+  const navigateFromDashboard = (destination: AdminTab, verificationFilter = 'ALL') => {
+    setCurrentTab(destination);
+    if (destination === 'verifications') {
+      setVerificationFilterRequest((current) => ({ value: verificationFilter, key: current.key + 1 }));
+    }
+  };
+
   const renderBaseTabContent = () => {
     const tabViews: Array<[AdminTab, React.ReactNode]> = [
-      ['dashboard', <DashboardView onNavigate={setCurrentTab} />],
+      ['dashboard', <DashboardView onNavigate={navigateFromDashboard} />],
       [
         'customers',
         <CustomerListView
@@ -65,7 +73,14 @@ const MainAppContent: React.FC = () => {
       ],
       ['campaigns', <CampaignsView />],
       ['monitoring', <MonitoringView />],
-      ['verifications', <VerificationListView onSelectVerification={setSelectedVerificationId} />],
+      [
+        'verifications',
+        <VerificationListView
+          onSelectVerification={setSelectedVerificationId}
+          initialStatusFilter={verificationFilterRequest.value}
+          filterRequestKey={verificationFilterRequest.key}
+        />,
+      ],
       ['reminders', <RemindersView onSelectVerification={setSelectedVerificationId} />],
       ['audit-logs', <AuditLogsView />],
       ['settings', <ValidationSettingsView />],

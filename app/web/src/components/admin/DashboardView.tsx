@@ -29,7 +29,7 @@ const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) 
 type DashboardDestination = 'customers' | 'campaigns' | 'verifications' | 'reminders';
 
 interface DashboardViewProps {
-  onNavigate: (destination: DashboardDestination) => void;
+  onNavigate: (destination: DashboardDestination, verificationFilter?: string) => void;
 }
 
 interface DashboardMetricCardProps {
@@ -141,6 +141,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
       percent: progressPercent(workflowStages.notStarted, totalChecks),
       icon: Clock3,
       color: 'bg-slate-400',
+      filter: 'WORKFLOW_NOT_STARTED',
     },
     {
       label: t('verifications.workflowInvitationSent'),
@@ -148,6 +149,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
       percent: progressPercent(workflowStages.invitationSent, totalChecks),
       icon: MessageSquare,
       color: 'bg-indigo-500',
+      filter: 'WORKFLOW_INVITATION_SENT',
     },
     {
       label: t('verifications.workflowLinkOpened'),
@@ -155,6 +157,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
       percent: progressPercent(workflowStages.linkOpened, totalChecks),
       icon: CheckCircle2,
       color: 'bg-blue-500',
+      filter: 'WORKFLOW_LINK_OPENED',
     },
     {
       label: t('verifications.workflowGpsReceived'),
@@ -162,6 +165,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
       percent: progressPercent(workflowStages.gpsReceived, totalChecks),
       icon: Compass,
       color: 'bg-violet-500',
+      filter: 'WORKFLOW_GPS_RECEIVED',
     },
     {
       label: t('verifications.workflowTeamAction'),
@@ -169,6 +173,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
       percent: progressPercent(workflowStages.teamAction, totalChecks),
       icon: AlertTriangle,
       color: 'bg-amber-500',
+      filter: 'WORKFLOW_TEAM_ACTION',
     },
     {
       label: t('verifications.workflowMatched'),
@@ -176,6 +181,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
       percent: progressPercent(workflowStages.matched, totalChecks),
       icon: MapPin,
       color: 'bg-emerald-500',
+      filter: 'WORKFLOW_MATCHED',
     },
   ];
 
@@ -344,9 +350,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
             </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
               {progressSteps.map((step, index) => (
-                <div
+                <button
                   key={step.label}
-                  className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-800/50"
+                  type="button"
+                  onClick={() => onNavigate('verifications', step.filter)}
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-left transition hover:border-indigo-300 hover:bg-white hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-800/50 dark:hover:border-indigo-700 dark:hover:bg-slate-800"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-start gap-2">
@@ -374,7 +382,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                       {step.percent}%
                     </span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>

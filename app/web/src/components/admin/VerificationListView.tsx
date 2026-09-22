@@ -87,6 +87,8 @@ const Metric: React.FC<{
 
 interface VerificationListViewProps {
   onSelectVerification: (sessionId: string) => void;
+  initialStatusFilter?: string;
+  filterRequestKey?: number;
 }
 
 interface VerificationListRow {
@@ -113,6 +115,15 @@ const statusValues = [
   'EXPIRED',
 ];
 
+const workflowStageValues = [
+  'WORKFLOW_NOT_STARTED',
+  'WORKFLOW_INVITATION_SENT',
+  'WORKFLOW_LINK_OPENED',
+  'WORKFLOW_GPS_RECEIVED',
+  'WORKFLOW_TEAM_ACTION',
+  'WORKFLOW_MATCHED',
+];
+
 const quickFilterValues = new Set([
   'WAITING_FOR_CUSTOMER',
   'NEEDS_ATTENTION',
@@ -134,7 +145,9 @@ const getFilterLabel = (status: string, t: (key: string) => string) => {
     LOCATION_VALID: t('verifications.verifiedFilter'),
     REMINDER_LIMIT_REACHED: t('verifications.reminderLimitFilter'),
   };
-  return quickFilterLabels[status] ?? getStatusLabel(status, t);
+  if (quickFilterLabels[status]) return quickFilterLabels[status];
+  const workflowLabel = t(`verifications.workflow.${status}`);
+  return workflowLabel === `verifications.workflow.${status}` ? getStatusLabel(status, t) : workflowLabel;
 };
 
 const getEnumLabel = (value: string | null | undefined, key: string, t: (key: string) => string) => {
@@ -160,7 +173,11 @@ const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
   return <Clock3 className="h-3.5 w-3.5" />;
 };
 
-export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSelectVerification }) => {
+export const VerificationListView: React.FC<VerificationListViewProps> = ({
+  onSelectVerification,
+  initialStatusFilter = 'ALL',
+  filterRequestKey = 0,
+}) => {
   const { validationConfig, dashboardSummary, refreshDashboard } = useApp();
   const { t } = useTranslation();
   const [rows, setRows] = useState<VerificationListRow[]>([]);
@@ -168,7 +185,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<TablePageSize>(25);
   const [cursors, setCursors] = useState<Record<number, string>>({});
@@ -184,6 +201,10 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
     setPage(1);
     setCursors({});
   }, [searchTerm, statusFilter]);
+
+  useEffect(() => {
+    setStatusFilter(initialStatusFilter);
+  }, [filterRequestKey, initialStatusFilter]);
 
   const load = async () => {
     const requestId = latestRequestId.current + 1;
@@ -559,6 +580,13 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
                         {getStatusLabel(value, t)}
                       </option>
                     ))}
+                </optgroup>
+                <optgroup label={t('verifications.workflowStageFilters')}>
+                  {workflowStageValues.map((value) => (
+                    <option key={value} value={value}>
+                      {getFilterLabel(value, t)}
+                    </option>
+                  ))}
                 </optgroup>
               </select>
             </label>
