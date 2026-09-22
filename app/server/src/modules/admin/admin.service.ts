@@ -1341,6 +1341,29 @@ export class AdminService {
           eq(verificationSessions.customerConfirmationStatus, 'MISMATCH'),
         ),
       );
+    } else if (query.status === 'MESSAGE_SENT') {
+      // Invitation sent is a delivery milestone, not necessarily the current
+      // verification status. Once a customer opens the link, the session
+      // moves to LINK_OPENED (or a later status), so filtering only by
+      // verification_status would hide invitations that were sent.
+      filters.push(sql`exists (
+        select 1
+        from verification_campaign_items sent_invitation
+        where sent_invitation.session_id = ${verificationSessions.id}
+          and sent_invitation.status in ('SENT', 'DELIVERED', 'READ')
+      )`);
+    } else if (query.status === 'CREATED') {
+      // "Not started" is represented by an unopened verification link. The
+      // session may already be in a reminder state after the first delivery.
+      filters.push(
+        and(isNull(verificationSessions.openedAt), ne(verificationSessions.verificationStatus, 'LOCATION_VALID')),
+      );
+    } else if (query.status === 'EXPIRED') {
+      // Expiration is time-based. A session can remain in its last workflow
+      // status after the link expires, so do not rely on the EXPIRED enum.
+      filters.push(
+        and(lt(verificationSessions.expiresAt, new Date()), ne(verificationSessions.verificationStatus, 'LOCATION_VALID')),
+      );
     } else if (query.status === 'NEEDS_REVIEW') {
       filters.push(
         and(
