@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Bell,
@@ -129,6 +129,8 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
   const [reviewReasonCode, setReviewReasonCode] = useState('REFERENCE_LOCATION_VERIFIED_MANUAL');
   const [reviewNote, setReviewNote] = useState('');
   const [reviewError, setReviewError] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const reviewSubmitLock = useRef(false);
   const [addressUpdateBusy, setAddressUpdateBusy] = useState(false);
   const [addressUpdateFeedback, setAddressUpdateFeedback] = useState<{
     type: 'success' | 'error';
@@ -260,26 +262,32 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
 
   const handleExecuteReview = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (reviewSubmitting || reviewSubmitLock.current) return;
     if (!reviewNote.trim()) {
       setReviewError('Catatan review (Review Note) wajib diisi untuk kepatuhan audit trail.');
       return;
     }
 
-    const confirmed = await confirmAction({
-      title: 'Simpan keputusan pemeriksaan?',
-      text: 'Keputusan ini akan mengubah status verifikasi customer dan tercatat di audit trail.',
-      confirmButtonText: 'Ya, simpan keputusan',
-      cancelButtonText: 'Batal',
-    });
-    if (!confirmed) return;
-
+    reviewSubmitLock.current = true;
+    setReviewSubmitting(true);
     try {
+      const confirmed = await confirmAction({
+        title: 'Simpan keputusan pemeriksaan?',
+        text: 'Keputusan ini akan mengubah status verifikasi customer dan tercatat di audit trail.',
+        confirmButtonText: 'Ya, simpan keputusan',
+        cancelButtonText: 'Batal',
+      });
+      if (!confirmed) return;
+
       await performManualReview(session.id, reviewDecision, reviewReasonCode, reviewNote.trim());
       setReviewModalOpen(false);
       setReviewNote('');
       setReviewError('');
     } catch (cause) {
       setReviewError(cause instanceof Error ? cause.message : 'Keputusan pemeriksaan gagal disimpan.');
+    } finally {
+      reviewSubmitLock.current = false;
+      setReviewSubmitting(false);
     }
   };
 
@@ -1394,9 +1402,10 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg font-medium shadow-xs transition-colors"
+                  disabled={reviewSubmitting}
+                  className="px-4 py-2 bg-gray-900 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg font-medium shadow-xs transition-colors"
                 >
-                  Simpan Keputusan Review
+                  {reviewSubmitting ? 'Memproses...' : 'Simpan Keputusan Review'}
                 </button>
               </div>
             </form>

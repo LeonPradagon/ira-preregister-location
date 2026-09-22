@@ -261,12 +261,8 @@ export class AdminService {
     return { id, status: disabled ? 'DISABLED' : 'ACTIVE', disabledAt: updated?.disabledAt ?? null };
   }
 
-  async dashboard() {
-    const cached = await this.readCache.getOrSet(
-      'dashboard',
-      'summary',
-      Number(process.env.DASHBOARD_CACHE_TTL_SECONDS ?? 30),
-      async () => {
+  async dashboard(forceRefresh = false) {
+    const loadSummaryFromDatabase = async () => {
         const [customerStats] = await db
           .select({
             total: sql<number>`count(*)`,
@@ -290,6 +286,42 @@ export class AdminService {
             addressChanged: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} in ('ADDRESS_EDITING', 'ADDRESS_PROPOSED'))`,
             manualReview: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} = 'MANUAL_REVIEW')`,
             locationValid: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} = 'LOCATION_VALID')`,
+            workflowNotStarted: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} = 'CREATED')`,
+            workflowInvitationSent: sql<number>`count(*) filter (
+              where ${verificationSessions.verificationStatus} <> 'CREATED'
+                and ${verificationSessions.verificationStatus} <> 'LOCATION_VALID'
+                and ${verificationSessions.openedAt} is null
+            )`,
+            workflowLinkOpened: sql<number>`count(*) filter (
+              where ${verificationSessions.verificationStatus} <> 'LOCATION_VALID'
+                and ${verificationSessions.openedAt} is not null
+                and ${verificationSessions.attemptCount} = 0
+                and ${verificationSessions.verificationStatus} not in (
+                  'MANUAL_REVIEW', 'LOW_GPS_ACCURACY', 'WAITING_FOR_HOME',
+                  'ADDRESS_EDITING', 'ADDRESS_PROPOSED'
+                )
+                and coalesce(${verificationSessions.customerConfirmationStatus}, '') <> 'MISMATCH'
+            )`,
+            workflowGpsReceived: sql<number>`count(*) filter (
+              where ${verificationSessions.verificationStatus} <> 'LOCATION_VALID'
+                and ${verificationSessions.attemptCount} > 0
+                and ${verificationSessions.verificationStatus} not in (
+                  'MANUAL_REVIEW', 'LOW_GPS_ACCURACY', 'WAITING_FOR_HOME',
+                  'ADDRESS_EDITING', 'ADDRESS_PROPOSED'
+                )
+                and coalesce(${verificationSessions.customerConfirmationStatus}, '') <> 'MISMATCH'
+            )`,
+            workflowTeamAction: sql<number>`count(*) filter (
+              where ${verificationSessions.verificationStatus} <> 'LOCATION_VALID'
+                and (
+                  ${verificationSessions.verificationStatus} in (
+                    'MANUAL_REVIEW', 'LOW_GPS_ACCURACY', 'WAITING_FOR_HOME',
+                    'ADDRESS_EDITING', 'ADDRESS_PROPOSED'
+                  )
+                  or ${verificationSessions.customerConfirmationStatus} = 'MISMATCH'
+                )
+            )`,
+            workflowMatched: sql<number>`count(*) filter (where ${verificationSessions.verificationStatus} = 'LOCATION_VALID')`,
           })
           .from(verificationSessions);
 
@@ -416,6 +448,14 @@ export class AdminService {
             ...Object.fromEntries(Object.entries(verificationStats).map(([key, value]) => [key, toNumber(value)])),
             statusCounts,
             manualCaseCounts,
+            workflowStages: {
+              notStarted: toNumber(verificationStats.workflowNotStarted),
+              invitationSent: toNumber(verificationStats.workflowInvitationSent),
+              linkOpened: toNumber(verificationStats.workflowLinkOpened),
+              gpsReceived: toNumber(verificationStats.workflowGpsReceived),
+              teamAction: toNumber(verificationStats.workflowTeamAction),
+              matched: toNumber(verificationStats.workflowMatched),
+            },
           },
           coordinateAudits: { statusCounts: coordinateAuditStatusCounts },
           reminders: {
@@ -425,9 +465,17 @@ export class AdminService {
           },
           outbox: Object.fromEntries(Object.entries(outboxStats[0]).map(([key, value]) => [key, toNumber(value)])),
         };
-      },
+    };
+
+    if (forceRefresh) {
+      return loadSummaryFromDatabase();
+    }
+    return this.readCache.getOrSet(
+      'dashboard',
+      'summary',
+      Number(process.env.DASHBOARD_CACHE_TTL_SECONDS ?? 30),
+      loadSummaryFromDatabase,
     );
-    return cached;
   }
 
   async monitoring() {

@@ -116,8 +116,8 @@ export class AdminController {
 
   @Get('dashboard')
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  dashboard() {
-    return this.admin.dashboard();
+  dashboard(@Query('refresh') refresh?: string) {
+    return this.admin.dashboard(refresh === 'true');
   }
 
   @Get('monitoring')

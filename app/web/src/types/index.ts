@@ -259,6 +259,14 @@ export interface DashboardSummary {
     locationValid: number;
     statusCounts: Record<string, number>;
     manualCaseCounts: Record<string, number>;
+    workflowStages: {
+      notStarted: number;
+      invitationSent: number;
+      linkOpened: number;
+      gpsReceived: number;
+      teamAction: number;
+      matched: number;
+    };
   };
   coordinateAudits: {
     statusCounts: Record<string, number>;

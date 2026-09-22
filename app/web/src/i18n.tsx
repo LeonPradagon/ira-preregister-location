@@ -1278,6 +1278,18 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'verifications.needsAttentionDetailsText':
       'Pilih jenis case untuk melihat daftar pemeriksaan yang perlu ditindaklanjuti.',
     'verifications.needsAttentionDetailsCount': 'case',
+    'verifications.workflowTitle': 'Tahapan pemeriksaan',
+    'verifications.workflowDescription':
+      'Setiap sesi ditampilkan pada satu tahap terakhirnya agar progres seluruh data mudah dibaca.',
+    'verifications.workflowChecks': 'pemeriksaan',
+    'verifications.workflowNotStarted': 'Belum mulai / belum dikirim',
+    'verifications.workflowInvitationSent': 'Undangan terkirim, belum dibuka',
+    'verifications.workflowLinkOpened': 'Link dibuka, belum ada GPS',
+    'verifications.workflowGpsReceived': 'GPS diterima, menunggu hasil',
+    'verifications.workflowTeamAction': 'Perlu tindak lanjut tim',
+    'verifications.workflowMatched': 'Lokasi sesuai',
+    'verifications.workflowNote':
+      'Tahapan ini bersifat eksklusif: satu sesi hanya dihitung satu kali. Kartu milestone di atas dapat saling tumpang tindih.',
     'verifications.listTitle': 'Daftar pemeriksaan',
     'verifications.listDescription': 'Buka detail untuk melihat hasil, peta, dan riwayat pemeriksaan.',
     'verifications.filterStatusHelp': 'Pilih status pemeriksaan untuk menampilkan data yang sesuai kebutuhan.',
@@ -1928,6 +1940,18 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'verifications.needsAttentionDetailsTitle': 'Team action details',
     'verifications.needsAttentionDetailsText': 'Choose a case type to see the checks that need follow-up.',
     'verifications.needsAttentionDetailsCount': 'cases',
+    'verifications.workflowTitle': 'Check progress stages',
+    'verifications.workflowDescription':
+      'Each session is shown in its latest stage so the progress of the full dataset is easy to read.',
+    'verifications.workflowChecks': 'checks',
+    'verifications.workflowNotStarted': 'Not started / not sent',
+    'verifications.workflowInvitationSent': 'Invitation sent, not opened',
+    'verifications.workflowLinkOpened': 'Link opened, no GPS yet',
+    'verifications.workflowGpsReceived': 'GPS received, awaiting result',
+    'verifications.workflowTeamAction': 'Team follow-up needed',
+    'verifications.workflowMatched': 'Location matched',
+    'verifications.workflowNote':
+      'These stages are exclusive: each session is counted once. The milestone cards above may overlap.',
     'verifications.listTitle': 'Location checks',
     'verifications.listDescription': 'Open details to see the result, map, and check history.',
     'verifications.filterStatusHelp': 'Choose a check status to show the records you need.',

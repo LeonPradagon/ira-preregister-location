@@ -297,6 +297,14 @@ export interface AdminDashboardApi {
     locationValid: ApiNumeric;
     statusCounts: Record<string, ApiNumeric>;
     manualCaseCounts: Record<string, ApiNumeric>;
+    workflowStages: {
+      notStarted: ApiNumeric;
+      invitationSent: ApiNumeric;
+      linkOpened: ApiNumeric;
+      gpsReceived: ApiNumeric;
+      teamAction: ApiNumeric;
+      matched: ApiNumeric;
+    };
   };
   coordinateAudits: {
     statusCounts: Record<string, ApiNumeric>;
@@ -570,7 +578,8 @@ const adminApi = {
       `/admin/users/${encodeURIComponent(id)}/enable`,
       { method: 'POST' },
     ),
-  dashboard: () => request<AdminDashboardApi>('/admin/dashboard'),
+  dashboard: (forceRefresh = false) =>
+    request<AdminDashboardApi>(`/admin/dashboard${forceRefresh ? '?refresh=true' : ''}`),
   monitoring: () => request<AdminMonitoringApi>('/admin/monitoring'),
   customers: (
     query: {

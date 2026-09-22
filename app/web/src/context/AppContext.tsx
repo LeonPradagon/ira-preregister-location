@@ -93,6 +93,14 @@ const EMPTY_DASHBOARD_SUMMARY: DashboardSummary = {
     locationValid: 0,
     statusCounts: {},
     manualCaseCounts: {},
+    workflowStages: {
+      notStarted: 0,
+      invitationSent: 0,
+      linkOpened: 0,
+      gpsReceived: 0,
+      teamAction: 0,
+      matched: 0,
+    },
   },
   coordinateAudits: { statusCounts: {} },
   reminders: { total: 0, scheduled: 0, sent: 0, failed: 0, cancelled: 0, cancelledByReason: {}, byNumber: {} },
@@ -122,7 +130,7 @@ interface AppContextType {
   customers: Customer[];
   customerPage: CustomerPage;
   dashboardSummary: DashboardSummary;
-  refreshDashboard: () => Promise<void>;
+  refreshDashboard: (forceRefresh?: boolean) => Promise<void>;
   loadCustomerPage: (
     page?: number,
     search?: string,
@@ -237,6 +245,14 @@ function mapApiDashboard(raw: AdminDashboardApi): DashboardSummary {
       locationValid: number(raw.verifications.locationValid),
       statusCounts: numberMap(raw.verifications.statusCounts),
       manualCaseCounts: numberMap(raw.verifications.manualCaseCounts),
+      workflowStages: {
+        notStarted: number(raw.verifications.workflowStages?.notStarted),
+        invitationSent: number(raw.verifications.workflowStages?.invitationSent),
+        linkOpened: number(raw.verifications.workflowStages?.linkOpened),
+        gpsReceived: number(raw.verifications.workflowStages?.gpsReceived),
+        teamAction: number(raw.verifications.workflowStages?.teamAction),
+        matched: number(raw.verifications.workflowStages?.matched),
+      },
     },
     coordinateAudits: {
       statusCounts: numberMap(raw.coordinateAudits?.statusCounts),
@@ -570,8 +586,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCustomerPage(result);
     return result;
   };
-  const refreshDashboard = async () => {
-    setDashboardSummary(mapApiDashboard(await api.dashboard()));
+  const refreshDashboard = async (forceRefresh = false) => {
+    setDashboardSummary(mapApiDashboard(await api.dashboard(forceRefresh)));
   };
   const loadCustomerDetail = async (customerId: string) => {
     const raw = await api.customer(customerId);

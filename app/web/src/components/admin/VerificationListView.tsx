@@ -161,7 +161,7 @@ const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
 };
 
 export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSelectVerification }) => {
-  const { validationConfig, dashboardSummary } = useApp();
+  const { validationConfig, dashboardSummary, refreshDashboard } = useApp();
   const { t } = useTranslation();
   const [rows, setRows] = useState<VerificationListRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -218,6 +218,15 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
     }
   };
 
+  const handleRefresh = async () => {
+    if (loading) return;
+    const results = await Promise.allSettled([load(), refreshDashboard(true)]);
+    const dashboardResult = results[1];
+    if (dashboardResult.status === 'rejected') {
+      setError(dashboardResult.reason instanceof Error ? dashboardResult.reason.message : t('verifications.loadError'));
+    }
+  };
+
   useEffect(() => {
     void load();
   }, [page, pageSize, searchTerm, statusFilter, sortKey, sortDirection]);
@@ -259,12 +268,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
   };
 
   const verificationStats = dashboardSummary.verifications;
-  const attentionCount =
-    verificationStats.manualReview +
-    verificationStats.lowGpsAccuracy +
-    verificationStats.waitingForHome +
-    verificationStats.addressChanged +
-    verificationStats.customersMismatch;
+  const attentionCount = verificationStats.workflowStages.teamAction;
   const attentionBreakdown = [
     {
       label: t('verifications.needsAttentionManualReview'),
@@ -297,6 +301,39 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
       filter: 'CUSTOMER_DATA_MISMATCH',
     },
   ];
+  const workflowStages = [
+    {
+      label: t('verifications.workflowNotStarted'),
+      value: verificationStats.workflowStages.notStarted,
+      tone: 'bg-slate-400',
+    },
+    {
+      label: t('verifications.workflowInvitationSent'),
+      value: verificationStats.workflowStages.invitationSent,
+      tone: 'bg-blue-500',
+    },
+    {
+      label: t('verifications.workflowLinkOpened'),
+      value: verificationStats.workflowStages.linkOpened,
+      tone: 'bg-violet-500',
+    },
+    {
+      label: t('verifications.workflowGpsReceived'),
+      value: verificationStats.workflowStages.gpsReceived,
+      tone: 'bg-cyan-500',
+    },
+    {
+      label: t('verifications.workflowTeamAction'),
+      value: verificationStats.workflowStages.teamAction,
+      tone: 'bg-amber-500',
+    },
+    {
+      label: t('verifications.workflowMatched'),
+      value: verificationStats.workflowStages.matched,
+      tone: 'bg-emerald-500',
+    },
+  ];
+  const workflowStageTotal = workflowStages.reduce((sum, stage) => sum + stage.value, 0);
 
   const openAttentionCase = (filter: string) => {
     setStatusFilter(filter);
@@ -323,7 +360,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
           </div>
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => void handleRefresh()}
             disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
@@ -432,6 +469,51 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({ onSe
           </p>
         </section>
       )}
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">{t('verifications.workflowTitle')}</h2>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              {t('verifications.workflowDescription')}
+            </p>
+          </div>
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+            {numberFormat.format(workflowStageTotal)} / {numberFormat.format(verificationStats.total)}{' '}
+            {t('verifications.workflowChecks')}
+          </span>
+        </div>
+        <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800" aria-label={t('verifications.workflowTitle')}>
+          {workflowStages.map((stage) => {
+            const width = verificationStats.total > 0 ? (stage.value / verificationStats.total) * 100 : 0;
+            return (
+              <div
+                key={stage.label}
+                className={`${stage.tone} min-w-0 transition-all`}
+                style={{ width: `${width}%` }}
+                title={`${stage.label}: ${numberFormat.format(stage.value)}`}
+              />
+            );
+          })}
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {workflowStages.map((stage) => {
+            const percentage = verificationStats.total > 0 ? Math.round((stage.value / verificationStats.total) * 100) : 0;
+            return (
+              <div key={stage.label} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/60">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${stage.tone}`} />
+                  <span className="truncate text-xs font-medium text-slate-700 dark:text-slate-200">{stage.label}</span>
+                </div>
+                <span className="shrink-0 text-xs font-bold tabular-nums text-slate-900 dark:text-white">
+                  {numberFormat.format(stage.value)} ({percentage}%)
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-3 text-[11px] leading-4 text-slate-400 dark:text-slate-500">{t('verifications.workflowNote')}</p>
+      </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-3 border-b border-slate-200 p-4 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
