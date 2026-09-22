@@ -35,6 +35,7 @@ import {
   nextReminderNumber,
   ReminderPreference,
   scheduleReminderInTimezone,
+  sessionExpiryAfterActivity,
   shouldCancelFutureRemindersOnLinkOpen,
 } from '../reminders/reminder.policy.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
@@ -152,15 +153,26 @@ export class VerificationService {
       : row.session.reminderCount;
     const canScheduleReminder =
       !reminder || canScheduleReminderFromLink(effectiveReminderCount, reminder.reminderNumber);
+    const activityTimestamp = now();
+    const activeSessionExpiresAt = sessionExpiryAfterActivity(
+      row.session.expiresAt,
+      activityTimestamp,
+      config.ACTIVE_SESSION_TTL_DAYS,
+    );
     if (!row.session.openedAt || firstReminderOpen) {
-      const timestamp = now();
+      const timestamp = activityTimestamp;
       await db.transaction(async (tx) => {
         if (!row.session.openedAt) {
           await tx
             .update(verificationSessions)
-            .set({ openedAt: timestamp, verificationStatus: 'LINK_OPENED', updatedAt: timestamp })
-        .where(eq(verificationSessions.id, row.session.id));
-            await tx.insert(auditLogs).values({
+            .set({
+              openedAt: timestamp,
+              verificationStatus: 'LINK_OPENED',
+              expiresAt: activeSessionExpiresAt,
+              updatedAt: timestamp,
+            })
+            .where(eq(verificationSessions.id, row.session.id));
+          await tx.insert(auditLogs).values({
             actorUserId: 'customer-token',
             actorName: 'Customer',
             action: 'LINK_OPENED',
@@ -218,6 +230,7 @@ export class VerificationService {
               .set({
                 attemptCount: 0,
                 reminderCount: effectiveReminderCount,
+                expiresAt: activeSessionExpiresAt,
                 updatedAt: timestamp,
               })
               .where(eq(verificationSessions.id, row.session.id));
@@ -263,7 +276,7 @@ export class VerificationService {
         linkExpiresAt:
           row.reminder?.tokenExpiresAt?.toISOString() ??
           row.shortLinkExpiresAt?.toISOString() ??
-          row.session.expiresAt.toISOString(),
+          activeSessionExpiresAt.toISOString(),
         customerConfirmationStatus: row.session.customerConfirmationStatus,
         reminderCount: effectiveReminderCount,
         attemptCount: row.reminder ? 0 : row.session.attemptCount,
@@ -323,6 +336,7 @@ export class VerificationService {
 
   async confirm(token: string, confirmed: boolean) {
     const row = await this.findByToken(token);
+    const config = await this.validationConfig.get();
     if (confirmed) assertAddressCorrectionComplete(row.address);
     const timestamp = now();
     const nextStatus = confirmed ? 'CONSENTED' : 'CUSTOMER_DATA_MISMATCH';
@@ -334,6 +348,7 @@ export class VerificationService {
           customerConfirmationStatus: confirmed ? 'CONFIRMED' : 'MISMATCH',
           verificationStatus: nextStatus,
           customerConfirmedAt: timestamp,
+          expiresAt: sessionExpiryAfterActivity(row.session.expiresAt, timestamp, config.ACTIVE_SESSION_TTL_DAYS),
           updatedAt: timestamp,
         })
         .where(eq(verificationSessions.id, row.session.id));
@@ -370,6 +385,7 @@ export class VerificationService {
 
   async consent(token: string) {
     const row = await this.findByToken(token);
+    const config = await this.validationConfig.get();
     assertAddressCorrectionComplete(row.address);
     if (row.session.customerConfirmationStatus !== 'CONFIRMED')
       throw new DomainError('Customer confirmation is required first');
@@ -378,7 +394,12 @@ export class VerificationService {
     await db.transaction(async (tx) => {
       await tx
         .update(verificationSessions)
-        .set({ consentAt: timestamp, verificationStatus: 'GPS_CAPTURING', updatedAt: timestamp })
+        .set({
+          consentAt: timestamp,
+          verificationStatus: 'GPS_CAPTURING',
+          expiresAt: sessionExpiryAfterActivity(row.session.expiresAt, timestamp, config.ACTIVE_SESSION_TTL_DAYS),
+          updatedAt: timestamp,
+        })
         .where(eq(verificationSessions.id, row.session.id));
       await tx.insert(auditLogs).values({
         actorUserId: 'customer-token',
@@ -588,6 +609,7 @@ export class VerificationService {
           verificationStatus: nextStatus,
           locationVerifiedAt: decision.result === 'LOCATION_VALID' ? timestamp : null,
           completedAt: decision.result === 'LOCATION_VALID' ? timestamp : null,
+          expiresAt: sessionExpiryAfterActivity(row.session.expiresAt, timestamp, config.ACTIVE_SESSION_TTL_DAYS),
           updatedAt: timestamp,
         })
         .where(eq(verificationSessions.id, row.session.id));
@@ -787,9 +809,14 @@ export class VerificationService {
           currentTime,
           process.env.REMINDER_TIMEZONE ?? 'Asia/Jakarta',
         );
+    const activeSessionExpiresAt = sessionExpiryAfterActivity(
+      row.session.expiresAt,
+      currentTime,
+      config.ACTIVE_SESSION_TTL_DAYS,
+    );
     if (Number.isNaN(scheduledAt.getTime()) || scheduledAt <= currentTime)
       throw new DomainError('Reminder time must be in the future', 422, 'REMINDER_TIME_INVALID');
-    if (!isReminderScheduledBeforeSessionExpiry(scheduledAt, row.session.expiresAt))
+    if (!isReminderScheduledBeforeSessionExpiry(scheduledAt, activeSessionExpiresAt))
       throw new DomainError(
         'Reminder time must be before the verification session expires',
         422,
@@ -842,7 +869,12 @@ export class VerificationService {
       }
       await tx
         .update(verificationSessions)
-        .set({ reminderCount: finalReminderNumber, verificationStatus: nextStatus, updatedAt: timestamp })
+        .set({
+          reminderCount: finalReminderNumber,
+          verificationStatus: nextStatus,
+          expiresAt: activeSessionExpiresAt,
+          updatedAt: timestamp,
+        })
         .where(eq(verificationSessions.id, row.session.id));
       await tx.insert(auditLogs).values({
         actorUserId: 'customer-token',
@@ -908,7 +940,11 @@ export class VerificationService {
     await db.transaction(async (tx) => {
       await tx
         .update(verificationSessions)
-        .set({ verificationStatus: nextStatus, updatedAt: timestamp })
+        .set({
+          verificationStatus: nextStatus,
+          expiresAt: sessionExpiryAfterActivity(row.session.expiresAt, timestamp, config.ACTIVE_SESSION_TTL_DAYS),
+          updatedAt: timestamp,
+        })
         .where(eq(verificationSessions.id, row.session.id));
       const reminderCancellationReason = sameAddress ? 'VERIFICATION_RESUMED' : 'ADDRESS_CHANGE_STARTED';
       const cancelledReminders = await tx
@@ -1026,7 +1062,12 @@ export class VerificationService {
       });
       await tx
         .update(verificationSessions)
-        .set({ currentAddressId: addressId, verificationStatus: 'ADDRESS_PROPOSED', updatedAt: timestamp })
+        .set({
+          currentAddressId: addressId,
+          verificationStatus: 'ADDRESS_PROPOSED',
+          expiresAt: sessionExpiryAfterActivity(row.session.expiresAt, timestamp, config.ACTIVE_SESSION_TTL_DAYS),
+          updatedAt: timestamp,
+        })
         .where(eq(verificationSessions.id, row.session.id));
       await tx.insert(auditLogs).values({
         actorUserId: 'customer-token',

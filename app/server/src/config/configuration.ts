@@ -27,6 +27,7 @@ export const envSchema = z.object({
   MAX_REMINDERS_PER_SESSION: z.coerce.number().int().min(1).max(3).default(3),
   COORDINATE_DISPLAY_DECIMALS: z.coerce.number().int().min(0).max(8).default(6),
   VERIFICATION_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
+  ACTIVE_SESSION_TTL_DAYS: z.coerce.number().int().positive().max(30).default(7),
   REMINDER_LINK_TTL_HOURS: z.coerce.number().positive().default(24),
   UNOPENED_LINK_REMINDER_DELAY_DAYS: z.coerce.number().positive().default(1),
   UNOPENED_LINK_REMINDER_INTERVAL_DAYS: z.coerce.number().positive().default(1),

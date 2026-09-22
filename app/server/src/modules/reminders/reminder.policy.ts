@@ -2,6 +2,7 @@ export const MAX_REMINDERS_PER_SESSION = 3;
 export const DEFAULT_REMINDER_LINK_TTL_HOURS = 24;
 export const DEFAULT_UNOPENED_LINK_REMINDER_DELAY_DAYS = 1;
 export const DEFAULT_UNOPENED_LINK_REMINDER_INTERVAL_DAYS = 1;
+export const DEFAULT_ACTIVE_SESSION_TTL_DAYS = 7;
 const AUTOMATIC_REMINDER_INTERVAL_DAYS = 2;
 const REMINDER_EXPIRY_BUFFER_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -197,6 +198,19 @@ export function verificationSessionExpiresAt(
     Math.max(0, maxReminders - 1) * unopenedReminderIntervalDays * DAY_MS +
     reminderLinkTtlHours * 60 * 60 * 1000;
   return new Date(initialLinkExpiresAt.getTime() + reminderWindowMs);
+}
+
+export function sessionExpiryAfterActivity(
+  currentExpiresAt: Date,
+  activityAt: Date,
+  activeSessionTtlDays = DEFAULT_ACTIVE_SESSION_TTL_DAYS,
+): Date {
+  if (!Number.isFinite(currentExpiresAt.getTime()) || !Number.isFinite(activityAt.getTime()))
+    throw new Error('Session activity time must be valid');
+  if (!Number.isFinite(activeSessionTtlDays) || activeSessionTtlDays <= 0)
+    throw new Error('Active session TTL must be positive');
+  const activityExpiry = new Date(activityAt.getTime() + activeSessionTtlDays * DAY_MS);
+  return activityExpiry > currentExpiresAt ? activityExpiry : new Date(currentExpiresAt);
 }
 
 export function isReminderScheduledBeforeSessionExpiry(scheduledAt: Date, sessionExpiresAt: Date): boolean {

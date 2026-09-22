@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   automaticReminderTimes,
+  sessionExpiryAfterActivity,
   canScheduleReminderFromLink,
   isSystemFollowUpStatus,
   isReminderLinkFirstOpen,
@@ -156,6 +157,16 @@ describe('reminder policy', () => {
     expect(verificationSessionExpiresAt(initialExpiry, 3, 24, 1, 1).toISOString()).toBe(
       '2026-01-12T10:00:00.000Z',
     );
+  });
+
+  it('extends an active session from customer activity without shortening a later expiry', () => {
+    const activityAt = new Date('2026-09-17T10:00:00.000Z');
+    expect(
+      sessionExpiryAfterActivity(new Date('2026-09-17T12:00:00.000Z'), activityAt, 7).toISOString(),
+    ).toBe('2026-09-24T10:00:00.000Z');
+    expect(
+      sessionExpiryAfterActivity(new Date('2026-09-30T12:00:00.000Z'), activityAt, 7).toISOString(),
+    ).toBe('2026-09-30T12:00:00.000Z');
   });
 
   it('does not allow scheduling after the verification session expires', () => {

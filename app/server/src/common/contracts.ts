@@ -268,6 +268,7 @@ export const validationConfigSchema = z.object({
   MAX_REMINDERS_PER_SESSION: z.number().int().min(1).max(3).optional(),
   COORDINATE_DISPLAY_DECIMALS: z.number().int().min(0).max(8).optional(),
   VERIFICATION_TOKEN_TTL_DAYS: z.number().int().positive().optional(),
+  ACTIVE_SESSION_TTL_DAYS: z.number().int().positive().max(30).optional(),
   REMINDER_LINK_TTL_HOURS: z.number().positive().optional(),
   UNOPENED_LINK_REMINDER_DELAY_DAYS: z.number().positive().optional(),
   UNOPENED_LINK_REMINDER_INTERVAL_DAYS: z.number().positive().optional(),

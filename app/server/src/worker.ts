@@ -39,6 +39,7 @@ import {
   reminderCancellationFields,
   reminderLinkExpiresAt,
   reminderScheduleFields,
+  sessionExpiryAfterActivity,
   isReusableCancelledReminder,
   shouldScheduleSystemFollowUp,
   verificationStatusAfterReminderSend,
@@ -487,7 +488,12 @@ const reminderWorker = runs('messaging')
             idempotencyKey: `reminder:${reminderId}`,
           });
           const sentAt = new Date();
-          const tokenExpiresAt = reminderLinkExpiresAt(sentAt, target.session.expiresAt, reminderTtlHours);
+          const sessionExpiresAt = sessionExpiryAfterActivity(
+            target.session.expiresAt,
+            sentAt,
+            runtimeConfig.ACTIVE_SESSION_TTL_DAYS,
+          );
+          const tokenExpiresAt = reminderLinkExpiresAt(sentAt, sessionExpiresAt, reminderTtlHours);
           const nextReminderNumber = target.reminder.reminderNumber + 1;
           const reminderIntervalDays =
             target.reminder.reminderSource === 'UNOPENED_LINK'
@@ -495,7 +501,7 @@ const reminderWorker = runs('messaging')
               : undefined;
           const nextScheduledAt =
             nextReminderNumber <= runtimeConfig.MAX_REMINDERS_PER_SESSION
-              ? nextAutomaticReminderAt(target.reminder.scheduledAt, target.session.expiresAt, reminderIntervalDays)
+              ? nextAutomaticReminderAt(target.reminder.scheduledAt, sessionExpiresAt, reminderIntervalDays)
               : null;
           await db.transaction(async (tx) => {
             await tx
@@ -514,6 +520,7 @@ const reminderWorker = runs('messaging')
               .set({
                 tokenId: verificationToken.tokenId,
                 tokenHash: verificationToken.tokenHash,
+                expiresAt: sessionExpiresAt,
                 reminderCount: nextScheduledAt ? nextReminderNumber : target.session.reminderCount,
                 verificationStatus: verificationStatusAfterReminderSend(
                   target.session.verificationStatus,
@@ -1225,6 +1232,121 @@ const recoverStaleReminderProcessing = async () => {
     });
 };
 
+const recoverExpiredAutomaticReminderSlots = async () => {
+  if (!runs('messaging')) return;
+  const runtimeConfig = await reminderConfig.get();
+  if (!runtimeConfig.ENABLE_REMINDERS) return;
+  const recoveryStartedAt = new Date();
+  const candidates = await db
+    .select({ id: verificationSessions.id, customerName: customers.name })
+    .from(verificationSessions)
+    .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
+    .innerJoin(
+      reminders,
+      and(
+        eq(reminders.sessionId, verificationSessions.id),
+        eq(reminders.reminderNumber, 2),
+        eq(reminders.status, 'SENT'),
+        inArray(reminders.reminderSource, ['SYSTEM_RECOVERY', 'UNOPENED_LINK']),
+      ),
+    )
+    .where(
+      and(
+        lte(verificationSessions.expiresAt, recoveryStartedAt),
+        inArray(verificationSessions.verificationStatus, SYSTEM_FOLLOW_UP_STATUSES),
+        isNull(verificationSessions.revokedAt),
+        sql`not exists (
+          select 1
+          from reminders reminder_3
+          where reminder_3.session_id = ${verificationSessions.id}
+            and reminder_3.reminder_number = 3
+        )`,
+      ),
+    )
+    .orderBy(verificationSessions.updatedAt, verificationSessions.id)
+    .limit(reminderRecoveryBatchSize);
+  let recovered = 0;
+  for (const candidate of candidates) {
+    try {
+      const didRecover = await db.transaction(async (tx) => {
+        const [session] = await tx
+          .select({
+            id: verificationSessions.id,
+            expiresAt: verificationSessions.expiresAt,
+            reminderCount: verificationSessions.reminderCount,
+          })
+          .from(verificationSessions)
+          .where(
+            and(
+              eq(verificationSessions.id, candidate.id),
+              lte(verificationSessions.expiresAt, recoveryStartedAt),
+              inArray(verificationSessions.verificationStatus, SYSTEM_FOLLOW_UP_STATUSES),
+              isNull(verificationSessions.revokedAt),
+              sql`not exists (
+                select 1
+                from reminders reminder_3
+                where reminder_3.session_id = ${verificationSessions.id}
+                  and reminder_3.reminder_number = 3
+              )`,
+            ),
+          )
+          .limit(1);
+        if (!session) return false;
+
+        const expiresAt = sessionExpiryAfterActivity(
+          session.expiresAt,
+          recoveryStartedAt,
+          runtimeConfig.ACTIVE_SESSION_TTL_DAYS,
+        );
+        const messageText = `Halo ${candidate.customerName}, silakan melanjutkan pemeriksaan lokasi Anda. Pengingat 3 dari ${runtimeConfig.MAX_REMINDERS_PER_SESSION}. Tautan baru berlaku maksimal ${runtimeConfig.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`;
+        const [created] = await tx
+          .insert(reminders)
+          .values({
+            id: randomUUID(),
+            sessionId: session.id,
+            reminderNumber: 3,
+            ...reminderScheduleFields('SYSTEM_RECOVERY', recoveryStartedAt, messageText),
+            createdAt: recoveryStartedAt,
+          })
+          .onConflictDoNothing({ target: [reminders.sessionId, reminders.reminderNumber] })
+          .returning({ id: reminders.id });
+        if (!created) return false;
+
+        await tx
+          .update(verificationSessions)
+          .set({
+            expiresAt,
+            reminderCount: Math.max(session.reminderCount, runtimeConfig.MAX_REMINDERS_PER_SESSION),
+            updatedAt: recoveryStartedAt,
+          })
+          .where(eq(verificationSessions.id, session.id));
+        await tx.insert(auditLogs).values({
+          actorUserId: 'system',
+          actorName: 'Expired Reminder Recovery',
+          action: 'REMINDER_SCHEDULED',
+          entityType: 'REMINDER',
+          entityId: created.id,
+          after: {
+            reminderNumber: 3,
+            automaticRecovery: true,
+            legacyExpiredSession: true,
+            expiresAt: expiresAt.toISOString(),
+          },
+          timestamp: recoveryStartedAt,
+        });
+        return true;
+      });
+      if (didRecover) recovered += 1;
+    } catch (error) {
+      logEvent('error', 'reminder.expired_recovery_failed', {
+        sessionId: candidate.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  if (recovered) logEvent('info', 'reminder.expired_slots_recovered', { count: recovered });
+};
+
 const recoverMissingReminderSlots = async () => {
   const recoveryBucket = Math.floor(Date.now() / (reminderRecoveryIntervalSeconds * 1000));
   if (recoveryBucket === lastReminderRecoveryBucket) return;
@@ -1652,6 +1774,7 @@ const poll = async () => {
     jobs.push(
       enqueuePendingOutbox(),
       recoverStaleReminderProcessing(),
+      recoverExpiredAutomaticReminderSlots(),
       recoverMissingReminderSlots(),
       scheduleStaleCustomerFollowUps(),
       enqueueDueReminders(),

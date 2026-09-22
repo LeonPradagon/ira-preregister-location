@@ -10,6 +10,7 @@ x-server-environment: &server-environment
   BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}
   BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL must be set}
   WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN must be set}
+  ACTIVE_SESSION_TTL_DAYS: ${ACTIVE_SESSION_TTL_DAYS:-7}
   IMPORT_STORAGE_DIR: /workspace/app/server/var/imports
   EXPORT_STORAGE_DIR: /workspace/app/server/var/exports
   GOOGLE_GEOCODING_API_KEY: ${GOOGLE_GEOCODING_API_KEY:-}
