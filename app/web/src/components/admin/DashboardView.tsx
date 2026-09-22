@@ -331,29 +331,52 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
               </span>
             </div>
           </div>
-          <div className="mt-5 space-y-4">
-            {progressSteps.map((step) => (
-              <div key={step.label}>
-                <div className="flex items-center justify-between gap-3 text-xs">
-                  <span className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200">
-                    <span className={`rounded-lg p-1.5 text-white ${step.color}`}>
-                      <step.icon className="h-3.5 w-3.5" />
+          <div className="mt-5">
+            <div className="flex h-3 overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200/70 dark:bg-slate-800 dark:ring-slate-700/70">
+              {progressSteps.map((step) => (
+                <div
+                  key={step.label}
+                  className={`${step.color} min-w-0 border-r border-white/60 transition-all last:border-r-0 dark:border-slate-900/50`}
+                  style={{ width: `${totalChecks > 0 ? (step.value / totalChecks) * 100 : 0}%` }}
+                  title={`${step.label}: ${step.value.toLocaleString('en-US')}`}
+                />
+              ))}
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
+              {progressSteps.map((step, index) => (
+                <div
+                  key={step.label}
+                  className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-800/50"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <span className={`rounded-lg p-1.5 text-white ${step.color}`}>
+                        <step.icon className="h-3.5 w-3.5" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                          {index + 1}
+                        </p>
+                        <p className="mt-0.5 text-xs font-semibold leading-4 text-slate-700 dark:text-slate-200">
+                          {step.label}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+                      {step.value.toLocaleString('en-US')}
                     </span>
-                    {step.label}
-                  </span>
-                  <span className="font-semibold text-slate-900 dark:text-white">
-                    {step.value.toLocaleString('en-US')}{' '}
-                    <span className="font-normal text-slate-400">({step.percent}%)</span>
-                  </span>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                      <div className={`h-full rounded-full ${step.color}`} style={{ width: `${step.percent}%` }} />
+                    </div>
+                    <span className="text-[11px] font-semibold tabular-nums text-slate-500 dark:text-slate-400">
+                      {step.percent}%
+                    </span>
+                  </div>
                 </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                  <div
-                    className={`h-full rounded-full ${step.color} transition-all`}
-                    style={{ width: `${step.percent}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </section>
 
