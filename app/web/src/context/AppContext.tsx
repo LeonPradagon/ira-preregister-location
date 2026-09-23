@@ -2,7 +2,6 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AdminUser,
-  AuditLog,
   Customer,
   CustomerAddress,
   CustomerPage,
@@ -10,7 +9,6 @@ import {
   CoordinateAuditStatus,
   DashboardSummary,
   IntegrationConfigs,
-  IntegrationOutboxEvent,
   LocationCapture,
   Reminder,
   ReviewDecision,
@@ -24,7 +22,7 @@ import {
 } from '../types';
 import { assertCapability } from '../lib/accessControl';
 import { AdminDashboardApi, api } from '../lib/apiClient';
-import { adminQueryKey, adminQueryOptions, dashboardQueryOptions } from '../lib/adminQueries';
+import { adminQueryKey, dashboardQueryOptions } from '../lib/adminQueries';
 
 type NewCustomerAddress = Omit<
   CustomerAddress,
@@ -127,6 +125,7 @@ export interface VerificationDetailData {
 
 interface AppContextType {
   currentAdmin: AdminUser | null;
+  isAppLoading: boolean;
   loginAdmin: (email: string, password?: string) => Promise<boolean>;
   logoutAdmin: () => void;
   customers: Customer[];
@@ -155,9 +154,6 @@ interface AppContextType {
   locationCaptures: LocationCapture[];
   verificationReviews: VerificationReview[];
   reminders: Reminder[];
-  campaigns: VerificationCampaign[];
-  auditLogs: AuditLog[];
-  outboxEvents: IntegrationOutboxEvent[];
   validationConfig: ValidationConfig;
   integrationConfigs: IntegrationConfigs;
   addCustomer: (
@@ -295,6 +291,8 @@ export function mapApiCustomer(raw: Record<string, unknown>): Customer {
     coverageStatus: raw.coverageStatus ? String(raw.coverageStatus) : undefined,
     coverageFwaStatus: raw.coverageFwaStatus ? String(raw.coverageFwaStatus) : undefined,
     coverageFtthStatus: raw.coverageFtthStatus ? String(raw.coverageFtthStatus) : undefined,
+    latestCoverageStatus: raw.latestCoverageStatus ? String(raw.latestCoverageStatus) as Customer['latestCoverageStatus'] : null,
+    latestCoverageCheckedAt: raw.latestCoverageCheckedAt ? String(raw.latestCoverageCheckedAt) : null,
     sourceMetadata:
       raw.sourceMetadata && typeof raw.sourceMetadata === 'object'
         ? (raw.sourceMetadata as Record<string, unknown>)
@@ -393,6 +391,7 @@ function mapApiCapture(raw: Record<string, unknown>): LocationCapture {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
   const [currentAdmin, setCurrentAdmin] = useState<AdminUser | null>(null);
+  const [isAppLoading, setIsAppLoading] = useState(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [customerPage, setCustomerPage] = useState<CustomerPage>(EMPTY_CUSTOMER_PAGE);
@@ -401,11 +400,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [locationCaptures, setLocationCaptures] = useState<LocationCapture[]>([]);
   const [verificationReviews, setVerificationReviews] = useState<VerificationReview[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
-  const [campaigns, setCampaigns] = useState<VerificationCampaign[]>([]);
   const dashboardQuery = useQuery(dashboardQueryOptions(currentAdmin));
   const dashboardSummary = dashboardQuery.data ? mapApiDashboard(dashboardQuery.data) : EMPTY_DASHBOARD_SUMMARY;
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [outboxEvents, setOutboxEvents] = useState<IntegrationOutboxEvent[]>([]);
   const [validationConfig, setValidationConfig] = useState<ValidationConfig>(DEFAULT_VALIDATION_CONFIG);
   const [integrationConfigs, setIntegrationConfigs] = useState<IntegrationConfigs>(DEFAULT_INTEGRATION_CONFIGS);
   const [theme, setThemeState] = useState<ThemeMode>(() => {
@@ -432,14 +428,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     let active = true;
-    void api
-      .getSession()
-      .then(async (session) => {
-        if (!active || !session?.user) return;
-        const admin = await api.me();
-        if (active) setCurrentAdmin(mapApiAdmin(admin));
-      })
-      .catch(() => undefined);
+    void (async () => {
+      try {
+        if (/^\/(?:v|s)\//.test(window.location.pathname)) return;
+        const session = await api.getSession();
+        if (!active) return;
+        if (session?.user) {
+          const admin = await api.me();
+          if (active) setCurrentAdmin(mapApiAdmin(admin));
+        } else setIsAppLoading(false);
+      } catch {
+        if (active) setIsAppLoading(false);
+      }
+    })();
     return () => {
       active = false;
     };
@@ -449,128 +450,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!currentAdmin) return;
     let active = true;
     const load = async () => {
-      const [
-        rawCustomerPage,
-        rawVerifications,
-        rawReminders,
-        rawAudits,
-        rawSettings,
-        rawIntegrations,
-        rawOutbox,
-        rawCampaigns,
-      ] = await Promise.all([
-        queryClient
-          .fetchQuery(
-            adminQueryOptions(currentAdmin, 'customers', () => api.customers({ page: 1, pageSize: 25 }), {
-              page: 1,
-              pageSize: 25,
-            }),
-          )
-          .catch(() => null),
-        queryClient
-          .fetchQuery(
-            adminQueryOptions(currentAdmin, 'verifications', () => api.verifications({ page: 1, pageSize: 25 }), {
-              page: 1,
-              pageSize: 25,
-            }),
-          )
-          .catch(() => null),
-        queryClient
-          .fetchQuery(
-            adminQueryOptions(currentAdmin, 'reminders', () => api.reminders({ page: 1, pageSize: 25 }), {
-              page: 1,
-              pageSize: 25,
-            }),
-          )
-          .catch(() => null),
-        queryClient
-          .fetchQuery(
-            adminQueryOptions(currentAdmin, 'auditLogs', () => api.auditLogs({ page: 1, pageSize: 25 }), {
-              page: 1,
-              pageSize: 25,
-            }),
-          )
-          .catch(() => null),
-        queryClient.fetchQuery(adminQueryOptions(currentAdmin, 'settings', () => api.settings())).catch(() => null),
-        queryClient
-          .fetchQuery(adminQueryOptions(currentAdmin, 'integrations', () => api.integrations()))
-          .catch(() => null),
-        queryClient
-          .fetchQuery(
-            adminQueryOptions(currentAdmin, 'outbox', () => api.outbox({ page: 1, pageSize: 25 }), {
-              page: 1,
-              pageSize: 25,
-            }),
-          )
-          .catch(() => null),
-        queryClient
-          .fetchQuery(
-            adminQueryOptions(currentAdmin, 'campaigns', () => api.campaigns({ page: 1, pageSize: 25 }), {
-              page: 1,
-              pageSize: 25,
-            }),
-          )
-          .catch(() => null),
-      ]);
-      if (!active) return;
-      if (rawCustomerPage) {
-        const mappedCustomers = rawCustomerPage.items.map(mapApiCustomer);
-        setCustomers((previous) => mergeCachedRecords(previous, mappedCustomers));
-        setCustomerPage({ ...rawCustomerPage, items: mappedCustomers });
-        if (rawCustomerPage.nextCursor) setCustomerCursors({ 2: rawCustomerPage.nextCursor });
-      }
-      if (rawVerifications)
-        setVerificationSessions((previous) =>
-          mergeCachedRecords(
-            previous,
-            rawVerifications.items.map((raw) => mapApiSession(raw.session)),
-          ),
-        );
-      if (rawReminders)
-        setReminders((previous) => mergeCachedRecords(previous, rawReminders.items as unknown as Reminder[]));
-      if (rawAudits) setAuditLogs((previous) => mergeCachedRecords(previous, rawAudits.items as unknown as AuditLog[]));
-      if (rawOutbox)
-        setOutboxEvents((previous) =>
-          mergeCachedRecords(previous, rawOutbox.items as unknown as IntegrationOutboxEvent[]),
-        );
-      if (rawCampaigns)
-        setCampaigns((previous) =>
-          mergeCachedRecords(
-            previous,
-            rawCampaigns.items.map((raw) => ({
-              ...(raw as unknown as VerificationCampaign),
-              id: String(raw.id),
-              name: String(raw.name ?? ''),
-              status: String(raw.status ?? 'DRAFT') as VerificationCampaign['status'],
-              timezone: String(raw.timezone ?? 'Asia/Jakarta'),
-              scheduledAt: String(raw.scheduledAt ?? ''),
-              targetCount: Number(raw.targetCount ?? 0),
-              sentCount: Number(raw.sentCount ?? 0),
-              failedCount: Number(raw.failedCount ?? 0),
-              dailySendLimit: Number(raw.dailySendLimit ?? 500),
-              createdBy: String(raw.createdBy ?? ''),
-              createdAt: String(raw.createdAt ?? ''),
-              updatedAt: String(raw.updatedAt ?? ''),
-            })),
-          ),
-        );
-      if (rawSettings) setValidationConfig({ ...DEFAULT_VALIDATION_CONFIG, ...rawSettings } as ValidationConfig);
-      if (rawIntegrations) {
-        const next = { ...DEFAULT_INTEGRATION_CONFIGS };
-        for (const raw of rawIntegrations) {
-          const key = String(raw.key) as keyof IntegrationConfigs;
-          if (key in next)
-            next[key] = {
-              enabled: Boolean(raw.enabled),
-              name: String(raw.name),
-              description: String(raw.description),
-              status: String(raw.status),
-            };
+      try {
+        const [rawCustomerPage, rawVerifications, rawReminders, rawSettings, rawIntegrations] = await Promise.all([
+          api.customers({ page: 1, pageSize: 25 }).catch(() => null),
+          api.verifications({ page: 1, pageSize: 25 }).catch(() => null),
+          api.reminders({ page: 1, pageSize: 25 }).catch(() => null),
+          api.settings().catch(() => null),
+          api.integrations().catch(() => null),
+        ]);
+        if (!active) return;
+        if (rawCustomerPage) {
+          const mappedCustomers = rawCustomerPage.items.map(mapApiCustomer);
+          setCustomers((previous) => mergeCachedRecords(previous, mappedCustomers));
+          setCustomerPage({ ...rawCustomerPage, items: mappedCustomers });
+          if (rawCustomerPage.nextCursor) setCustomerCursors({ 2: rawCustomerPage.nextCursor });
         }
-        setIntegrationConfigs(next);
+        if (rawVerifications)
+          setVerificationSessions((previous) =>
+            mergeCachedRecords(previous, rawVerifications.items.map((raw) => mapApiSession(raw.session))),
+          );
+        if (rawReminders)
+          setReminders((previous) => mergeCachedRecords(previous, rawReminders.items as unknown as Reminder[]));
+        if (rawSettings) setValidationConfig({ ...DEFAULT_VALIDATION_CONFIG, ...rawSettings } as ValidationConfig);
+        if (rawIntegrations) {
+          const next = { ...DEFAULT_INTEGRATION_CONFIGS };
+          for (const raw of rawIntegrations) {
+            const key = String(raw.key) as keyof IntegrationConfigs;
+            if (key in next)
+              next[key] = {
+                enabled: Boolean(raw.enabled),
+                name: String(raw.name),
+                description: String(raw.description),
+                status: String(raw.status),
+              };
+          }
+          setIntegrationConfigs(next);
+        }
+      } finally {
+        if (active) setIsAppLoading(false);
       }
     };
-    void load();
+    void load().catch(() => {
+      if (active) setIsAppLoading(false);
+    });
     return () => {
       active = false;
     };
@@ -596,9 +518,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLocationCaptures([]);
     setVerificationReviews([]);
     setReminders([]);
-    setCampaigns([]);
-    setAuditLogs([]);
-    setOutboxEvents([]);
     setValidationConfig(DEFAULT_VALIDATION_CONFIG);
     setIntegrationConfigs(DEFAULT_INTEGRATION_CONFIGS);
     queryClient.clear();
@@ -635,10 +554,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sortDirection,
       cursor: page === 1 ? undefined : customerCursors[page],
     };
-    const raw = await queryClient.fetchQuery({
-      ...adminQueryOptions(currentAdmin, 'customers', () => api.customers(parameters), parameters),
-      staleTime: 0,
-    });
+    const raw = await api.customers(parameters);
     if (page === 1) setCustomerCursors({});
     if (raw.nextCursor) setCustomerCursors((previous) => ({ ...previous, [page + 1]: raw.nextCursor! }));
     const mapped = raw.items.map(mapApiCustomer);
@@ -654,10 +570,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await queryClient.invalidateQueries({ queryKey: [...adminQueryKey(currentAdmin), 'monitoring'] });
   };
   const loadCustomerDetail = async (customerId: string) => {
-    const raw = await queryClient.fetchQuery({
-      ...adminQueryOptions(currentAdmin, 'customer', () => api.customer(customerId), customerId),
-      staleTime: 0,
-    });
+    const raw = await api.customer(customerId);
     const customer = mapApiCustomer(raw.customer as Record<string, unknown>);
     const detailAddresses = (Array.isArray(raw.addresses) ? raw.addresses : []).map((row) =>
       mapApiAddress(row as Record<string, unknown>),
@@ -679,10 +592,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { customer, addresses: detailAddresses, sessions: detailSessions };
   };
   const loadVerificationDetail = async (sessionId: string) => {
-    const raw = await queryClient.fetchQuery({
-      ...adminQueryOptions(currentAdmin, 'verification', () => api.verification(sessionId), sessionId),
-      staleTime: 0,
-    });
+    const raw = await api.verification(sessionId);
     const rawSession = raw.session as Record<string, unknown>;
     const rawCustomer = raw.customer as Record<string, unknown>;
     const rawAddress = raw.address as Record<string, unknown>;
@@ -722,11 +632,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setReminders((previous) => [
         ...(raw.reminders as Reminder[]),
         ...previous.filter((item) => item.sessionId !== session.id),
-      ]);
-    if (Array.isArray(raw.audits))
-      setAuditLogs((previous) => [
-        ...(raw.audits as AuditLog[]),
-        ...previous.filter((item) => item.entityId !== session.id),
       ]);
     return {
       session: { ...session, lastValidationResult },
@@ -945,16 +850,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: String(raw.createdAt ?? ''),
       updatedAt: String(raw.updatedAt ?? ''),
     };
-    setCampaigns((prev) => [campaign, ...prev]);
     await refreshDashboard();
     return campaign;
   };
   const startCampaign = async (campaignId: string) => {
     assertCapability(currentAdmin?.role, 'createVerification');
     await api.startCampaign(campaignId);
-    setCampaigns((prev) =>
-      prev.map((campaign) => (campaign.id === campaignId ? { ...campaign, status: 'RUNNING' } : campaign)),
-    );
     await refreshDashboard();
   };
   const optOutCustomer = async (customerId: string) => {
@@ -1000,13 +901,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     assertCapability(currentAdmin?.role, 'changeValidationConfig');
     const saved = await api.updateSettings(newConfig);
     setValidationConfig((prev) => ({ ...prev, ...saved }) as ValidationConfig);
-    await queryClient.invalidateQueries({ queryKey: [...adminQueryKey(currentAdmin), 'settings'] });
   };
 
   return (
     <AppContext.Provider
       value={{
         currentAdmin,
+        isAppLoading: isAppLoading || Boolean(currentAdmin && dashboardQuery.isLoading),
         loginAdmin,
         logoutAdmin,
         customers,
@@ -1021,9 +922,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         locationCaptures,
         verificationReviews,
         reminders,
-        campaigns,
-        auditLogs,
-        outboxEvents,
         validationConfig,
         integrationConfigs,
         addCustomer,

@@ -1,6 +1,9 @@
 import axios, { type AxiosRequestConfig } from 'axios';
-import type { CoveragePort, CoveragePoint, CoverageResult } from './coverage.port.js';
-import { normalizeCoverageStatus } from '../../modules/coverage/coverage.policy.js';
+import {
+  normalizeCoverageStatus,
+  type CoveragePoint,
+  type CoverageResult,
+} from '../../modules/coverage/coverage.policy.js';
 
 type FwaResponse = {
   id?: string | null;
@@ -22,7 +25,7 @@ const mapResult = (point: CoveragePoint, response: FwaResponse): CoverageResult 
   status: normalizeCoverageStatus(response.coverage_status),
 });
 
-export class FwaCoverageAdapter implements CoveragePort {
+export class FwaCoverageAdapter {
   constructor(
     private readonly client: CoverageHttpClient = axios,
     private readonly baseUrl = process.env.FWA_COVERAGE_BASE_URL ?? '',

@@ -10,6 +10,7 @@ export interface AdminUser {
 }
 
 export type CustomerStatus = 'ACTIVE' | 'PENDING_INSTALLATION' | 'SUSPENDED' | 'VERIFIED';
+export type CoverageCheckStatus = 'NOT_CHECKED' | 'QUEUED' | 'PROCESSING' | 'COVERED' | 'UNCOVERED' | 'FAILED';
 export type WhatsappStatus =
   | 'VALID_FORMAT'
   | 'FORMAT_INVALID'
@@ -37,6 +38,8 @@ export interface Customer {
   coverageStatus?: string;
   coverageFwaStatus?: string;
   coverageFtthStatus?: string;
+  latestCoverageStatus?: CoverageCheckStatus | null;
+  latestCoverageCheckedAt?: string | null;
   sourceMetadata?: Record<string, unknown>;
   activeAddress?: CustomerAddress | null;
   latestVerification?: VerificationSession | null;
@@ -96,6 +99,8 @@ export interface CustomerAddress {
   coordinateAuditEvidence?: Record<string, unknown>;
   coordinateAuditConfidence?: number;
   coordinateAuditedAt?: string;
+  latestCoverageStatus?: CoverageCheckStatus | null;
+  latestCoverageCheckedAt?: string | null;
   isActive: boolean;
   isVerified: boolean;
   validFrom: string;
@@ -460,7 +465,7 @@ export interface IntegrationConfigs {
   };
 }
 
-export type CoverageCandidateStatus = 'NOT_CHECKED' | 'QUEUED' | 'PROCESSING' | 'COVERED' | 'UNCOVERED' | 'FAILED';
+export type CoverageCandidateStatus = CoverageCheckStatus;
 
 export interface CoverageCandidate {
   verificationId: string;

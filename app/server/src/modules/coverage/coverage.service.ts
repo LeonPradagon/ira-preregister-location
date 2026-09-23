@@ -16,6 +16,7 @@ import type { CoverageCandidateQueryInput, CoverageCheckCreateInput } from '../.
 import { DomainError, NotFoundError } from '../../common/errors.js';
 import type { RequestAdmin } from '../../common/request-user.js';
 import { queueNames } from '../../common/queue-names.js';
+import { latestFwaCoverageValue } from './latest-fwa-coverage.sql.js';
 
 const PROVIDER_KEY = 'FWA';
 const now = () => new Date();
@@ -46,8 +47,8 @@ export class CoverageService implements OnModuleDestroy {
   private latestLatitude = () => sql<string | null>`(
     select latest_result.captured_latitude
     from validation_results latest_result
-    where latest_result.session_id = ${verificationSessions.id}
-      and latest_result.address_id = ${verificationSessions.currentAddressId}
+    where latest_result.session_id = ${sql.raw('"verification_sessions"."id"')}
+      and latest_result.address_id = ${sql.raw('"verification_sessions"."current_address_id"')}
     order by latest_result.created_at desc, latest_result.id desc
     limit 1
   )`;
@@ -55,29 +56,15 @@ export class CoverageService implements OnModuleDestroy {
   private latestLongitude = () => sql<string | null>`(
     select latest_result.captured_longitude
     from validation_results latest_result
-    where latest_result.session_id = ${verificationSessions.id}
-      and latest_result.address_id = ${verificationSessions.currentAddressId}
+    where latest_result.session_id = ${sql.raw('"verification_sessions"."id"')}
+      and latest_result.address_id = ${sql.raw('"verification_sessions"."current_address_id"')}
     order by latest_result.created_at desc, latest_result.id desc
     limit 1
   )`;
 
-  private latestCheckStatus = () => sql<string | null>`(
-    select latest_check.status
-    from coverage_checks latest_check
-    where latest_check.verification_session_id = ${verificationSessions.id}
-      and latest_check.provider_key = ${PROVIDER_KEY}
-    order by latest_check.created_at desc, latest_check.id desc
-    limit 1
-  )`;
+  private latestCheckStatus = () => latestFwaCoverageValue('session', 'status');
 
-  private latestCheckCreatedAt = () => sql<Date | null>`(
-    select latest_check.created_at
-    from coverage_checks latest_check
-    where latest_check.verification_session_id = ${verificationSessions.id}
-      and latest_check.provider_key = ${PROVIDER_KEY}
-    order by latest_check.created_at desc, latest_check.id desc
-    limit 1
-  )`;
+  private latestCheckCreatedAt = () => latestFwaCoverageValue('session', 'created_at');
 
   private candidateFilters(query: CoverageCandidateQueryInput, ids?: string[]) {
     const latestStatus = this.latestCheckStatus();

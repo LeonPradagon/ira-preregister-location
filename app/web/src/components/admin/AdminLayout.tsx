@@ -98,7 +98,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           badge: pendingReviewsCount > 0 ? pendingReviewsCount : undefined,
           badgeColor: 'bg-amber-500 text-white',
         },
-        { id: 'coverage', label: t('nav.coverageCheck'), icon: Wifi },
+        // { id: 'coverage', label: t('nav.coverageCheck'), icon: Wifi },
       ],
     },
     {
@@ -131,8 +131,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     setOpenNavGroupId(parentGroup?.id ?? null);
     setMobileNavOpen(false);
   };
-  const toggleNavGroup = (groupId: string) =>
-    setOpenNavGroupId((current) => (current === groupId ? null : groupId));
+  const toggleNavGroup = (groupId: string) => setOpenNavGroupId((current) => (current === groupId ? null : groupId));
   const navbarOffsetClass = sidebarOpen ? 'md:left-64' : 'md:left-0';
 
   return (
@@ -351,9 +350,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                       className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-gray-400 transition-colors hover:bg-red-50 hover:text-[#b8171d] dark:text-gray-500 dark:hover:bg-red-950/30 dark:hover:text-red-300"
                     >
                       <span>{group.label}</span>
-                      <ChevronDown
-                        className={`h-3.5 w-3.5 transition-transform ${groupOpen ? 'rotate-180' : ''}`}
-                      />
+                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${groupOpen ? 'rotate-180' : ''}`} />
                     </button>
                     {groupOpen && (
                       <div className="space-y-1 pl-1">
@@ -396,7 +393,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               })}
             </nav>
           </div>
-
         </aside>
         {mobileNavOpen && (
           <button

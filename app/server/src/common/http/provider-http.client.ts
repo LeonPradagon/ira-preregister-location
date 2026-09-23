@@ -4,11 +4,6 @@ export const providerHttpClient: AxiosInstance = axios.create({
   headers: { accept: 'application/json' },
 });
 
-providerHttpClient.interceptors.request.use((config) => {
-  config.headers.set('accept', 'application/json');
-  return config;
-});
-
 providerHttpClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {

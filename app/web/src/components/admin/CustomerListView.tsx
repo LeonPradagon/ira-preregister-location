@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { fwaCoverageLabel, networkAvailabilityLabel } from '../../lib/networkAvailability';
 import { api } from '../../lib/apiClient';
 import { CoordinateAuditStatus, Customer, CustomerStatus, WhatsappStatus } from '../../types';
 import { hasCapability } from '../../lib/accessControl';
@@ -1121,20 +1122,15 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
 
                   <td className="px-4 py-3.5 align-top">
                     <div className="text-gray-800 dark:text-gray-200 break-words whitespace-normal leading-4">
-                      {cust.coverageStatus === 'COVERED BTS'
-                        ? t('customers.coverageAvailable')
-                        : cust.coverageStatus === 'KELURAHAN BTS SAMA'
-                          ? t('customers.coverageSameArea')
-                          : cust.coverageStatus === 'NOT COVERED BTS'
-                            ? t('customers.coverageUnavailable')
-                            : t('customers.coverageUnknown')}
+                      {t(networkAvailabilityLabel(cust.latestCoverageStatus ?? masterAddr?.latestCoverageStatus, cust.coverageStatus))}
                     </div>
                     <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 break-words whitespace-normal leading-4">
                       {cust.btsName || (cust.isCoverBts ? t('customers.btsAvailable') : t('customers.btsNameMissing'))}
                     </div>
                     <div className="mt-1 space-y-0.5 text-[10px] text-gray-500 dark:text-gray-400 break-words whitespace-normal leading-4">
                       <div>
-                        <span className="font-semibold">FWA:</span> {cust.coverageFwaStatus || '—'}
+                        <span className="font-semibold">FWA:</span>{' '}
+                        {t(fwaCoverageLabel(cust.latestCoverageStatus ?? masterAddr?.latestCoverageStatus, cust.coverageFwaStatus))}
                       </div>
                       <div>
                         <span className="font-semibold">FTTH:</span> {cust.coverageFtthStatus || '—'}

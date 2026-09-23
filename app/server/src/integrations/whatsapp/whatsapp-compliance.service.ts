@@ -15,6 +15,8 @@ import { classifyWhatsAppFailure, formatWhatsAppProviderError } from './whatsapp
 import { CampaignItemState } from '../../modules/campaigns/campaign-item-state.js';
 import { reminderCancellationAudit, reminderCancellationFields } from '../../modules/reminders/reminder.policy.js';
 
+type ComplianceTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 @Injectable()
 export class WhatsAppComplianceService {
   async recordDeliveryStatus(input: {
@@ -79,64 +81,23 @@ export class WhatsAppComplianceService {
   async recordInbound(phoneE164: string, text: string) {
     if (!isOptOutMessage(text)) return { optedOut: false };
     const [customer] = await db
-      .select({ id: customers.id })
+      .select({ id: customers.id, phoneE164: customers.phoneE164 })
       .from(customers)
       .where(eq(customers.phoneE164, phoneE164))
       .limit(1);
     if (!customer) return { optedOut: true, matched: false };
     const changedAt = new Date();
-    await db.transaction(async (tx) => {
-      await tx
-        .update(customers)
-        .set({ whatsappOptOutAt: changedAt, updatedAt: changedAt })
-        .where(eq(customers.id, customer.id));
-      const cancelledReminders = await tx
-        .update(reminders)
-        .set({
-          ...reminderCancellationFields('CUSTOMER_OPTED_OUT', changedAt, 'whatsapp-inbound'),
-          processingStartedAt: null,
-        })
-        .where(
-          and(
-            eq(reminders.status, 'SCHEDULED'),
-            sql`${reminders.sessionId} in (select id from verification_sessions where customer_id = ${customer.id})`,
-          ),
-        )
-        .returning({ id: reminders.id });
-      if (cancelledReminders.length)
-        await tx.insert(auditLogs).values(
-          cancelledReminders.map(({ id }) =>
-            reminderCancellationAudit(id, 'CUSTOMER_OPTED_OUT', changedAt, 'whatsapp-inbound', 'WhatsApp'),
-          ),
-        );
-      const optedOutItems = await tx
-        .update(verificationCampaignItems)
-        .set({ status: 'OPTED_OUT', lastError: 'CUSTOMER_OPTED_OUT', failedAt: changedAt, updatedAt: changedAt })
-        .where(
-          and(eq(verificationCampaignItems.status, 'PENDING'), eq(verificationCampaignItems.customerId, customer.id)),
-        )
-        .returning({ campaignId: verificationCampaignItems.campaignId });
-      for (const campaignId of new Set(optedOutItems.map((item) => item.campaignId))) {
-        const count = optedOutItems.filter((item) => item.campaignId === campaignId).length;
-        await tx
-          .update(verificationCampaigns)
-          .set({
-            failedCount: sql`${verificationCampaigns.failedCount} + ${count}`,
-            optedOutCount: sql`${verificationCampaigns.optedOutCount} + ${count}`,
-            updatedAt: changedAt,
-          })
-          .where(eq(verificationCampaigns.id, campaignId));
-      }
-      await tx.insert(auditLogs).values({
-        actorUserId: 'whatsapp-inbound',
-        actorName: 'WhatsApp',
-        action: 'WHATSAPP_OPTED_OUT',
-        entityType: 'CUSTOMER',
-        entityId: customer.id,
-        after: { phoneHash: hashPhone(phoneE164), source: 'inbound_keyword' },
-        timestamp: changedAt,
-      });
-    });
+    await db.transaction((tx) =>
+      this.persistOptOut(
+        tx,
+        customer.id,
+        customer.phoneE164,
+        changedAt,
+        'whatsapp-inbound',
+        'WhatsApp',
+        'inbound_keyword',
+      ),
+    );
     return { optedOut: true, matched: true };
   }
 
@@ -147,58 +108,70 @@ export class WhatsAppComplianceService {
       .where(eq(customers.id, customerId));
     if (!customer) throw new NotFoundError('Customer not found');
     const changedAt = new Date();
-    await db.transaction(async (tx) => {
+    await db.transaction((tx) =>
+      this.persistOptOut(tx, customerId, customer.phoneE164, changedAt, adminId, 'Admin', 'admin'),
+    );
+    return { customerId, status: 'OPTED_OUT' };
+  }
+
+  private async persistOptOut(
+    tx: ComplianceTransaction,
+    customerId: string,
+    phoneE164: string,
+    changedAt: Date,
+    actorId: string,
+    actorName: string,
+    source: 'inbound_keyword' | 'admin',
+  ) {
+    await tx
+      .update(customers)
+      .set({ whatsappOptOutAt: changedAt, updatedAt: changedAt })
+      .where(eq(customers.id, customerId));
+    const cancelledReminders = await tx
+      .update(reminders)
+      .set({
+        ...reminderCancellationFields('CUSTOMER_OPTED_OUT', changedAt, actorId),
+        processingStartedAt: null,
+      })
+      .where(
+        and(
+          eq(reminders.status, 'SCHEDULED'),
+          sql`${reminders.sessionId} in (select id from verification_sessions where customer_id = ${customerId})`,
+        ),
+      )
+      .returning({ id: reminders.id });
+    if (cancelledReminders.length)
       await tx
-        .update(customers)
-        .set({ whatsappOptOutAt: changedAt, updatedAt: changedAt })
-        .where(eq(customers.id, customerId));
-      const cancelledReminders = await tx
-        .update(reminders)
-        .set({
-          ...reminderCancellationFields('CUSTOMER_OPTED_OUT', changedAt, adminId),
-          processingStartedAt: null,
-        })
-        .where(
-          and(
-            eq(reminders.status, 'SCHEDULED'),
-            sql`${reminders.sessionId} in (select id from verification_sessions where customer_id = ${customer.id})`,
-          ),
-        )
-        .returning({ id: reminders.id });
-      if (cancelledReminders.length)
-        await tx.insert(auditLogs).values(
+        .insert(auditLogs)
+        .values(
           cancelledReminders.map(({ id }) =>
-            reminderCancellationAudit(id, 'CUSTOMER_OPTED_OUT', changedAt, adminId, 'Admin'),
+            reminderCancellationAudit(id, 'CUSTOMER_OPTED_OUT', changedAt, actorId, actorName),
           ),
         );
-      const optedOutItems = await tx
-        .update(verificationCampaignItems)
-        .set({ status: 'OPTED_OUT', lastError: 'CUSTOMER_OPTED_OUT', failedAt: changedAt, updatedAt: changedAt })
-        .where(
-          and(eq(verificationCampaignItems.status, 'PENDING'), eq(verificationCampaignItems.customerId, customer.id)),
-        )
-        .returning({ campaignId: verificationCampaignItems.campaignId });
-      for (const campaignId of new Set(optedOutItems.map((item) => item.campaignId))) {
-        const count = optedOutItems.filter((item) => item.campaignId === campaignId).length;
-        await tx
-          .update(verificationCampaigns)
-          .set({
-            failedCount: sql`${verificationCampaigns.failedCount} + ${count}`,
-            optedOutCount: sql`${verificationCampaigns.optedOutCount} + ${count}`,
-            updatedAt: changedAt,
-          })
-          .where(eq(verificationCampaigns.id, campaignId));
-      }
-      await tx.insert(auditLogs).values({
-        actorUserId: adminId,
-        actorName: 'Admin',
-        action: 'WHATSAPP_OPTED_OUT',
-        entityType: 'CUSTOMER',
-        entityId: customerId,
-        after: { phoneHash: hashPhone(customer.phoneE164), source: 'admin' },
-        timestamp: changedAt,
-      });
+    const optedOutItems = await tx
+      .update(verificationCampaignItems)
+      .set({ status: 'OPTED_OUT', lastError: 'CUSTOMER_OPTED_OUT', failedAt: changedAt, updatedAt: changedAt })
+      .where(and(eq(verificationCampaignItems.status, 'PENDING'), eq(verificationCampaignItems.customerId, customerId)))
+      .returning({ campaignId: verificationCampaignItems.campaignId });
+    for (const campaignId of new Set(optedOutItems.map((item) => item.campaignId))) {
+      const count = optedOutItems.filter((item) => item.campaignId === campaignId).length;
+      await tx
+        .update(verificationCampaigns)
+        .set({
+          failedCount: sql`${verificationCampaigns.failedCount} + ${count}`,
+          optedOutCount: sql`${verificationCampaigns.optedOutCount} + ${count}`,
+          updatedAt: changedAt,
+        })
+        .where(eq(verificationCampaigns.id, campaignId));
+    }
+    await tx.insert(auditLogs).values({
+      actorUserId: actorId,
+      actorName,
+      action: 'WHATSAPP_OPTED_OUT',
+      entityType: 'CUSTOMER',
+      entityId: customerId,
+      after: { phoneHash: hashPhone(phoneE164), source },
+      timestamp: changedAt,
     });
-    return { customerId, status: 'OPTED_OUT' };
   }
 }

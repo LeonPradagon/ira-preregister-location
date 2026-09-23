@@ -13,7 +13,7 @@ scripts/     Utilitas development dan laporan
 deploy/     Konfigurasi Nginx dan opsi deployment terpisah
 ```
 
-Frontend memakai TanStack Query untuk cache data admin pada dashboard, monitoring, daftar penerima campaign, dan request bersama di `AppContext`. Cache dipisahkan menurut akun dan role admin, lalu dikosongkan saat logout. Alur verifikasi pelanggan dan state formulir tetap dikelola oleh komponen yang bersangkutan.
+Frontend memakai TanStack Query untuk data dashboard dan monitoring. Cache dipisahkan menurut akun dan role admin, lalu dikosongkan saat logout. State daftar/detail admin dikelola oleh `AppContext`; alur verifikasi pelanggan dan state formulir dikelola oleh komponen terkait.
 
 ## Deploy dengan Docker Compose
 

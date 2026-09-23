@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Compass, ExternalLink, Home } from 'lucide-react';
+import { ArrowLeft, Compass, ExternalLink, Home, Wifi } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../i18n';
 import { hasCapability } from '../../lib/accessControl';
@@ -8,6 +8,7 @@ import { userFriendlyStatus } from '../../lib/statusLabels';
 import { confirmAction } from '../../lib/swal';
 import { CoordinateAuditStatus } from '../../types';
 import { formatAppDate, formatAppDateTime } from '../../lib/dateTime';
+import { fwaCoverageLabel, networkAvailabilityLabel } from '../../lib/networkAvailability';
 
 interface CustomerDetailViewProps {
   customerId: string;
@@ -123,10 +124,16 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
                 </strong>
               </span>
               <span>
-                Coverage: <strong className="text-gray-700 dark:text-gray-300">{customer.coverageStatus || '—'}</strong>
+                {t('table.coverage')}:{' '}
+                <strong className="text-gray-700 dark:text-gray-300">
+                  {t(networkAvailabilityLabel(customer.latestCoverageStatus ?? masterAddress?.latestCoverageStatus, customer.coverageStatus))}
+                </strong>
               </span>
               <span>
-                FWA: <strong className="text-gray-700 dark:text-gray-300">{customer.coverageFwaStatus || '—'}</strong>
+                FWA:{' '}
+                <strong className="text-gray-700 dark:text-gray-300">
+                  {t(fwaCoverageLabel(customer.latestCoverageStatus ?? masterAddress?.latestCoverageStatus, customer.coverageFwaStatus))}
+                </strong>
               </span>
               <span>
                 FTTH: <strong className="text-gray-700 dark:text-gray-300">{customer.coverageFtthStatus || '—'}</strong>
@@ -205,6 +212,22 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({ customer
                   <p className="text-gray-700 dark:text-gray-300 leading-relaxed font-medium">
                     {formatAddressForDisplay(addr.rawAddress)}
                   </p>
+                  {addr.latestCoverageStatus && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2 dark:border-indigo-900/70 dark:bg-indigo-950/30">
+                      <Wifi className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">
+                        {t('coverage.title')}
+                      </span>
+                      <span className="rounded-full border border-indigo-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-indigo-700 dark:border-indigo-800 dark:bg-gray-900 dark:text-indigo-300">
+                        {t(`coverage.status.${addr.latestCoverageStatus}`)}
+                      </span>
+                      {addr.latestCoverageCheckedAt && (
+                        <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                          {formatAppDateTime(addr.latestCoverageCheckedAt)}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {isIncompleteAddress(addr) && (
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[10px] font-medium leading-4 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
                       {t('detail.addressIncomplete')}

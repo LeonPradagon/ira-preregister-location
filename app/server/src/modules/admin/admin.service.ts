@@ -60,6 +60,7 @@ import {
   unopenedLinkReminderAt,
   verificationSessionExpiresAt,
 } from '../reminders/reminder.policy.js';
+import { latestFwaCoverageValue } from '../coverage/latest-fwa-coverage.sql.js';
 const timestamp = () => new Date();
 const canManage = (role: RequestAdmin['role']) => role === 'SUPER_ADMIN' || role === 'ADMIN';
 const customerAuditActorIds = ['customer', 'customer-token'];
@@ -859,11 +860,23 @@ export class AdminService {
         countAsOf: cachedCount.countAsOf,
       };
 
+    const coverageRows = await db
+      .select({
+        customerId: customers.id,
+        latestCoverageStatus: latestFwaCoverageValue('customer', 'status'),
+        latestCoverageCheckedAt: latestFwaCoverageValue('customer', 'completed_at'),
+      })
+      .from(customers)
+      .where(inArray(customers.id, customerIds));
+    const coverageByCustomer = new Map(coverageRows.map((row) => [row.customerId, row]));
+
     const addressRows = await db
       .select({
         address: customerAddresses,
         referenceLatitude: sql<number>`ST_Y(${customerAddresses.referenceLocation}::geometry)`,
         referenceLongitude: sql<number>`ST_X(${customerAddresses.referenceLocation}::geometry)`,
+        latestCoverageStatus: latestFwaCoverageValue('address', 'status'),
+        latestCoverageCheckedAt: latestFwaCoverageValue('address', 'completed_at'),
       })
       .from(customerAddresses)
       .where(and(inArray(customerAddresses.customerId, customerIds), eq(customerAddresses.isActive, true)))
@@ -878,6 +891,8 @@ export class AdminService {
       if (!addressByCustomer.has(row.address.customerId))
         addressByCustomer.set(row.address.customerId, {
           ...row.address,
+          latestCoverageStatus: row.latestCoverageStatus,
+          latestCoverageCheckedAt: row.latestCoverageCheckedAt,
           referenceLocation:
             row.referenceLatitude == null || row.referenceLongitude == null
               ? null
@@ -889,6 +904,8 @@ export class AdminService {
     return {
       items: customerRows.map((customer) => ({
         ...customer,
+        latestCoverageStatus: coverageByCustomer.get(customer.id)?.latestCoverageStatus ?? null,
+        latestCoverageCheckedAt: coverageByCustomer.get(customer.id)?.latestCoverageCheckedAt ?? null,
         activeAddress: addressByCustomer.get(customer.id) ?? null,
         latestVerification: sessionByCustomer.get(customer.id)
           ? sanitizeSession(sessionByCustomer.get(customer.id)!)
@@ -981,27 +998,48 @@ export class AdminService {
   async customer(id: string) {
     const [customer] = await db.select().from(customers).where(eq(customers.id, id));
     if (!customer) throw new NotFoundError('Customer not found');
+    const [latestCoverage] = await db
+      .select({
+        status: latestFwaCoverageValue('customer', 'status'),
+        checkedAt: latestFwaCoverageValue('customer', 'completed_at'),
+      })
+      .from(customers)
+      .where(eq(customers.id, id));
     const addressRows = await db
       .select({
         address: customerAddresses,
         referenceLatitude: sql<number>`ST_Y(${customerAddresses.referenceLocation}::geometry)`,
         referenceLongitude: sql<number>`ST_X(${customerAddresses.referenceLocation}::geometry)`,
+        latestCoverageStatus: latestFwaCoverageValue('address', 'status'),
+        latestCoverageCheckedAt: latestFwaCoverageValue('address', 'completed_at'),
       })
       .from(customerAddresses)
       .where(eq(customerAddresses.customerId, id));
-    const addresses = addressRows.map(({ address, referenceLatitude, referenceLongitude }) => ({
-      ...address,
-      referenceLocation:
-        referenceLatitude == null || referenceLongitude == null
-          ? null
-          : { latitude: Number(referenceLatitude), longitude: Number(referenceLongitude) },
-    }));
+    const addresses = addressRows.map(
+      ({ address, referenceLatitude, referenceLongitude, latestCoverageStatus, latestCoverageCheckedAt }) => ({
+        ...address,
+        latestCoverageStatus,
+        latestCoverageCheckedAt,
+        referenceLocation:
+          referenceLatitude == null || referenceLongitude == null
+            ? null
+            : { latitude: Number(referenceLatitude), longitude: Number(referenceLongitude) },
+      }),
+    );
     const sessions = await db
       .select()
       .from(verificationSessions)
       .where(eq(verificationSessions.customerId, id))
       .orderBy(desc(verificationSessions.createdAt));
-    return { customer, addresses, sessions: sessions.map(sanitizeSession) };
+    return {
+      customer: {
+        ...customer,
+        latestCoverageStatus: latestCoverage?.status ?? null,
+        latestCoverageCheckedAt: latestCoverage?.checkedAt ?? null,
+      },
+      addresses,
+      sessions: sessions.map(sanitizeSession),
+    };
   }
 
   async updateCustomer(admin: RequestAdmin, id: string, input: CustomerUpdateInput) {

@@ -1,6 +1,5 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
-import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module.js';
@@ -31,7 +30,6 @@ async function bootstrap() {
     next();
   });
   app.setGlobalPrefix('v1');
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new DomainErrorFilter());
   await app.listen(config.PORT, '0.0.0.0');
 }

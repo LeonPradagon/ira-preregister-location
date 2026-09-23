@@ -62,7 +62,6 @@ import {
 import { coordinateAuditEnqueueLimit } from './modules/validation/coordinate-audit-queue.policy.js';
 import { AdminExportService } from './modules/admin/admin-export.service.js';
 import { FwaCoverageAdapter } from './integrations/coverage/fwa-coverage.adapter.js';
-import type { CoveragePort } from './integrations/coverage/coverage.port.js';
 
 const connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null }).on(
   'error',
@@ -125,7 +124,7 @@ const whatsapp: WhatsAppPort =
 const campaigns = new CampaignService(new ValidationConfigService(), new ReadCacheService());
 const reminderConfig = new ValidationConfigService();
 const messagingConfig = new ValidationConfigService();
-const fwaCoverage: CoveragePort = new FwaCoverageAdapter();
+const fwaCoverage = new FwaCoverageAdapter();
 
 const cancelClaimedReminder = async (
   reminderId: string,

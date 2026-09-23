@@ -448,16 +448,6 @@ export interface CoverageBatchApi {
   };
 }
 
-function coverageQueryString(query: CoverageCandidateQuery): string {
-  const params = new URLSearchParams();
-  if (query.page) params.set('page', String(query.page));
-  if (query.pageSize) params.set('pageSize', String(query.pageSize));
-  if (query.search) params.set('search', query.search);
-  if (query.status) params.set('status', query.status);
-  const value = params.toString();
-  return value ? `?${value}` : '';
-}
-
 function queryString(query: AdminListQuery): string {
   const params = new URLSearchParams();
   if (query.page) params.set('page', String(query.page));
@@ -765,7 +755,7 @@ const adminApi = {
     request<Record<string, unknown>>('/admin/settings/validation', { method: 'PUT', body: JSON.stringify(body) }),
   integrations: () => request<Array<Record<string, unknown>>>('/admin/integrations'),
   coverageCandidates: (query: CoverageCandidateQuery = {}) =>
-    request<AdminPageApi<CoverageCandidateApi>>(`/admin/coverage/candidates${coverageQueryString(query)}`),
+    request<AdminPageApi<CoverageCandidateApi>>(`/admin/coverage/candidates${queryString(query)}`),
   enqueueCoverageChecks: (verificationIds: string[]) =>
     request<{ batchId: string; queuedCount: number; skippedCount: number }>('/admin/coverage/checks', {
       method: 'POST',

@@ -20,9 +20,10 @@ import { MonitoringView } from './components/admin/MonitoringView';
 import { UserManagementView } from './components/admin/UserManagementView';
 import { I18nProvider, useTranslation } from './i18n';
 import { showActionError } from './lib/swal';
+import { AppLoader } from './components/common/AppLoader';
 
 const MainAppContent: React.FC = () => {
-  const { currentAdmin, loadCustomerDetail } = useApp();
+  const { currentAdmin, isAppLoading, loadCustomerDetail } = useApp();
   const { t } = useTranslation();
   const [currentTab, setCurrentTab] = useState<AdminTab>('dashboard');
   const [visitedTabs, setVisitedTabs] = useState<AdminTab[]>(['dashboard']);
@@ -42,6 +43,12 @@ const MainAppContent: React.FC = () => {
   }, [currentTab]);
 
   if (customerToken) return <BackendCustomerVerificationView token={customerToken} simulation={simulationRoute} />;
+  if (isAppLoading)
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gray-50" aria-busy="true">
+        <AppLoader size={72} label="Loading application" />
+      </main>
+    );
   if (!currentAdmin) return <LoginView />;
 
   const selectCustomer = async (customerId: string, alreadyLoaded = false) => {
