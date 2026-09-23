@@ -1,7 +1,7 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
-import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { db } from '../../db/client.js';
 import {
@@ -17,6 +17,7 @@ import { DomainError, NotFoundError } from '../../common/errors.js';
 import type { RequestAdmin } from '../../common/request-user.js';
 import { queueNames } from '../../common/queue-names.js';
 import { latestFwaCoverageValue } from './latest-fwa-coverage.sql.js';
+import { decodeCoverageCandidateCursor, encodeCoverageCandidateCursor } from '../../common/list-cursor.js';
 
 const PROVIDER_KEY = 'FWA';
 const now = () => new Date();
@@ -107,6 +108,32 @@ export class CoverageService implements OnModuleDestroy {
 
   async listCandidates(query: CoverageCandidateQueryInput) {
     const filters = this.candidateFilters(query);
+    const priority = sql<number>`case
+      when coalesce(${this.latestCheckStatus()}, 'NOT_CHECKED') = 'NOT_CHECKED'
+        and ${customers.coverageFwaStatus} = 'Not Coverage' then 0
+      when coalesce(${this.latestCheckStatus()}, 'NOT_CHECKED') = 'NOT_CHECKED' then 1
+      when coalesce(${this.latestCheckStatus()}, 'NOT_CHECKED') = 'UNCOVERED' then 2
+      when coalesce(${this.latestCheckStatus()}, 'NOT_CHECKED') = 'FAILED' then 3
+      else 4
+    end`;
+    const cursor = decodeCoverageCandidateCursor(query.cursor);
+    const cursorWhere = cursor
+      ? or(
+          gt(priority, cursor.priority),
+          and(
+            eq(priority, cursor.priority),
+            cursor.locationVerifiedAt === null
+              ? and(isNull(verificationSessions.locationVerifiedAt), lt(verificationSessions.id, cursor.id))
+              : or(
+                  lt(verificationSessions.locationVerifiedAt, new Date(cursor.locationVerifiedAt)),
+                  and(
+                    eq(verificationSessions.locationVerifiedAt, new Date(cursor.locationVerifiedAt)),
+                    lt(verificationSessions.id, cursor.id),
+                  ),
+                ),
+          ),
+        )
+      : undefined;
     const [{ total }] = await db
       .select({ total: sql<number>`count(*)` })
       .from(verificationSessions)
@@ -118,20 +145,13 @@ export class CoverageService implements OnModuleDestroy {
       .from(verificationSessions)
       .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
       .innerJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
-      .where(and(...filters))
+      .where(cursorWhere ? and(...filters, cursorWhere) : and(...filters))
       .orderBy(
-        sql`case
-          when coalesce(${this.latestCheckStatus()}, 'NOT_CHECKED') = 'NOT_CHECKED'
-            and ${customers.coverageFwaStatus} = 'Not Coverage' then 0
-          when coalesce(${this.latestCheckStatus()}, 'NOT_CHECKED') = 'NOT_CHECKED' then 1
-          when coalesce(${this.latestCheckStatus()}, 'NOT_CHECKED') = 'UNCOVERED' then 2
-          when coalesce(${this.latestCheckStatus()}, 'NOT_CHECKED') = 'FAILED' then 3
-          else 4
-        end`,
+        priority,
         desc(verificationSessions.locationVerifiedAt),
         desc(verificationSessions.id),
       )
-      .offset((query.page - 1) * query.pageSize)
+      .offset(cursor ? 0 : (query.page - 1) * query.pageSize)
       .limit(query.pageSize);
     return {
       items: rows.map((row) => this.mapCandidate(row)),
@@ -139,6 +159,25 @@ export class CoverageService implements OnModuleDestroy {
       pageSize: query.pageSize,
       total: Number(total),
       totalPages: Math.ceil(Number(total) / query.pageSize),
+      nextCursor:
+        rows.length === query.pageSize
+          ? (() => {
+              const last = rows[rows.length - 1];
+              const status = last.latestCoverageStatus ?? 'NOT_CHECKED';
+              const lastPriority =
+                status === 'NOT_CHECKED' && last.importedCoverageStatus === 'Not Coverage'
+                  ? 0
+                  : status === 'NOT_CHECKED'
+                    ? 1
+                    : status === 'UNCOVERED'
+                      ? 2
+                      : status === 'FAILED'
+                        ? 3
+                        : 4;
+              return encodeCoverageCandidateCursor(lastPriority, last.session.locationVerifiedAt, last.session.id);
+            })()
+          : null,
+      hasMore: rows.length === query.pageSize,
     };
   }
 

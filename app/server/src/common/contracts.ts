@@ -189,7 +189,7 @@ export const customerListQuerySchema = z.object({
   campaignAvailable: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
   sortBy: z.string().trim().max(64).optional(),
   sortDirection: z.enum(['asc', 'desc']).optional(),
-  cursor: z.string().max(255).optional(),
+  cursor: z.string().max(2048).optional(),
 });
 
 export const customerExportQuerySchema = z.object({

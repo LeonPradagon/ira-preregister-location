@@ -25,7 +25,12 @@ import { RequestAdmin } from '../../common/request-user.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
 import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/whatsapp/whatsapp.templates.js';
 import { ReadCacheService } from '../../common/read-cache.service.js';
-import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js';
+import {
+  decodeCustomerNameCursor,
+  decodeListCursor,
+  encodeCustomerNameCursor,
+  encodeListCursor,
+} from '../../common/list-cursor.js';
 import { buildVerificationSimulationConfig } from '../verification/simulation-config.js';
 import { getPublicWebOrigin } from '../../config/public-origin.js';
 import {
@@ -349,7 +354,8 @@ export class CampaignService {
         return Number(total);
       },
     );
-    const usesCursor = !query.sortBy;
+    const usesNameCursor = query.sortBy === 'campaign' && query.sortDirection !== 'desc';
+    const usesCursor = !query.sortBy || usesNameCursor;
     const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
     const sortExpression =
       query.sortBy === 'target'
@@ -361,8 +367,14 @@ export class CampaignService {
             : query.sortBy === 'status'
               ? verificationCampaigns.status
               : verificationCampaigns.name;
-    const cursor = usesCursor ? decodeListCursor(query.cursor) : undefined;
-    const cursorWhere = cursor
+    const nameCursor = usesNameCursor ? decodeCustomerNameCursor(query.cursor) : null;
+    const cursor = usesCursor && !usesNameCursor ? decodeListCursor(query.cursor) : undefined;
+    const cursorWhere = nameCursor
+      ? or(
+          gt(verificationCampaigns.name, nameCursor.name),
+          and(eq(verificationCampaigns.name, nameCursor.name), gt(verificationCampaigns.id, nameCursor.id)),
+        )
+      : cursor
       ? or(
           lt(verificationCampaigns.createdAt, new Date(cursor.value)),
           and(eq(verificationCampaigns.createdAt, new Date(cursor.value)), lt(verificationCampaigns.id, cursor.id)),
@@ -373,18 +385,22 @@ export class CampaignService {
       .from(verificationCampaigns)
       .where(cursorWhere ? and(where, cursorWhere) : where)
       .orderBy(
-        usesCursor
+        usesNameCursor
+          ? asc(verificationCampaigns.name)
+          : usesCursor
           ? desc(verificationCampaigns.createdAt)
           : sortDirection === 'desc'
             ? desc(sortExpression)
             : asc(sortExpression),
-        usesCursor
+        usesNameCursor
+          ? asc(verificationCampaigns.id)
+          : usesCursor
           ? desc(verificationCampaigns.id)
           : sortDirection === 'desc'
             ? desc(verificationCampaigns.id)
             : asc(verificationCampaigns.id),
       )
-      .offset(usesCursor && cursor ? 0 : (query.page - 1) * query.pageSize)
+      .offset((usesNameCursor && nameCursor) || (usesCursor && cursor) ? 0 : (query.page - 1) * query.pageSize)
       .limit(query.pageSize);
     return {
       items,
@@ -393,9 +409,11 @@ export class CampaignService {
       total: cachedCount.total,
       totalPages: Math.ceil(cachedCount.total / query.pageSize),
       nextCursor:
-        usesCursor && items.length === query.pageSize
-          ? encodeListCursor(items[items.length - 1].createdAt, items[items.length - 1].id)
-          : null,
+        usesNameCursor && items.length === query.pageSize
+          ? encodeCustomerNameCursor(items[items.length - 1].name, items[items.length - 1].id)
+          : usesCursor && items.length === query.pageSize
+            ? encodeListCursor(items[items.length - 1].createdAt, items[items.length - 1].id)
+            : null,
       hasMore: items.length === query.pageSize,
       countAsOf: cachedCount.countAsOf,
     };
@@ -725,7 +743,8 @@ export class CampaignService {
       where recipient_reminder.session_id = ${verificationSessions.id}
         and recipient_reminder.status = 'SENT'
     )`;
-    const usesCursor = !query.sortBy;
+    const usesNameCursor = ['customer', 'recipient'].includes(query.sortBy ?? '') && query.sortDirection !== 'desc';
+    const usesCursor = !query.sortBy || usesNameCursor;
     const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
     const sortExpression =
       query.sortBy === 'deliveryStatus'
@@ -743,8 +762,14 @@ export class CampaignService {
                   : query.sortBy === 'reminderCount'
                     ? reminderSentCountExpression
                     : customers.name;
-    const cursor = usesCursor ? decodeListCursor(query.cursor) : undefined;
-    const cursorWhere = cursor
+    const nameCursor = usesNameCursor ? decodeCustomerNameCursor(query.cursor) : null;
+    const cursor = usesCursor && !usesNameCursor ? decodeListCursor(query.cursor) : undefined;
+    const cursorWhere = nameCursor
+      ? or(
+          gt(customers.name, nameCursor.name),
+          and(eq(customers.name, nameCursor.name), gt(verificationCampaignItems.id, nameCursor.id)),
+        )
+      : cursor
       ? or(
           lt(verificationCampaignItems.createdAt, new Date(cursor.value)),
           and(
@@ -809,18 +834,22 @@ export class CampaignService {
       .leftJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
       .where(cursorWhere ? and(...itemFilters, cursorWhere) : and(...itemFilters))
       .orderBy(
-        usesCursor
+        usesNameCursor
+          ? asc(customers.name)
+          : usesCursor
           ? desc(verificationCampaignItems.createdAt)
           : sortDirection === 'desc'
             ? desc(sortExpression)
             : asc(sortExpression),
-        usesCursor
+        usesNameCursor
+          ? asc(verificationCampaignItems.id)
+          : usesCursor
           ? desc(verificationCampaignItems.id)
           : sortDirection === 'desc'
             ? desc(verificationCampaignItems.id)
             : asc(verificationCampaignItems.id),
       )
-      .offset(usesCursor && cursor ? 0 : (query.page - 1) * query.pageSize)
+      .offset((usesNameCursor && nameCursor) || (usesCursor && cursor) ? 0 : (query.page - 1) * query.pageSize)
         .limit(query.pageSize);
     const originalAddressIds = [...new Set(items.map((row) => row.item.addressId))];
     const originalAddressRows = originalAddressIds.length
@@ -847,9 +876,11 @@ export class CampaignService {
       total: cachedCount.total,
       totalPages: Math.ceil(cachedCount.total / query.pageSize),
       nextCursor:
-        usesCursor && items.length === query.pageSize
-          ? encodeListCursor(items[items.length - 1].item.createdAt, items[items.length - 1].item.id)
-          : null,
+        usesNameCursor && items.length === query.pageSize
+          ? encodeCustomerNameCursor(items[items.length - 1].customer.name, items[items.length - 1].item.id)
+          : usesCursor && items.length === query.pageSize
+            ? encodeListCursor(items[items.length - 1].item.createdAt, items[items.length - 1].item.id)
+            : null,
       hasMore: items.length === query.pageSize,
       countAsOf: cachedCount.countAsOf,
     };

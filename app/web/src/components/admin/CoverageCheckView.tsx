@@ -40,6 +40,7 @@ export const CoverageCheckView: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<TablePageSize>(25);
   const [total, setTotal] = useState(0);
+  const [cursors, setCursors] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +55,9 @@ export const CoverageCheckView: React.FC = () => {
         pageSize,
         search,
         status: status === 'ALL' ? undefined : status,
+        cursor: page === 1 ? undefined : cursors[page],
       });
+      if (response.nextCursor) setCursors((previous) => ({ ...previous, [page + 1]: response.nextCursor! }));
       setItems(response.items);
       setTotal(response.total);
     } catch (cause) {
@@ -66,6 +69,7 @@ export const CoverageCheckView: React.FC = () => {
 
   useEffect(() => {
     setPage(1);
+    setCursors({});
   }, [search, status, pageSize]);
 
   useEffect(() => {
@@ -355,6 +359,7 @@ export const CoverageCheckView: React.FC = () => {
               onPageSizeChange={(value) => {
                 setPageSize(value);
                 setPage(1);
+                setCursors({});
               }}
               disabled={loading}
             />

@@ -12,7 +12,6 @@ import {
   Megaphone,
   Moon,
   Radio,
-  Wifi,
   Settings,
   Sun,
   type LucideIcon,

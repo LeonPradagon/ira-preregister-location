@@ -102,6 +102,7 @@ export const customers = pgTable('customers', {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (table) => [
+  index('customers_name_id_idx').on(table.name, table.id),
   index('customers_whatsapp_status_idx').on(table.whatsappStatus),
   index('customers_coverage_fwa_status_idx').on(table.coverageFwaStatus),
   index('customers_coverage_ftth_status_idx').on(table.coverageFtthStatus),

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, lt, ne, not, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, ilike, inArray, isNotNull, isNull, lt, ne, not, or, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import {
   auditLogs,
@@ -43,7 +43,12 @@ import { createVerificationToken } from '../verification/verification-token.js';
 import { createShortLinkCode, hashShortLinkCode } from '../verification/short-link.js';
 import { getWhatsAppTemplate, renderWhatsAppTemplate } from '../../integrations/whatsapp/whatsapp.templates.js';
 import { ReadCacheService } from '../../common/read-cache.service.js';
-import { decodeListCursor, encodeListCursor } from '../../common/list-cursor.js';
+import {
+  decodeCustomerNameCursor,
+  decodeListCursor,
+  encodeCustomerNameCursor,
+  encodeListCursor,
+} from '../../common/list-cursor.js';
 import { buildVerificationSimulationConfig } from '../verification/simulation-config.js';
 import { canRestartVerificationCycle } from '../verification/verification-cycle.policy.js';
 import { buildVerifiedAddressReference } from '../verification/verified-location.js';
@@ -804,7 +809,6 @@ export class AdminService {
       order by sort_address.updated_at desc, sort_address.id desc
       limit 1
     )`;
-    const usesCursor = !query.sortBy;
     const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
     const sortExpression =
       query.sortBy === 'id'
@@ -822,30 +826,42 @@ export class AdminService {
                   : query.sortBy === 'status'
                     ? customers.status
                     : customers.name;
-    const cursor = usesCursor ? decodeListCursor(query.cursor) : undefined;
-    const cursorWhere = cursor
-      ? or(
+    const nameCursor = query.sortBy === 'name' ? decodeCustomerNameCursor(query.cursor) : null;
+    const cursor = !query.sortBy ? decodeListCursor(query.cursor) : null;
+    const cursorWhere = nameCursor
+      ? sortDirection === 'desc'
+        ? or(
+            lt(customers.name, nameCursor.name),
+            and(eq(customers.name, nameCursor.name), lt(customers.id, nameCursor.id)),
+          )
+        : or(
+            gt(customers.name, nameCursor.name),
+            and(eq(customers.name, nameCursor.name), gt(customers.id, nameCursor.id)),
+          )
+      : cursor
+        ? or(
           lt(customers.updatedAt, new Date(cursor.value)),
           and(eq(customers.updatedAt, new Date(cursor.value)), lt(customers.id, cursor.id)),
         )
-      : undefined;
+        : undefined;
+    const usesCursor = Boolean(nameCursor || cursor);
     const customerRows = await db
       .select()
       .from(customers)
       .where(cursorWhere ? and(where, cursorWhere) : where)
       .orderBy(
-        usesCursor
+        !query.sortBy
           ? desc(customers.updatedAt)
           : sortDirection === 'desc'
             ? desc(sortExpression)
             : asc(sortExpression),
-        usesCursor
+        !query.sortBy
           ? desc(customers.id)
           : sortDirection === 'desc'
             ? desc(customers.id)
             : asc(customers.id),
       )
-      .offset(usesCursor && cursor ? 0 : (query.page - 1) * query.pageSize)
+      .offset(usesCursor ? 0 : (query.page - 1) * query.pageSize)
       .limit(query.pageSize);
     const customerIds = customerRows.map((customer) => customer.id);
     if (!customerIds.length)
@@ -916,8 +932,12 @@ export class AdminService {
       total: cachedCount.total,
       totalPages: Math.ceil(cachedCount.total / query.pageSize),
       nextCursor:
-        usesCursor && customerRows.length === query.pageSize
-          ? encodeListCursor(customerRows[customerRows.length - 1].updatedAt, customerRows[customerRows.length - 1].id)
+        customerRows.length === query.pageSize
+          ? query.sortBy === 'name'
+            ? encodeCustomerNameCursor(customerRows[customerRows.length - 1].name, customerRows[customerRows.length - 1].id)
+            : !query.sortBy
+              ? encodeListCursor(customerRows[customerRows.length - 1].updatedAt, customerRows[customerRows.length - 1].id)
+              : null
           : null,
       hasMore: customerRows.length === query.pageSize,
       countAsOf: cachedCount.countAsOf,
@@ -1549,7 +1569,8 @@ export class AdminService {
       order by latest_location_result.created_at desc, latest_location_result.id desc
       limit 1
     )`;
-    const usesCursor = !query.sortBy;
+    const usesNameCursor = query.sortBy === 'customer' && query.sortDirection !== 'desc';
+    const usesCursor = !query.sortBy || usesNameCursor;
     const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
     const addressChangedSort = sql<number>`case
       when ${verificationSessions.verificationStatus} in ('ADDRESS_EDITING', 'ADDRESS_PROPOSED')
@@ -1567,8 +1588,14 @@ export class AdminService {
           : query.sortBy === 'activity'
             ? verificationSessions.attemptCount
             : customers.name;
-    const cursor = usesCursor ? decodeListCursor(query.cursor) : undefined;
-    const cursorWhere = cursor
+    const nameCursor = usesNameCursor ? decodeCustomerNameCursor(query.cursor) : null;
+    const cursor = usesCursor && !usesNameCursor ? decodeListCursor(query.cursor) : undefined;
+    const cursorWhere = nameCursor
+      ? or(
+          gt(customers.name, nameCursor.name),
+          and(eq(customers.name, nameCursor.name), gt(verificationSessions.id, nameCursor.id)),
+        )
+      : cursor
       ? or(
           lt(verificationSessions.updatedAt, new Date(cursor.value)),
           and(eq(verificationSessions.updatedAt, new Date(cursor.value)), lt(verificationSessions.id, cursor.id)),
@@ -1581,18 +1608,22 @@ export class AdminService {
       .innerJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
       .where(cursorWhere ? and(where, cursorWhere) : where)
       .orderBy(
-        usesCursor
+        usesNameCursor
+          ? asc(customers.name)
+          : usesCursor
           ? desc(verificationSessions.updatedAt)
           : sortDirection === 'desc'
             ? desc(sortExpression)
             : asc(sortExpression),
-        usesCursor
+        usesNameCursor
+          ? asc(verificationSessions.id)
+          : usesCursor
           ? desc(verificationSessions.id)
           : sortDirection === 'desc'
             ? desc(verificationSessions.id)
             : asc(verificationSessions.id),
       )
-      .offset(usesCursor && cursor ? 0 : (query.page - 1) * query.pageSize)
+      .offset((usesNameCursor && nameCursor) || (usesCursor && cursor) ? 0 : (query.page - 1) * query.pageSize)
       .limit(query.pageSize);
     const resultRows = rows.length
       ? await db
@@ -1624,9 +1655,11 @@ export class AdminService {
       total: cachedCount.total,
       totalPages: Math.ceil(cachedCount.total / query.pageSize),
       nextCursor:
-        usesCursor && rows.length === query.pageSize
-          ? encodeListCursor(rows[rows.length - 1].session.updatedAt, rows[rows.length - 1].session.id)
-          : null,
+        usesNameCursor && rows.length === query.pageSize
+          ? encodeCustomerNameCursor(rows[rows.length - 1].customer.name, rows[rows.length - 1].session.id)
+          : usesCursor && rows.length === query.pageSize
+            ? encodeListCursor(rows[rows.length - 1].session.updatedAt, rows[rows.length - 1].session.id)
+            : null,
       hasMore: rows.length === query.pageSize,
       countAsOf: cachedCount.countAsOf,
     };
@@ -2214,7 +2247,8 @@ export class AdminService {
       },
     );
     const scheduleSort = sql<Date>`coalesce(${reminders.sentAt}, ${reminders.scheduledAt})`;
-    const usesCursor = !query.sortBy;
+    const usesScheduleCursor = query.sortBy === 'schedule';
+    const usesCursor = !query.sortBy || usesScheduleCursor;
     const sortDirection = query.sortDirection === 'desc' ? 'desc' : 'asc';
     const sortExpression =
       query.sortBy === 'customer'
@@ -2227,11 +2261,16 @@ export class AdminService {
               ? reminders.status
               : scheduleSort;
     const cursor = usesCursor ? decodeListCursor(query.cursor) : undefined;
-    const cursorWhere = cursor
-      ? or(
-          lt(reminders.createdAt, new Date(cursor.value)),
-          and(eq(reminders.createdAt, new Date(cursor.value)), lt(reminders.id, cursor.id)),
-        )
+    const cursorDate = cursor ? new Date(cursor.value) : undefined;
+    const cursorWhere = cursor && cursorDate
+      ? usesScheduleCursor
+        ? query.sortDirection === 'asc'
+          ? or(gt(scheduleSort, cursorDate), and(eq(scheduleSort, cursorDate), gt(reminders.id, cursor.id)))
+          : or(lt(scheduleSort, cursorDate), and(eq(scheduleSort, cursorDate), lt(reminders.id, cursor.id)))
+        : or(
+            lt(reminders.createdAt, cursorDate),
+            and(eq(reminders.createdAt, cursorDate), lt(reminders.id, cursor.id)),
+          )
       : undefined;
     const rows = await db
       .select({ reminder: reminders, session: verificationSessions, customer: customers })
@@ -2240,12 +2279,20 @@ export class AdminService {
       .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
       .where(cursorWhere ? and(where, cursorWhere) : where)
       .orderBy(
-        usesCursor
+        usesScheduleCursor
+          ? sortDirection === 'desc'
+            ? desc(scheduleSort)
+            : asc(scheduleSort)
+          : usesCursor
           ? desc(reminders.createdAt)
           : sortDirection === 'desc'
             ? desc(sortExpression)
             : asc(sortExpression),
-        usesCursor
+        usesScheduleCursor
+          ? sortDirection === 'desc'
+            ? desc(reminders.id)
+            : asc(reminders.id)
+          : usesCursor
           ? desc(reminders.id)
           : sortDirection === 'desc'
             ? desc(reminders.id)
@@ -2264,9 +2311,14 @@ export class AdminService {
       total: cachedCount.total,
       totalPages: Math.ceil(cachedCount.total / query.pageSize),
       nextCursor:
-        usesCursor && rows.length === query.pageSize
-          ? encodeListCursor(rows[rows.length - 1].reminder.createdAt, rows[rows.length - 1].reminder.id)
-          : null,
+        usesScheduleCursor && rows.length === query.pageSize
+          ? encodeListCursor(
+              rows[rows.length - 1].reminder.sentAt ?? rows[rows.length - 1].reminder.scheduledAt,
+              rows[rows.length - 1].reminder.id,
+            )
+          : usesCursor && rows.length === query.pageSize
+            ? encodeListCursor(rows[rows.length - 1].reminder.createdAt, rows[rows.length - 1].reminder.id)
+            : null,
       hasMore: rows.length === query.pageSize,
       countAsOf: cachedCount.countAsOf,
     };

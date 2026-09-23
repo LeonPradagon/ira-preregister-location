@@ -96,6 +96,7 @@ const auditLabels: Record<string, string> = {
   LOGIN_FAILED: 'Sign-in failed',
   LOGOUT: 'Signed out',
   SESSION_REVOKED: 'Session revoked',
+  HTTP_RESPONSE: 'HTTP response',
 };
 
 const auditEntityLabels: Record<string, string> = {
@@ -110,6 +111,7 @@ const auditEntityLabels: Record<string, string> = {
   CAMPAIGN_ITEM: 'Campaign item',
   DELIVERY: 'WhatsApp message',
   AUTH: 'Account access',
+  HTTP_REQUEST: 'API request',
 };
 
 export const userFriendlyStatus = (status: string | null | undefined): string =>

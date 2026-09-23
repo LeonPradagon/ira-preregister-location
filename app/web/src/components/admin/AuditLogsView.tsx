@@ -122,8 +122,6 @@ export const AuditLogsView: React.FC = () => {
       : apiStatus === 'error'
         ? t('audit.apiError')
         : t('audit.apiLoading');
-  const apiCodeLabel = apiStatusCode ? `HTTP ${apiStatusCode}` : apiStatus === 'error' ? t('audit.networkError') : '';
-
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -139,20 +137,29 @@ export const AuditLogsView: React.FC = () => {
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('audit.description')}</p>
             </div>
           </div>
-          <div
-            className={`flex items-center gap-2 self-start rounded-full border px-3 py-1.5 text-xs font-semibold ${apiStatus === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300' : apiStatus === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300' : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
-          >
-            {apiStatus === 'success' ? (
-              <Wifi className="h-3.5 w-3.5" />
-            ) : apiStatus === 'error' ? (
-              <WifiOff className="h-3.5 w-3.5" />
-            ) : (
-              <AppLoader size={18} label={t('audit.apiLoading')} />
-            )}
-            <span>
-              {apiStatusLabel}
-              {apiCodeLabel && ` · ${apiCodeLabel}`}
+          <div className="flex flex-wrap items-center gap-2 self-start">
+            <div
+              className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${apiStatus === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300' : apiStatus === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300' : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
+            >
+              {apiStatus === 'success' ? (
+                <Wifi className="h-3.5 w-3.5" />
+              ) : apiStatus === 'error' ? (
+                <WifiOff className="h-3.5 w-3.5" />
+              ) : (
+                <AppLoader size={18} label={t('audit.apiLoading')} />
+              )}
+              <span>{apiStatusLabel}</span>
+            </div>
+            <span
+              className={`rounded-full border px-3 py-1.5 font-mono text-xs font-bold ${apiStatusCode === null ? 'border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400' : apiStatusCode < 400 ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300' : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300'}`}
+            >
+              HTTP {apiStatusCode ?? '—'}
             </span>
+            {apiStatus === 'error' && apiStatusCode === null && (
+              <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300">
+                {t('audit.networkError')}
+              </span>
+            )}
           </div>
         </div>
 
@@ -223,6 +230,7 @@ export const AuditLogsView: React.FC = () => {
                 <option value="CAMPAIGN_ITEM">{t('audit.campaignItem')}</option>
                 <option value="DELIVERY">{t('audit.delivery')}</option>
                 <option value="AUTH">{t('audit.auth')}</option>
+                <option value="HTTP_REQUEST">{t('audit.httpRequest')}</option>
               </select>
             </label>
           </div>
@@ -252,7 +260,10 @@ export const AuditLogsView: React.FC = () => {
         <div className="divide-y divide-slate-100 dark:divide-slate-800">
           {auditLogs.map((log) => {
             const isExpanded = expandedLogId === log.id;
-            const outcome = getAuditOutcome(log.action);
+            const httpStatusCode = typeof log.after?.httpStatusCode === 'number' ? log.after.httpStatusCode : null;
+            const isHttpRequest = log.entityType === 'HTTP_REQUEST';
+            const outcome =
+              httpStatusCode === null ? getAuditOutcome(log.action) : httpStatusCode >= 400 ? 'failed' : 'success';
             return (
               <article key={log.id} className="p-4 transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
                 <div className="flex items-start gap-3">
@@ -277,6 +288,12 @@ export const AuditLogsView: React.FC = () => {
                           {outcomeIcon(outcome)}
                           {outcomeLabel(outcome)}
                         </span>
+                        <span
+                          className={`rounded-md border px-2 py-1 font-mono text-[11px] font-bold ${httpStatusCode === null ? 'border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400' : httpStatusCode >= 400 ? 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'}`}
+                          aria-label={httpStatusCode === null ? 'HTTP Code unavailable' : `HTTP Code ${httpStatusCode}`}
+                        >
+                          {httpStatusCode ?? '—'}
+                        </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                         <span className="inline-flex items-center gap-1.5">
@@ -294,7 +311,11 @@ export const AuditLogsView: React.FC = () => {
                         {userFriendlyAuditEntity(log.entityType)}
                       </span>
                       <span aria-hidden="true">·</span>
-                      <span className="break-all font-mono text-[11px]">{log.entityId}</span>
+                      <span className="break-all font-mono text-[11px]">
+                        {isHttpRequest && typeof log.after?.method === 'string' && typeof log.after?.path === 'string'
+                          ? `${log.after.method} ${log.after.path}`
+                          : log.entityId}
+                      </span>
                     </div>
                     {log.reason && (
                       <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">

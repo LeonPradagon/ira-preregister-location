@@ -418,6 +418,7 @@ export interface CoverageCandidateQuery {
   pageSize?: number;
   search?: string;
   status?: 'NOT_CHECKED' | 'QUEUED' | 'PROCESSING' | 'COVERED' | 'UNCOVERED' | 'FAILED';
+  cursor?: string;
 }
 
 export interface CoverageCandidateApi {
