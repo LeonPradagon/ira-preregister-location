@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   BarChart3,
   CheckCircle2,
@@ -13,7 +14,9 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useTranslation } from '../../i18n';
-import { api, type AdminMonitoringApi, type AdminMonitoringCampaign } from '../../lib/apiClient';
+import { useApp } from '../../context/AppContext';
+import { adminQueryOptions, monitoringQueryOptions } from '../../lib/adminQueries';
+import { api, type AdminMonitoringCampaign } from '../../lib/apiClient';
 import { formatAppDateTime } from '../../lib/dateTime';
 import { AppLoader } from '../common/AppLoader';
 import {
@@ -97,14 +100,14 @@ type MonitoringSortKey =
 
 export const MonitoringView: React.FC = () => {
   const { t } = useTranslation();
-  const [data, setData] = useState<AdminMonitoringApi | null>(null);
+  const { currentAdmin } = useApp();
+  const monitoringQuery = useQuery(monitoringQueryOptions(currentAdmin));
+  const data = monitoringQuery.data;
+  const loading = monitoringQuery.isPending || monitoringQuery.isFetching;
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('ALL');
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCampaign, setSelectedCampaign] = useState<AdminMonitoringCampaign | null>(null);
-  const [recipientRows, setRecipientRows] = useState<Array<Record<string, unknown>>>([]);
-  const [recipientTotal, setRecipientTotal] = useState(0);
   const [recipientPage, setRecipientPage] = useState(1);
   const [recipientPageSize, setRecipientPageSize] = useState<TablePageSize>(25);
   const [recipientCursors, setRecipientCursors] = useState<Record<number, string>>({});
@@ -112,7 +115,6 @@ export const MonitoringView: React.FC = () => {
   const [debouncedRecipientSearch, setDebouncedRecipientSearch] = useState('');
   const [recipientSortKey, setRecipientSortKey] = useState<RecipientSortKey>('recipient');
   const [recipientSortDirection, setRecipientSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [recipientLoading, setRecipientLoading] = useState(false);
   const [expandedRecipientId, setExpandedRecipientId] = useState<string | null>(null);
   const [monitoringSortKey, setMonitoringSortKey] = useState<MonitoringSortKey>('campaign');
   const [monitoringSortDirection, setMonitoringSortDirection] = useState<TableSortDirection>('asc');
@@ -120,20 +122,9 @@ export const MonitoringView: React.FC = () => {
   const [exportMenuCampaign, setExportMenuCampaign] = useState<string | null>(null);
 
   const load = async () => {
-    setLoading(true);
     setError(null);
-    try {
-      setData(await api.monitoring());
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('monitoring.loadError'));
-    } finally {
-      setLoading(false);
-    }
+    await monitoringQuery.refetch();
   };
-
-  useEffect(() => {
-    void load();
-  }, []);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -142,31 +133,31 @@ export const MonitoringView: React.FC = () => {
     return () => window.clearTimeout(timeout);
   }, [recipientSearch]);
 
+  const recipientParameters = {
+    page: recipientPage,
+    pageSize: recipientPageSize,
+    search: debouncedRecipientSearch,
+    sortBy: recipientSortKey,
+    sortDirection: recipientSortDirection,
+    cursor: recipientPage === 1 ? undefined : recipientCursors[recipientPage],
+  };
+  const recipientQuery = useQuery({
+    ...adminQueryOptions(currentAdmin, 'campaignItems', ({ signal }) =>
+      api.campaignItems(selectedCampaign!.id, recipientParameters, signal),
+      { campaignId: selectedCampaign?.id, ...recipientParameters },
+    ),
+    enabled: Boolean(currentAdmin && selectedCampaign && (recipientPage === 1 || recipientParameters.cursor)),
+  });
+  const recipientRows = recipientQuery.data?.items ?? [];
+  const recipientTotal = recipientQuery.data?.total ?? 0;
+  const recipientLoading = recipientQuery.isFetching || recipientQuery.isPending;
+
   useEffect(() => {
-    if (!selectedCampaign) return;
-    const loadRecipients = async () => {
-      setRecipientLoading(true);
-      try {
-        const response = await api.campaignItems(selectedCampaign.id, {
-          page: recipientPage,
-          pageSize: recipientPageSize,
-          search: debouncedRecipientSearch,
-          sortBy: recipientSortKey,
-          sortDirection: recipientSortDirection,
-          cursor: recipientPage === 1 ? undefined : recipientCursors[recipientPage],
-        });
-        if (response.nextCursor)
-          setRecipientCursors((previous) => ({ ...previous, [recipientPage + 1]: response.nextCursor! }));
-        setRecipientRows(response.items);
-        setRecipientTotal(response.total);
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : t('monitoring.recipientsLoadError'));
-      } finally {
-        setRecipientLoading(false);
-      }
-    };
-    void loadRecipients();
-  }, [selectedCampaign, recipientPage, recipientPageSize, debouncedRecipientSearch, recipientSortKey, recipientSortDirection]);
+    const nextCursor = recipientQuery.data?.nextCursor;
+    if (nextCursor) setRecipientCursors((previous) =>
+      previous[recipientPage + 1] === nextCursor ? previous : { ...previous, [recipientPage + 1]: nextCursor },
+    );
+  }, [recipientQuery.data?.nextCursor, recipientPage]);
 
   const filteredRows = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -256,7 +247,7 @@ export const MonitoringView: React.FC = () => {
         </div>
       </section>
 
-      {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">{error}</div>}
+      {(error || monitoringQuery.error || recipientQuery.error) && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">{error || monitoringQuery.error?.message || recipientQuery.error?.message}</div>}
 
       {summary && (
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

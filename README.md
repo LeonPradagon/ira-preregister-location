@@ -6,12 +6,14 @@ Struktur aplikasi tetap:
 
 ```text
 app/
-  web/       React, Vite, Tailwind CSS, Leaflet
+  web/       React, Vite, TanStack Query, Tailwind CSS, Leaflet
   server/    NestJS, Better Auth, Drizzle, PostgreSQL/PostGIS, BullMQ
 packages/    Ruang untuk shared package jika diperlukan
 scripts/     Utilitas development dan laporan
 deploy/     Konfigurasi Nginx dan opsi deployment terpisah
 ```
+
+Frontend memakai TanStack Query untuk cache data admin pada dashboard, monitoring, daftar penerima campaign, dan request bersama di `AppContext`. Cache dipisahkan menurut akun dan role admin, lalu dikosongkan saat logout. Alur verifikasi pelanggan dan state formulir tetap dikelola oleh komponen yang bersangkutan.
 
 ## Deploy dengan Docker Compose
 

@@ -233,7 +233,7 @@ apiClient.interceptors.response.use(
   },
 );
 
-type ApiRequestOptions = Pick<AxiosRequestConfig, 'method' | 'headers' | 'timeout'> & { body?: unknown };
+type ApiRequestOptions = Pick<AxiosRequestConfig, 'method' | 'headers' | 'timeout' | 'signal'> & { body?: unknown };
 
 async function request<T>(path: string, init: ApiRequestOptions = {}): Promise<T> {
   const response = await requestWithStatus<T>(path, init);
@@ -248,6 +248,7 @@ async function requestWithStatus<T>(path: string, init: ApiRequestOptions = {}):
     data: init.body,
     headers: init.headers,
     timeout: init.timeout,
+    signal: init.signal,
   });
   return { data: response.status === 204 ? (undefined as T) : response.data, status: response.status };
 }
@@ -578,9 +579,9 @@ const adminApi = {
       `/admin/users/${encodeURIComponent(id)}/enable`,
       { method: 'POST' },
     ),
-  dashboard: (forceRefresh = false) =>
-    request<AdminDashboardApi>(`/admin/dashboard${forceRefresh ? '?refresh=true' : ''}`),
-  monitoring: () => request<AdminMonitoringApi>('/admin/monitoring'),
+  dashboard: (forceRefresh = false, signal?: AbortSignal) =>
+    request<AdminDashboardApi>(`/admin/dashboard${forceRefresh ? '?refresh=true' : ''}`, { signal }),
+  monitoring: (signal?: AbortSignal) => request<AdminMonitoringApi>('/admin/monitoring', { signal }),
   customers: (
     query: {
       page?: number;
@@ -776,9 +777,10 @@ const adminApi = {
   campaigns: (query: AdminListQuery = {}) =>
     request<AdminPageApi<Record<string, unknown>>>(`/admin/campaigns${queryString(query)}`),
   campaign: (id: string) => request<Record<string, unknown>>(`/admin/campaigns/${encodeURIComponent(id)}`),
-  campaignItems: (id: string, query: AdminListQuery = {}) =>
+  campaignItems: (id: string, query: AdminListQuery = {}, signal?: AbortSignal) =>
     request<AdminPageApi<Record<string, unknown>> & { monitoring: CampaignMonitoringSummary }>(
       `/admin/campaigns/${encodeURIComponent(id)}/items${queryString(query)}`,
+      { signal },
     ),
   downloadCampaignExport: async (id: string, format: 'xlsx' | 'csv') => {
     const response = await apiClient.get<ArrayBuffer>(

@@ -11,6 +11,7 @@
     "test": "vitest run --configLoader runner"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.103.2",
     "axios": "^1.20.0",
     "leaflet": "^1.9.4",
     "lottie-web": "^5.13.0",

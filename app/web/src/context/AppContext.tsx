@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AdminUser,
   AuditLog,
@@ -23,6 +24,7 @@ import {
 } from '../types';
 import { assertCapability } from '../lib/accessControl';
 import { AdminDashboardApi, api } from '../lib/apiClient';
+import { adminQueryKey, adminQueryOptions, dashboardQueryOptions } from '../lib/adminQueries';
 
 type NewCustomerAddress = Omit<
   CustomerAddress,
@@ -389,6 +391,7 @@ function mapApiCapture(raw: Record<string, unknown>): LocationCapture {
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const queryClient = useQueryClient();
   const [currentAdmin, setCurrentAdmin] = useState<AdminUser | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
@@ -399,7 +402,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [verificationReviews, setVerificationReviews] = useState<VerificationReview[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [campaigns, setCampaigns] = useState<VerificationCampaign[]>([]);
-  const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary>(EMPTY_DASHBOARD_SUMMARY);
+  const dashboardQuery = useQuery(dashboardQueryOptions(currentAdmin));
+  const dashboardSummary = dashboardQuery.data ? mapApiDashboard(dashboardQuery.data) : EMPTY_DASHBOARD_SUMMARY;
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [outboxEvents, setOutboxEvents] = useState<IntegrationOutboxEvent[]>([]);
   const [validationConfig, setValidationConfig] = useState<ValidationConfig>(DEFAULT_VALIDATION_CONFIG);
@@ -446,7 +450,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let active = true;
     const load = async () => {
       const [
-        rawDashboard,
         rawCustomerPage,
         rawVerifications,
         rawReminders,
@@ -456,18 +459,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         rawOutbox,
         rawCampaigns,
       ] = await Promise.all([
-        api.dashboard().catch(() => null),
-        api.customers({ page: 1, pageSize: 25 }).catch(() => null),
-        api.verifications({ page: 1, pageSize: 25 }).catch(() => null),
-        api.reminders({ page: 1, pageSize: 25 }).catch(() => null),
-        api.auditLogs({ page: 1, pageSize: 25 }).catch(() => null),
-        api.settings().catch(() => null),
-        api.integrations().catch(() => null),
-        api.outbox({ page: 1, pageSize: 25 }).catch(() => null),
-        api.campaigns({ page: 1, pageSize: 25 }).catch(() => null),
+        queryClient
+          .fetchQuery(
+            adminQueryOptions(currentAdmin, 'customers', () => api.customers({ page: 1, pageSize: 25 }), {
+              page: 1,
+              pageSize: 25,
+            }),
+          )
+          .catch(() => null),
+        queryClient
+          .fetchQuery(
+            adminQueryOptions(currentAdmin, 'verifications', () => api.verifications({ page: 1, pageSize: 25 }), {
+              page: 1,
+              pageSize: 25,
+            }),
+          )
+          .catch(() => null),
+        queryClient
+          .fetchQuery(
+            adminQueryOptions(currentAdmin, 'reminders', () => api.reminders({ page: 1, pageSize: 25 }), {
+              page: 1,
+              pageSize: 25,
+            }),
+          )
+          .catch(() => null),
+        queryClient
+          .fetchQuery(
+            adminQueryOptions(currentAdmin, 'auditLogs', () => api.auditLogs({ page: 1, pageSize: 25 }), {
+              page: 1,
+              pageSize: 25,
+            }),
+          )
+          .catch(() => null),
+        queryClient.fetchQuery(adminQueryOptions(currentAdmin, 'settings', () => api.settings())).catch(() => null),
+        queryClient
+          .fetchQuery(adminQueryOptions(currentAdmin, 'integrations', () => api.integrations()))
+          .catch(() => null),
+        queryClient
+          .fetchQuery(
+            adminQueryOptions(currentAdmin, 'outbox', () => api.outbox({ page: 1, pageSize: 25 }), {
+              page: 1,
+              pageSize: 25,
+            }),
+          )
+          .catch(() => null),
+        queryClient
+          .fetchQuery(
+            adminQueryOptions(currentAdmin, 'campaigns', () => api.campaigns({ page: 1, pageSize: 25 }), {
+              page: 1,
+              pageSize: 25,
+            }),
+          )
+          .catch(() => null),
       ]);
       if (!active) return;
-      if (rawDashboard) setDashboardSummary(mapApiDashboard(rawDashboard));
       if (rawCustomerPage) {
         const mappedCustomers = rawCustomerPage.items.map(mapApiCustomer);
         setCustomers((previous) => mergeCachedRecords(previous, mappedCustomers));
@@ -482,11 +527,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ),
         );
       if (rawReminders)
-        setReminders((previous) =>
-          mergeCachedRecords(previous, rawReminders.items as unknown as Reminder[]),
-        );
-      if (rawAudits)
-        setAuditLogs((previous) => mergeCachedRecords(previous, rawAudits.items as unknown as AuditLog[]));
+        setReminders((previous) => mergeCachedRecords(previous, rawReminders.items as unknown as Reminder[]));
+      if (rawAudits) setAuditLogs((previous) => mergeCachedRecords(previous, rawAudits.items as unknown as AuditLog[]));
       if (rawOutbox)
         setOutboxEvents((previous) =>
           mergeCachedRecords(previous, rawOutbox.items as unknown as IntegrationOutboxEvent[]),
@@ -532,11 +574,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       active = false;
     };
-  }, [currentAdmin]);
+  }, [currentAdmin, queryClient]);
 
   const loginAdmin = async (email: string, password = ''): Promise<boolean> => {
     try {
       await api.signInEmail(email.trim().toLowerCase(), password);
+      queryClient.clear();
       setCurrentAdmin(mapApiAdmin(await api.me()));
       return true;
     } catch {
@@ -544,8 +587,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
   const logoutAdmin = () => {
-    void api.signOut().catch(() => undefined);
     setCurrentAdmin(null);
+    setCustomers([]);
+    setAddresses([]);
+    setCustomerPage(EMPTY_CUSTOMER_PAGE);
+    setCustomerCursors({});
+    setVerificationSessions([]);
+    setLocationCaptures([]);
+    setVerificationReviews([]);
+    setReminders([]);
+    setCampaigns([]);
+    setAuditLogs([]);
+    setOutboxEvents([]);
+    setValidationConfig(DEFAULT_VALIDATION_CONFIG);
+    setIntegrationConfigs(DEFAULT_INTEGRATION_CONFIGS);
+    queryClient.clear();
+    void api.signOut().catch(() => undefined);
   };
   const getCustomerById = (id: string) => customers.find((customer) => customer.id === id);
   const getCustomerAddresses = (customerId: string) => addresses.filter((address) => address.customerId === customerId);
@@ -564,7 +621,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sortBy,
     sortDirection,
   ): Promise<CustomerPage> => {
-    const raw = await api.customers({
+    const parameters = {
       page,
       pageSize,
       search,
@@ -577,6 +634,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sortBy,
       sortDirection,
       cursor: page === 1 ? undefined : customerCursors[page],
+    };
+    const raw = await queryClient.fetchQuery({
+      ...adminQueryOptions(currentAdmin, 'customers', () => api.customers(parameters), parameters),
+      staleTime: 0,
     });
     if (page === 1) setCustomerCursors({});
     if (raw.nextCursor) setCustomerCursors((previous) => ({ ...previous, [page + 1]: raw.nextCursor! }));
@@ -587,10 +648,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return result;
   };
   const refreshDashboard = async (forceRefresh = false) => {
-    setDashboardSummary(mapApiDashboard(await api.dashboard(forceRefresh)));
+    if (!currentAdmin) return;
+    await queryClient.invalidateQueries({ queryKey: adminQueryKey(currentAdmin), refetchType: 'none' });
+    await queryClient.fetchQuery({ ...dashboardQueryOptions(currentAdmin, forceRefresh), staleTime: 0 });
+    await queryClient.invalidateQueries({ queryKey: [...adminQueryKey(currentAdmin), 'monitoring'] });
   };
   const loadCustomerDetail = async (customerId: string) => {
-    const raw = await api.customer(customerId);
+    const raw = await queryClient.fetchQuery({
+      ...adminQueryOptions(currentAdmin, 'customer', () => api.customer(customerId), customerId),
+      staleTime: 0,
+    });
     const customer = mapApiCustomer(raw.customer as Record<string, unknown>);
     const detailAddresses = (Array.isArray(raw.addresses) ? raw.addresses : []).map((row) =>
       mapApiAddress(row as Record<string, unknown>),
@@ -612,7 +679,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { customer, addresses: detailAddresses, sessions: detailSessions };
   };
   const loadVerificationDetail = async (sessionId: string) => {
-    const raw = await api.verification(sessionId);
+    const raw = await queryClient.fetchQuery({
+      ...adminQueryOptions(currentAdmin, 'verification', () => api.verification(sessionId), sessionId),
+      staleTime: 0,
+    });
     const rawSession = raw.session as Record<string, unknown>;
     const rawCustomer = raw.customer as Record<string, unknown>;
     const rawAddress = raw.address as Record<string, unknown>;
@@ -684,6 +754,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
     setAddresses((prev) => [mappedAddress, ...prev]);
+    await queryClient.invalidateQueries({ queryKey: adminQueryKey(currentAdmin), refetchType: 'none' });
     return customer;
   };
 
@@ -700,6 +771,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
     if (updatedAddress)
       setAddresses((prev) => [...prev.filter((item) => item.id !== updatedAddress.id), updatedAddress]);
+    await queryClient.invalidateQueries({ queryKey: adminQueryKey(currentAdmin), refetchType: 'none' });
     return customer;
   };
 
@@ -928,6 +1000,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     assertCapability(currentAdmin?.role, 'changeValidationConfig');
     const saved = await api.updateSettings(newConfig);
     setValidationConfig((prev) => ({ ...prev, ...saved }) as ValidationConfig);
+    await queryClient.invalidateQueries({ queryKey: [...adminQueryKey(currentAdmin), 'settings'] });
   };
 
   return (

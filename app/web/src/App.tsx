@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createAppQueryClient } from './lib/queryClient';
 import { AppProvider, useApp } from './context/AppContext';
 import { LoginView } from './components/auth/LoginView';
 import { AdminLayout, AdminTab } from './components/admin/AdminLayout';
@@ -92,9 +94,9 @@ const MainAppContent: React.FC = () => {
     return tabViews
       .filter(([tab]) => visitedTabs.includes(tab))
       .map(([tab, content]) => (
-      <div key={tab} className={currentTab === tab && !detailOpen ? '' : 'hidden'}>
-        {content}
-      </div>
+        <div key={tab} className={currentTab === tab && !detailOpen ? '' : 'hidden'}>
+          {content}
+        </div>
       ));
   };
 
@@ -138,12 +140,15 @@ const MainAppContent: React.FC = () => {
 };
 
 export default function App() {
+  const [queryClient] = useState(createAppQueryClient);
   const customerRoute = /^\/(?:v|s)\//.test(window.location.pathname);
   return (
     <I18nProvider defaultLanguage={customerRoute ? 'id' : 'en'}>
-      <AppProvider>
-        <MainAppContent />
-      </AppProvider>
+      <QueryClientProvider client={queryClient}>
+        <AppProvider>
+          <MainAppContent />
+        </AppProvider>
+      </QueryClientProvider>
     </I18nProvider>
   );
 }
