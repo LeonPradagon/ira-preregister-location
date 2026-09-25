@@ -96,6 +96,7 @@ const auditLabels: Record<string, string> = {
   LOGIN_FAILED: 'Sign-in failed',
   LOGOUT: 'Signed out',
   SESSION_REVOKED: 'Session revoked',
+  VERIFICATION_SESSION_SUPERSEDED: 'Older verification session closed',
   HTTP_RESPONSE: 'HTTP response',
 };
 

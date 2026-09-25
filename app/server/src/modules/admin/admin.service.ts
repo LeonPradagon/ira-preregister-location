@@ -1548,6 +1548,18 @@ export class AdminService {
           query.status as typeof verificationSessions.$inferSelect.verificationStatus,
         ),
       );
+    filters.push(sql`not exists (
+      select 1
+      from verification_sessions newer_session
+      where newer_session.customer_id = ${verificationSessions.customerId}
+        and (
+          newer_session.created_at > ${verificationSessions.createdAt}
+          or (
+            newer_session.created_at = ${verificationSessions.createdAt}
+            and newer_session.id > ${verificationSessions.id}
+          )
+        )
+    )`);
     const where = and(...filters);
     const cachedCount = await this.readCache.count(
       'verifications',

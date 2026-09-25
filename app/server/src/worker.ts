@@ -1252,13 +1252,36 @@ const recoverExpiredAutomaticReminderSlots = async () => {
     .where(
       and(
         lte(verificationSessions.expiresAt, recoveryStartedAt),
-        inArray(verificationSessions.verificationStatus, SYSTEM_FOLLOW_UP_STATUSES),
+        or(
+          inArray(verificationSessions.verificationStatus, SYSTEM_FOLLOW_UP_STATUSES),
+          and(
+            eq(verificationSessions.verificationStatus, 'MANUAL_REVIEW'),
+            sql`exists (
+              select 1
+              from reminders reminder_3
+              where reminder_3.session_id = ${verificationSessions.id}
+                and reminder_3.reminder_number = 3
+                and reminder_3.status = 'CANCELLED'
+                and reminder_3.reminder_source = 'SYSTEM_RECOVERY'
+                and reminder_3.cancellation_reason = 'REMINDER_LINK_OPENED'
+                and reminder_3.sent_at is null
+                and reminder_3.token_id is null
+            )`,
+          ),
+        ),
         isNull(verificationSessions.revokedAt),
         sql`not exists (
           select 1
           from reminders reminder_3
           where reminder_3.session_id = ${verificationSessions.id}
             and reminder_3.reminder_number = 3
+            and not (
+              reminder_3.status = 'CANCELLED'
+              and reminder_3.reminder_source = 'SYSTEM_RECOVERY'
+              and reminder_3.cancellation_reason = 'REMINDER_LINK_OPENED'
+              and reminder_3.sent_at is null
+              and reminder_3.token_id is null
+            )
         )`,
       ),
     )
@@ -1279,13 +1302,36 @@ const recoverExpiredAutomaticReminderSlots = async () => {
             and(
               eq(verificationSessions.id, candidate.id),
               lte(verificationSessions.expiresAt, recoveryStartedAt),
-              inArray(verificationSessions.verificationStatus, SYSTEM_FOLLOW_UP_STATUSES),
+              or(
+                inArray(verificationSessions.verificationStatus, SYSTEM_FOLLOW_UP_STATUSES),
+                and(
+                  eq(verificationSessions.verificationStatus, 'MANUAL_REVIEW'),
+                  sql`exists (
+                    select 1
+                    from reminders reminder_3
+                    where reminder_3.session_id = ${verificationSessions.id}
+                      and reminder_3.reminder_number = 3
+                      and reminder_3.status = 'CANCELLED'
+                      and reminder_3.reminder_source = 'SYSTEM_RECOVERY'
+                      and reminder_3.cancellation_reason = 'REMINDER_LINK_OPENED'
+                      and reminder_3.sent_at is null
+                      and reminder_3.token_id is null
+                  )`,
+                ),
+              ),
               isNull(verificationSessions.revokedAt),
               sql`not exists (
                 select 1
                 from reminders reminder_3
                 where reminder_3.session_id = ${verificationSessions.id}
                   and reminder_3.reminder_number = 3
+                  and not (
+                    reminder_3.status = 'CANCELLED'
+                    and reminder_3.reminder_source = 'SYSTEM_RECOVERY'
+                    and reminder_3.cancellation_reason = 'REMINDER_LINK_OPENED'
+                    and reminder_3.sent_at is null
+                    and reminder_3.token_id is null
+                  )
               )`,
             ),
           )
@@ -1298,18 +1344,54 @@ const recoverExpiredAutomaticReminderSlots = async () => {
           runtimeConfig.ACTIVE_SESSION_TTL_DAYS,
         );
         const messageText = `Halo ${candidate.customerName}, silakan melanjutkan pemeriksaan lokasi Anda. Pengingat 3 dari ${runtimeConfig.MAX_REMINDERS_PER_SESSION}. Tautan baru berlaku maksimal ${runtimeConfig.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`;
-        const [created] = await tx
-          .insert(reminders)
-          .values({
-            id: randomUUID(),
-            sessionId: session.id,
-            reminderNumber: 3,
-            ...reminderScheduleFields('SYSTEM_RECOVERY', recoveryStartedAt, messageText),
-            createdAt: recoveryStartedAt,
-          })
-          .onConflictDoNothing({ target: [reminders.sessionId, reminders.reminderNumber] })
-          .returning({ id: reminders.id });
-        if (!created) return false;
+        const [cancelledReminder] = await tx
+          .select({ id: reminders.id })
+          .from(reminders)
+          .where(
+            and(
+              eq(reminders.sessionId, session.id),
+              eq(reminders.reminderNumber, 3),
+              eq(reminders.status, 'CANCELLED'),
+              eq(reminders.reminderSource, 'SYSTEM_RECOVERY'),
+              eq(reminders.cancellationReason, 'REMINDER_LINK_OPENED'),
+              isNull(reminders.sentAt),
+              isNull(reminders.tokenId),
+            ),
+          )
+          .limit(1);
+        let reminderId: string;
+        if (cancelledReminder) {
+          const [reused] = await tx
+            .update(reminders)
+            .set(reminderScheduleFields('SYSTEM_RECOVERY', recoveryStartedAt, messageText))
+            .where(
+              and(
+                eq(reminders.id, cancelledReminder.id),
+                eq(reminders.status, 'CANCELLED'),
+                eq(reminders.reminderSource, 'SYSTEM_RECOVERY'),
+                eq(reminders.cancellationReason, 'REMINDER_LINK_OPENED'),
+                isNull(reminders.sentAt),
+                isNull(reminders.tokenId),
+              ),
+            )
+            .returning({ id: reminders.id });
+          if (!reused) return false;
+          reminderId = reused.id;
+        } else {
+          const [created] = await tx
+            .insert(reminders)
+            .values({
+              id: randomUUID(),
+              sessionId: session.id,
+              reminderNumber: 3,
+              ...reminderScheduleFields('SYSTEM_RECOVERY', recoveryStartedAt, messageText),
+              createdAt: recoveryStartedAt,
+            })
+            .onConflictDoNothing({ target: [reminders.sessionId, reminders.reminderNumber] })
+            .returning({ id: reminders.id });
+          if (!created) return false;
+          reminderId = created.id;
+        }
 
         await tx
           .update(verificationSessions)
@@ -1324,11 +1406,12 @@ const recoverExpiredAutomaticReminderSlots = async () => {
           actorName: 'Expired Reminder Recovery',
           action: 'REMINDER_SCHEDULED',
           entityType: 'REMINDER',
-          entityId: created.id,
+          entityId: reminderId,
           after: {
             reminderNumber: 3,
             automaticRecovery: true,
             legacyExpiredSession: true,
+            reusedCancelledReminder: Boolean(cancelledReminder),
             expiresAt: expiresAt.toISOString(),
           },
           timestamp: recoveryStartedAt,
