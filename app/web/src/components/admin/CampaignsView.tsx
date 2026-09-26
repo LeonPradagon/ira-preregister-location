@@ -221,8 +221,8 @@ export const CampaignsView: React.FC = () => {
   const [coverageFtthFilter, setCoverageFtthFilter] = useState('ALL');
   const [candidateCustomers, setCandidateCustomers] = useState<Customer[]>([]);
   const [candidatePage, setCandidatePage] = useState(1);
-  const [candidatePageSize, setCandidatePageSize] = useState<TablePageSize>(25);
-  const [candidateTotal, setCandidateTotal] = useState(0);
+  const candidatePageSize = 25;
+  const [candidateHasMore, setCandidateHasMore] = useState(false);
   const [candidateLoading, setCandidateLoading] = useState(true);
   const [preview, setPreview] = useState<WhatsAppPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -287,7 +287,9 @@ export const CampaignsView: React.FC = () => {
     setItemPage(1);
     setItemCursors({});
   };
-  const selectedCount = selectAllEligible ? Math.min(candidateTotal, dailySendLimit) : selected.length;
+  const selectionSummary = selectAllEligible
+    ? t('campaigns.selectAllEligible')
+    : `${selected.length.toLocaleString('en-US')} / ${dailySendLimit.toLocaleString('en-US')} ${t('campaigns.selectedRecipients')}`;
 
   const loadCampaigns = async () => {
     setLoading(true);
@@ -324,6 +326,7 @@ export const CampaignsView: React.FC = () => {
 
   const loadCandidates = async () => {
     setCandidateLoading(true);
+    setCandidateHasMore(false);
     try {
       const response = await api.customers({
         page: candidatePage,
@@ -338,7 +341,7 @@ export const CampaignsView: React.FC = () => {
       if (response.nextCursor)
         setCandidateCursors((previous) => ({ ...previous, [candidatePage + 1]: response.nextCursor! }));
       setCandidateCustomers(response.items.map(mapApiCustomer));
-      setCandidateTotal(response.total);
+      setCandidateHasMore(response.hasMore);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('campaigns.targetError'));
     } finally {
@@ -622,8 +625,7 @@ export const CampaignsView: React.FC = () => {
             </label>
           </div>
           <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
-            {selectedCount.toLocaleString('en-US')} / {candidateTotal.toLocaleString('en-US')}{' '}
-            {t('campaigns.selectedRecipients')}
+            {selectionSummary}
           </span>
         </div>
         <div className="mt-3 max-h-72 overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
@@ -658,18 +660,25 @@ export const CampaignsView: React.FC = () => {
             <p className="p-8 text-center text-sm text-amber-700 dark:text-amber-300">{t('campaigns.targetEmpty')}</p>
           )}
         </div>
-        <TablePagination
-          page={candidatePage}
-          pageSize={candidatePageSize}
-          total={candidateTotal}
-          onPageChange={setCandidatePage}
-          onPageSizeChange={(size) => {
-            setCandidatePageSize(size);
-            setCandidatePage(1);
-            setCandidateCursors({});
-          }}
-          disabled={candidateLoading}
-        />
+        <nav aria-label={t('table.navigation')} className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3 dark:border-slate-800">
+          <button
+            type="button"
+            disabled={candidateLoading || candidatePage === 1}
+            onClick={() => setCandidatePage((page) => page - 1)}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300"
+          >
+            {t('table.previous')}
+          </button>
+          <span className="text-xs text-slate-500">{candidatePage}</span>
+          <button
+            type="button"
+            disabled={candidateLoading || !candidateHasMore}
+            onClick={() => setCandidatePage((page) => page + 1)}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300"
+          >
+            {t('table.next')}
+          </button>
+        </nav>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">

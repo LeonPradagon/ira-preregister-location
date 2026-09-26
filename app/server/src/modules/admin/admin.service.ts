@@ -754,37 +754,29 @@ export class AdminService {
       )`);
     }
     const where = and(...filters);
-    const cachedCount = await this.readCache.count(
-      'customers',
-      {
-        search: query.search,
-        status: query.status,
-        whatsappStatus: query.whatsappStatus,
-        coverageFwaStatus: query.coverageFwaStatus,
-        coverageFtthStatus: query.coverageFtthStatus,
-        locationStatus: query.locationStatus,
-        coordinateAuditStatus: query.coordinateAuditStatus,
-        addressCompleteness: query.addressCompleteness,
-        campaignAvailable: query.campaignAvailable,
-      },
-      async () => {
-        // Keep the displayed total accurate. The send limit is enforced when
-        // selecting recipients and again during campaign creation; it must not
-        // make a smaller eligible population look like exactly 10,000.
-        if (query.campaignAvailable) {
-          const [{ total }] = await db
-            .select({ total: sql<number>`count(*)` })
-            .from(customers)
-            .where(where);
-          return Number(total);
-        }
-        const [{ total }] = await db
-          .select({ total: sql<number>`count(*)` })
-          .from(customers)
-          .where(where);
-        return Number(total);
-      },
-    );
+    const cachedCount = query.campaignAvailable
+      ? { total: 0, countAsOf: new Date().toISOString() }
+      : await this.readCache.count(
+          'customers',
+          {
+            search: query.search,
+            status: query.status,
+            whatsappStatus: query.whatsappStatus,
+            coverageFwaStatus: query.coverageFwaStatus,
+            coverageFtthStatus: query.coverageFtthStatus,
+            locationStatus: query.locationStatus,
+            coordinateAuditStatus: query.coordinateAuditStatus,
+            addressCompleteness: query.addressCompleteness,
+            campaignAvailable: query.campaignAvailable,
+          },
+          async () => {
+            const [{ total }] = await db
+              .select({ total: sql<number>`count(*)` })
+              .from(customers)
+              .where(where);
+            return Number(total);
+          },
+        );
     const activeAddressSort = sql<string>`(
       select sort_address.raw_address
       from customer_addresses sort_address
@@ -845,7 +837,7 @@ export class AdminService {
         )
         : undefined;
     const usesCursor = Boolean(nameCursor || cursor);
-    const customerRows = await db
+    const queriedCustomerRows = await db
       .select()
       .from(customers)
       .where(cursorWhere ? and(where, cursorWhere) : where)
@@ -862,7 +854,11 @@ export class AdminService {
             : asc(customers.id),
       )
       .offset(usesCursor ? 0 : (query.page - 1) * query.pageSize)
-      .limit(query.pageSize);
+      .limit(query.pageSize + (query.campaignAvailable ? 1 : 0));
+    const hasMore = query.campaignAvailable
+      ? queriedCustomerRows.length > query.pageSize
+      : queriedCustomerRows.length === query.pageSize;
+    const customerRows = queriedCustomerRows.slice(0, query.pageSize);
     const customerIds = customerRows.map((customer) => customer.id);
     if (!customerIds.length)
       return {
@@ -932,14 +928,14 @@ export class AdminService {
       total: cachedCount.total,
       totalPages: Math.ceil(cachedCount.total / query.pageSize),
       nextCursor:
-        customerRows.length === query.pageSize
+        hasMore && customerRows.length === query.pageSize
           ? query.sortBy === 'name'
             ? encodeCustomerNameCursor(customerRows[customerRows.length - 1].name, customerRows[customerRows.length - 1].id)
             : !query.sortBy
               ? encodeListCursor(customerRows[customerRows.length - 1].updatedAt, customerRows[customerRows.length - 1].id)
               : null
           : null,
-      hasMore: customerRows.length === query.pageSize,
+      hasMore,
       countAsOf: cachedCount.countAsOf,
     };
   }
