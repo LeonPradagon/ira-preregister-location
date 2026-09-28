@@ -16,7 +16,6 @@ import {
   reminderLinkExpiresAt,
   scheduleReminder,
   scheduleReminderInTimezone,
-  shouldCancelFutureRemindersOnLinkOpen,
   shouldScheduleSystemFollowUp,
   spreadReminderTimes,
   unopenedLinkReminderAt,
@@ -32,7 +31,7 @@ describe('reminder policy', () => {
     },
   );
 
-  it.each(['LOCATION_VALID', 'EXPIRED', 'MANUAL_REVIEW', 'CUSTOMER_DATA_MISMATCH'])(
+  it.each(['LOCATION_VALID', 'EXPIRED', 'CUSTOMER_DATA_MISMATCH'])(
     'does not treat %s as an automatic follow-up state',
     (status) => {
       expect(isSystemFollowUpStatus(status)).toBe(false);
@@ -86,15 +85,20 @@ describe('reminder policy', () => {
     expect(nextReminderNumber(3)).toBeNull();
   });
 
-  it.each(['SYSTEM_RECOVERY', 'UNOPENED_LINK', 'ADMIN_MANUAL'])(
-    'does not cancel future reminders when a %s link is opened',
-    (source) => {
-      expect(shouldCancelFutureRemindersOnLinkOpen(source)).toBe(false);
-    },
-  );
-
-  it('cancels future reminders for a customer-selected reminder link', () => {
-    expect(shouldCancelFutureRemindersOnLinkOpen('CUSTOMER_SELECTED')).toBe(true);
+  it('allows system follow-up after manual review when session remains active', () => {
+    const now = new Date('2026-09-17T12:00:00.000Z');
+    expect(
+      shouldScheduleSystemFollowUp({
+        status: 'MANUAL_REVIEW',
+        reminderCount: 2,
+        maxReminders: 3,
+        updatedAt: new Date('2026-09-16T11:59:00.000Z'),
+        expiresAt: new Date('2026-09-20T12:00:00.000Z'),
+        now,
+        hasActiveReminder: false,
+        whatsappOptedOut: false,
+      }),
+    ).toBe(true);
   });
 
   it('keeps the session status while the final reminder is only scheduled', () => {

@@ -18,6 +18,7 @@ export const SYSTEM_FOLLOW_UP_STATUSES = [
   'WAITING_FOR_HOME',
   'ADDRESS_EDITING',
   'ADDRESS_PROPOSED',
+  'MANUAL_REVIEW',
 ];
 const systemFollowUpStatuses = new Set(SYSTEM_FOLLOW_UP_STATUSES);
 
@@ -111,10 +112,6 @@ export function reminderCountAfterOpeningLink(currentCount: number, reminderNumb
 
 export function isReminderLinkFirstOpen(openedAt: Date | null | undefined): boolean {
   return !openedAt;
-}
-
-export function shouldCancelFutureRemindersOnLinkOpen(reminderSource: string): boolean {
-  return reminderSource.trim().toUpperCase() === 'CUSTOMER_SELECTED';
 }
 
 export function verificationStatusAfterReminderSend(

@@ -2025,14 +2025,25 @@ export class AdminService {
     if (reminderNumber > max) throw new DomainError('Reminder limit reached', 409, 'REMINDER_LIMIT_REACHED');
 
     const scheduledAt = timestamp();
-    const nextStatus = reminderNumber >= max ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME';
+    const nextStatus =
+      reminderNumber >= max
+        ? 'REMINDER_LIMIT_REACHED'
+        : detail.session.verificationStatus === 'MANUAL_REVIEW'
+          ? 'REMINDER_REQUIRED'
+          : 'WAITING_FOR_HOME';
     assertTransition(detail.session.verificationStatus, nextStatus);
     const existingReminder = detail.reminders.find((reminder) => reminder.reminderNumber === reminderNumber);
     const reuseCancelledReminder = Boolean(
       existingReminder &&
         isReusableCancelledReminder(existingReminder.status, existingReminder.sentAt, existingReminder.tokenId),
     );
-    if (existingReminder && !reuseCancelledReminder)
+    const replaceScheduledReminder = Boolean(
+      existingReminder &&
+        existingReminder.status === 'SCHEDULED' &&
+        !existingReminder.sentAt &&
+        !existingReminder.tokenId,
+    );
+    if (existingReminder && !reuseCancelledReminder && !replaceScheduledReminder)
       throw new DomainError('Reminder slot has already been used', 409, 'REMINDER_SLOT_ALREADY_USED');
     const messageText = `Halo ${detail.customer.name}, ini pengingat verifikasi lokasi Anda. Pengingat ${reminderNumber} dari ${max}. Tautan baru berlaku maksimal ${config.REMINDER_LINK_TTL_HOURS} jam setelah dikirim.`;
     await db.transaction(async (tx) => {
@@ -2040,14 +2051,14 @@ export class AdminService {
         .update(verificationSessions)
         .set({ reminderCount: reminderNumber, verificationStatus: nextStatus, updatedAt: scheduledAt })
         .where(eq(verificationSessions.id, id));
-      if (reuseCancelledReminder) {
+      if (reuseCancelledReminder || replaceScheduledReminder) {
         const [reused] = await tx
           .update(reminders)
           .set(reminderScheduleFields('ADMIN_MANUAL', scheduledAt, messageText))
           .where(
             and(
               eq(reminders.id, existingReminder!.id),
-              eq(reminders.status, 'CANCELLED'),
+              inArray(reminders.status, ['CANCELLED', 'SCHEDULED']),
               isNull(reminders.sentAt),
               isNull(reminders.tokenId),
             ),
@@ -2076,7 +2087,13 @@ export class AdminService {
         action: 'REMINDER_SCHEDULED',
         entityType: 'REMINDER',
         entityId: id,
-        after: { reminderNumber, manual: true, tokenRotated: true, reusedCancelledReminder: reuseCancelledReminder },
+        after: {
+          reminderNumber,
+          manual: true,
+          tokenRotated: true,
+          reusedCancelledReminder: reuseCancelledReminder,
+          replacedScheduledReminder: replaceScheduledReminder,
+        },
         timestamp: scheduledAt,
       });
     });

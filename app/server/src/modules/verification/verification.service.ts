@@ -36,7 +36,6 @@ import {
   ReminderPreference,
   scheduleReminderInTimezone,
   sessionExpiryAfterActivity,
-  shouldCancelFutureRemindersOnLinkOpen,
 } from '../reminders/reminder.policy.js';
 import { ValidationConfigService } from '../../config/validation-config.service.js';
 import { parseVerificationToken, verifyVerificationToken } from './verification-token.js';
@@ -184,28 +183,6 @@ export class VerificationService {
           });
         }
         if (reminder && firstReminderOpen) {
-          const cancelledReminders = shouldCancelFutureRemindersOnLinkOpen(reminder.reminderSource)
-            ? await tx
-                .update(reminders)
-                .set({
-                  ...reminderCancellationFields('REMINDER_LINK_OPENED', timestamp, 'customer-token'),
-                  processingStartedAt: null,
-                })
-                .where(
-                  and(
-                    eq(reminders.sessionId, row.session.id),
-                    eq(reminders.status, 'SCHEDULED'),
-                    eq(reminders.reminderSource, 'CUSTOMER_SELECTED'),
-                  ),
-                )
-                .returning({ id: reminders.id })
-            : [];
-          if (cancelledReminders.length)
-            await tx.insert(auditLogs).values(
-              cancelledReminders.map(({ id }) =>
-                reminderCancellationAudit(id, 'REMINDER_LINK_OPENED', timestamp, 'customer-token', 'Customer'),
-              ),
-            );
           await tx
             .update(reminders)
             .set({ openedAt: timestamp })
@@ -218,7 +195,7 @@ export class VerificationService {
             entityId: reminder.id,
             after: {
               reminderNumber: reminder.reminderNumber,
-              futureRemindersCancelled: cancelledReminders.length > 0,
+              futureRemindersCancelled: false,
               reminderCountBefore: row.session.reminderCount,
               reminderCountAfter: effectiveReminderCount,
             },
