@@ -67,3 +67,13 @@ export async function showActionError(title: string, text?: string): Promise<voi
     confirmButtonColor: '#2563eb',
   });
 }
+
+export async function showActionInfo(title: string, text?: string): Promise<void> {
+  await Swal.fire({
+    icon: 'info',
+    title,
+    text,
+    confirmButtonText: 'OK',
+    confirmButtonColor: '#2563eb',
+  });
+}

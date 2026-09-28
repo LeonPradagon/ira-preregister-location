@@ -449,6 +449,32 @@ export interface CoverageBatchApi {
   };
 }
 
+export interface TicketingCandidateApi {
+  customerId: string;
+  externalId: string;
+  name: string;
+  phoneE164: string;
+  coverageFwaStatus: string | null;
+  coverageFtthStatus: string | null;
+  latestFwaCoverageStatus: string | null;
+  address: {
+    rawAddress: string;
+    province: string;
+    city: string;
+    district: string;
+    subdistrict: string;
+    postalCode: string;
+  } | null;
+  ticketStatus: 'NOT_CREATED' | 'PROCESSING' | 'PUBLISHED' | 'FAILED' | string;
+  ticketAttemptCount: number;
+  ticketSentAt: string | null;
+  ticketError: string | null;
+  providerTicketId: string | null;
+  providerStatus: string | null;
+  providerStatusForCustomer: string | null;
+  providerResponse: unknown;
+}
+
 function queryString(query: AdminListQuery): string {
   const params = new URLSearchParams();
   if (query.page) params.set('page', String(query.page));
@@ -763,6 +789,55 @@ const adminApi = {
       body: JSON.stringify({ verificationIds }),
     }),
   coverageBatch: (id: string) => request<CoverageBatchApi>(`/admin/coverage/batches/${encodeURIComponent(id)}`),
+  ticketingCandidates: (query: { page?: number; pageSize?: number; search?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (query.page) params.set('page', String(query.page));
+    if (query.pageSize) params.set('pageSize', String(query.pageSize));
+    if (query.search) params.set('search', query.search);
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return request<{
+      items: TicketingCandidateApi[];
+      page: number;
+      pageSize: number;
+      total: number;
+      totalPages: number;
+    }>(`/admin/ticketing/candidates${suffix}`);
+  },
+  createTicket: (body: {
+    customerId: string;
+    payload: {
+      title: string;
+      description: string;
+      solution: string;
+      error_category: string;
+      priority: string;
+      severity: string;
+      ticket_type: string;
+      companies: string[];
+      alert_interval_minutes: number;
+      attachments: string[];
+    };
+    entity?: {
+      entity_email?: string;
+      hardware_serial_number?: string;
+      additional_creator?: string;
+    };
+    mitra_data?: { name?: string; station?: string | null } | null;
+  }) => request<{ status: string; customerId: string; eventId: string; providerTicketId?: string | null; providerResponse?: unknown }>('/admin/ticketing/tickets', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  ticketingProviderStatus: (customerId: string) =>
+    request<{
+      status: 'FOUND' | 'NOT_FOUND';
+      customerId: string;
+      externalId: string;
+      platform: string;
+      providerTicketId: string | null;
+      providerStatus: string | null;
+      providerStatusForCustomer: string | null;
+      providerResponse: unknown;
+    }>(`/admin/ticketing/tickets/${encodeURIComponent(customerId)}/provider-status`),
   outbox: (query: AdminListQuery = {}) =>
     request<AdminPageApi<Record<string, unknown>>>(`/admin/outbox${queryString(query)}`),
   campaigns: (query: AdminListQuery = {}) =>

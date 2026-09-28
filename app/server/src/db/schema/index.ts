@@ -380,6 +380,8 @@ export const integrationOutbox = pgTable('integration_outbox', {
   idempotencyKey: varchar('idempotency_key', { length: 255 }).notNull().unique(),
   payload: jsonb('payload').notNull(),
   status: varchar('status', { length: 32 }).notNull().default('PENDING'),
+  providerTicketId: varchar('provider_ticket_id', { length: 255 }),
+  providerResponse: jsonb('provider_response'),
   attemptCount: integer('attempt_count').notNull().default(0),
   nextRetryAt: timestamp('next_retry_at', { withTimezone: true }),
   sentAt: timestamp('sent_at', { withTimezone: true }),

@@ -1,4 +1,5 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import axios from 'axios';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '../../db/client.js';
 import { administrativeRegions, regionPostalCodes } from '../../db/schema/index.js';
@@ -57,9 +58,8 @@ export class RegionsService {
       return local;
     }
     try {
-      const response = await fetch(`${this.baseUrl}/${path}?limit=1000`, { signal: AbortSignal.timeout(10000) });
-      if (!response.ok) throw new Error(`Region provider returned ${response.status}`);
-      const payload = (await response.json()) as RegionPayload;
+      const response = await axios.get<RegionPayload>(`${this.baseUrl}/${path}?limit=1000`, { timeout: 10000 });
+      const payload = response.data;
       const data = Array.isArray(payload.data)
         ? payload.data
             .filter((item) => typeof item.code === 'string' && typeof item.name === 'string')

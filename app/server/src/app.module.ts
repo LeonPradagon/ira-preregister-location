@@ -27,6 +27,7 @@ import { RequestMetricsMiddleware } from './common/request-metrics.middleware.js
 import { RedisRateLimitMiddleware } from './common/redis-rate-limit.middleware.js';
 import { CoverageController } from './modules/coverage/coverage.controller.js';
 import { CoverageService } from './modules/coverage/coverage.service.js';
+import { TicketingService } from './modules/ticketing/ticketing.service.js';
 
 @Module({
   imports: [AuthModule],
@@ -52,6 +53,7 @@ import { CoverageService } from './modules/coverage/coverage.service.js';
     RequestMetricsMiddleware,
     RedisRateLimitMiddleware,
     CoverageService,
+    TicketingService,
     ValidationConfigService,
     RolesGuard,
     {

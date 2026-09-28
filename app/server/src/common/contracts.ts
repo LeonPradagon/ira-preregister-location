@@ -243,6 +243,44 @@ export const coverageCheckCreateSchema = z.object({
 export type CoverageCandidateQueryInput = z.infer<typeof coverageCandidateQuerySchema>;
 export type CoverageCheckCreateInput = z.infer<typeof coverageCheckCreateSchema>;
 
+export const ticketingCandidateQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  search: z.string().trim().max(128).default(''),
+});
+
+const ticketingPayloadSchema = z.object({
+  title: z.string().trim().min(1).max(500),
+  description: z.string().trim().min(1).max(10000),
+  solution: z.string().trim().min(1).max(10000),
+  error_category: z.string().trim().min(1).max(128),
+  priority: z.string().trim().min(1).max(32),
+  severity: z.string().trim().min(1).max(32),
+  ticket_type: z.string().trim().min(1).max(64),
+  companies: z.array(z.string().trim().min(1).max(128)).min(1).max(20),
+  alert_interval_minutes: z.number().int().positive().max(10080).default(60),
+  attachments: z.array(z.string().url()).max(20).default([]),
+});
+
+export const ticketingCreateSchema = z.object({
+  customerId: z.string().uuid(),
+  payload: ticketingPayloadSchema,
+  entity: z
+    .object({
+      entity_email: z.string().trim().email().optional(),
+      hardware_serial_number: z.string().trim().max(255).optional(),
+      additional_creator: z.string().trim().max(255).optional(),
+    })
+    .optional(),
+  mitra_data: z
+    .object({ name: z.string().trim().max(255).optional(), station: z.string().trim().max(255).nullable().optional() })
+    .nullable()
+    .optional(),
+});
+
+export type TicketingCandidateQueryInput = z.infer<typeof ticketingCandidateQuerySchema>;
+export type TicketingCreateInput = z.infer<typeof ticketingCreateSchema>;
+
 export const whatsappDeliveryStatusSchema = z.object({
   providerMessageId: z.string().trim().min(1).max(255),
   status: z.enum(['SENT', 'DELIVERED', 'READ', 'FAILED']),

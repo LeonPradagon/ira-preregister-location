@@ -12,8 +12,10 @@ import {
   Megaphone,
   Moon,
   Radio,
+  RefreshCw,
   Settings,
   Sun,
+  Ticket,
   type LucideIcon,
   UserCog,
   Users,
@@ -32,6 +34,8 @@ export type AdminTab =
   | 'settings'
   | 'integrations'
   | 'coverage'
+  | 'ticketing'
+  | 'ticketing-status'
   | 'users';
 
 interface AdminLayoutProps {
@@ -65,7 +69,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   onSelectVerification,
   children,
 }) => {
-  const { currentAdmin, logoutAdmin, dashboardSummary, theme, isDarkMode, setTheme } = useApp();
+  const { currentAdmin, logoutAdmin, dashboardSummary, theme, isDarkMode, setTheme, validationConfig } = useApp();
   const { t } = useTranslation();
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
@@ -98,6 +102,12 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           badgeColor: 'bg-amber-500 text-white',
         },
         // { id: 'coverage', label: t('nav.coverageCheck'), icon: Wifi },
+        ...(validationConfig.ENABLE_TICKETING
+          ? [
+              { id: 'ticketing' as const, label: 'Ticketing', icon: Ticket },
+              { id: 'ticketing-status' as const, label: 'Status Provider Ticketing', icon: RefreshCw },
+            ]
+          : []),
       ],
     },
     {

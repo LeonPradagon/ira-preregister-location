@@ -98,6 +98,9 @@ export class ValidationConfigService {
         ? (latest.configValues as Partial<RuntimeValidationConfig>)
         : {};
     const merged = { ...this.fromEnvironment(), ...persisted };
+    // Explicit environment enablement must be able to turn on integrations after
+    // an older persisted config stored them as false.
+    if (process.env.ENABLE_TICKETING === 'true') merged.ENABLE_TICKETING = true;
     return {
       ...merged,
       MAX_LOCATION_ATTEMPTS: Math.min(3, Math.max(1, Number(merged.MAX_LOCATION_ATTEMPTS ?? 3))),

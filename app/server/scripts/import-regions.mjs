@@ -1,13 +1,18 @@
 import 'dotenv/config';
+import axios from 'axios';
 import { Pool } from 'pg';
 
 const regionsUrl = 'https://raw.githubusercontent.com/cahyadsn/wilayah/v2026.7/db/wilayah.sql';
 const postalCodesUrl = 'https://raw.githubusercontent.com/cahyadsn/wilayah_kodepos/main/json/wilayah_kodepos.json';
 
 const fetchText = async (url) => {
-  const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
-  if (!response.ok) throw new Error(`Gagal mengunduh ${url}: HTTP ${response.status}`);
-  return response.text();
+  try {
+    const response = await axios.get(url, { responseType: 'text', timeout: 60_000 });
+    return response.data;
+  } catch (error) {
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+    throw new Error(`Gagal mengunduh ${url}: ${status ? `HTTP ${status}` : error instanceof Error ? error.message : 'unknown error'}`);
+  }
 };
 
 const insertChunks = async (client, table, columns, rows, valueFactory) => {

@@ -14,6 +14,8 @@ import { AuditLogsView } from './components/admin/AuditLogsView';
 import { RemindersView } from './components/admin/RemindersView';
 import { IntegrationsView } from './components/admin/IntegrationsView';
 import { CoverageCheckView } from './components/admin/CoverageCheckView';
+import { TicketingView } from './components/admin/TicketingView';
+import { TicketingProviderStatusView } from './components/admin/TicketingProviderStatusView';
 import { BackendCustomerVerificationView } from './components/customer/BackendCustomerVerificationView';
 import { CampaignsView } from './components/admin/CampaignsView';
 import { MonitoringView } from './components/admin/MonitoringView';
@@ -95,6 +97,8 @@ const MainAppContent: React.FC = () => {
       ['settings', <ValidationSettingsView />],
       ['integrations', <IntegrationsView />],
       ['coverage', <CoverageCheckView />],
+      ['ticketing', <TicketingView />],
+      ['ticketing-status', <TicketingProviderStatusView />],
       ['users', <UserManagementView />],
     ];
     const detailOpen = Boolean(selectedCustomerId || selectedVerificationId);

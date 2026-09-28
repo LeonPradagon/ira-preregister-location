@@ -29,6 +29,8 @@ import {
   customerListQuerySchema,
   customerUpdateSchema,
   reviewSchema,
+  ticketingCandidateQuerySchema,
+  ticketingCreateSchema,
   validationConfigSchema,
 } from '../../common/contracts.js';
 import { CurrentAdmin, RequestAdmin } from '../../common/request-user.js';
@@ -41,6 +43,7 @@ import { z } from 'zod';
 import { WhatsAppComplianceService } from '../../integrations/whatsapp/whatsapp-compliance.service.js';
 import { CustomerImportService } from '../imports/customer-import.service.js';
 import type { UploadedCustomerFile } from '../imports/customer-import.service.js';
+import { TicketingService } from '../ticketing/ticketing.service.js';
 
 const CustomerFileInterceptor = FileInterceptor('file', {
   storage: diskStorage({
@@ -64,6 +67,7 @@ export class AdminController {
     private readonly adminExport: AdminExportService,
     private readonly whatsappCompliance: WhatsAppComplianceService,
     private readonly customerImport: CustomerImportService,
+    private readonly ticketing: TicketingService,
   ) {}
 
   @Get('me')
@@ -339,6 +343,29 @@ export class AdminController {
   @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
   integrations() {
     return this.admin.integrations();
+  }
+
+  @Get('ticketing/candidates')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
+  ticketingCandidates(@Query() query: unknown) {
+    const parsed = ticketingCandidateQuerySchema.safeParse(query);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.ticketing.listCandidates(parsed.data);
+  }
+
+  @Get('ticketing/tickets/:customerId/provider-status')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
+  ticketingProviderStatus(@Param('customerId') customerId: string) {
+    return this.ticketing.checkProviderStatus(customerId);
+  }
+
+  @Post('ticketing/tickets')
+  @HttpCode(201)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER')
+  createTicket(@CurrentAdmin() currentAdmin: RequestAdmin, @Body() body: unknown) {
+    const parsed = ticketingCreateSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.ticketing.create(currentAdmin, parsed.data);
   }
 
   @Get('outbox')
