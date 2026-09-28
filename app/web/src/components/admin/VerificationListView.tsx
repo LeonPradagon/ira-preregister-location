@@ -776,10 +776,10 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
                     <div>
-                      {session.attemptCount} {t('verifications.attempts')}
+                      {session.locationAttemptCount ?? session.attemptCount} {t('verifications.attempts')}
                     </div>
                     <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                      {session.reminderCount} / {validationConfig.MAX_REMINDERS_PER_SESSION}{' '}
+                      {session.sentReminderCount ?? session.reminderCount} / {validationConfig.MAX_REMINDERS_PER_SESSION}{' '}
                       {t('verifications.reminders')}
                     </div>
                     <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">

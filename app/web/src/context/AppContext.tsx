@@ -335,6 +335,8 @@ export function mapApiSession(raw: Record<string, unknown>): VerificationSession
     customerId: String(raw.customerId),
     currentAddressId: String(raw.currentAddressId),
     reminderCount: Number(raw.reminderCount ?? 0),
+    sentReminderCount: raw.sentReminderCount == null ? undefined : Number(raw.sentReminderCount),
+    locationAttemptCount: raw.locationAttemptCount == null ? undefined : Number(raw.locationAttemptCount),
     attemptCount: Number(raw.attemptCount ?? 0),
     lastValidationResult:
       raw.lastValidationResult && typeof raw.lastValidationResult === 'object'

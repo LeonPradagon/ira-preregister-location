@@ -1584,6 +1584,11 @@ export class AdminService {
       when ${verificationSessions.verificationStatus} in ('ADDRESS_EDITING', 'ADDRESS_PROPOSED')
         or ${verificationSessions.customerConfirmationStatus} = 'MISMATCH'
       then 1 else 0 end`;
+    const locationAttemptCount = sql<number>`(
+      select count(*)::int
+      from location_captures location_attempt
+      where location_attempt.session_id = ${verificationSessions.id}
+    )`;
     const sortExpression =
       query.sortBy === 'status'
         ? verificationSessions.verificationStatus
@@ -1594,7 +1599,7 @@ export class AdminService {
         : query.sortBy === 'location'
           ? latestLocationResultSort
           : query.sortBy === 'activity'
-            ? verificationSessions.attemptCount
+            ? locationAttemptCount
             : customers.name;
     const nameCursor = usesNameCursor ? decodeCustomerNameCursor(query.cursor) : null;
     const cursor = usesCursor && !usesNameCursor ? decodeListCursor(query.cursor) : undefined;
@@ -1610,7 +1615,18 @@ export class AdminService {
         )
       : undefined;
     const rows = await db
-      .select({ session: verificationSessions, customer: customers, address: customerAddresses })
+      .select({
+        session: verificationSessions,
+        customer: customers,
+        address: customerAddresses,
+        sentReminderCount: sql<number>`(
+          select count(*)::int
+          from reminders sent_reminder
+          where sent_reminder.session_id = ${verificationSessions.id}
+            and sent_reminder.status = 'SENT'
+        )`,
+        locationAttemptCount,
+      })
       .from(verificationSessions)
       .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
       .innerJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
@@ -1653,8 +1669,13 @@ export class AdminService {
     for (const result of resultRows)
       if (!resultBySession.has(result.sessionId)) resultBySession.set(result.sessionId, result);
     return {
-      items: rows.map(({ session, customer, address }) => ({
-        session: { ...sanitizeSession(session), lastValidationResult: resultBySession.get(session.id) ?? null },
+      items: rows.map(({ session, customer, address, sentReminderCount }) => ({
+        session: {
+          ...sanitizeSession(session),
+          sentReminderCount: Number(sentReminderCount),
+          locationAttemptCount: Number(locationAttemptCount),
+          lastValidationResult: resultBySession.get(session.id) ?? null,
+        },
         customer,
         address,
       })),

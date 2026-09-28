@@ -221,6 +221,8 @@ export interface VerificationSession {
   customerConfirmationStatus: CustomerConfirmationStatus;
   attemptCount: number;
   reminderCount: number; // max 3
+  sentReminderCount?: number;
+  locationAttemptCount?: number;
   registeredPhoneSnapshot: string;
   openedAt?: string;
   customerConfirmedAt?: string;
