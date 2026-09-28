@@ -119,6 +119,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
 
   const sessionReminders = reminders.filter((r) => r.sessionId === sessionId);
   const sessionCaptures = locationCaptures.filter((capture) => capture.sessionId === sessionId);
+  const sentReminderCount = sessionReminders.filter((reminder) => reminder.status === 'SENT').length;
 
   // Copy state helpers
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -689,7 +690,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
               <div className="text-xs font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                 <Bell className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 <span>
-                  Riwayat Pengingat WhatsApp ({session.reminderCount} / {validationConfig.MAX_REMINDERS_PER_SESSION})
+                  Riwayat Pengingat WhatsApp ({sentReminderCount} / {validationConfig.MAX_REMINDERS_PER_SESSION})
                 </span>
               </div>
               <button
@@ -698,7 +699,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                 disabled={
                   !canSendVerification ||
                   sessionExpired ||
-                  session.reminderCount >= validationConfig.MAX_REMINDERS_PER_SESSION
+                  sentReminderCount >= validationConfig.MAX_REMINDERS_PER_SESSION
                 }
                 title={
                   !canSendVerification

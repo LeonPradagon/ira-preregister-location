@@ -2017,7 +2017,11 @@ export class AdminService {
     const config = await this.validationConfig.get();
     const max = config.MAX_REMINDERS_PER_SESSION;
     if (!config.ENABLE_REMINDERS) throw new DomainError('Reminders are disabled', 409, 'REMINDERS_DISABLED');
-    const reminderNumber = detail.session.reminderCount + 1;
+    const highestSentReminderNumber = detail.reminders.reduce(
+      (highest, reminder) => (reminder.status === 'SENT' ? Math.max(highest, reminder.reminderNumber) : highest),
+      0,
+    );
+    const reminderNumber = Math.max(detail.session.reminderCount, highestSentReminderNumber) + 1;
     if (detail.session.revokedAt || detail.session.expiresAt <= timestamp())
       throw new DomainError('Session is expired or revoked', 409, 'SESSION_EXPIRED');
     if (detail.session.verificationStatus === 'LOCATION_VALID' || detail.session.verificationStatus === 'EXPIRED')

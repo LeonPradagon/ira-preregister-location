@@ -201,16 +201,16 @@ export class VerificationService {
             },
             timestamp,
           });
+          await tx
+            .update(verificationSessions)
+            .set({
+              attemptCount: row.session.attemptCount > 0 ? 0 : row.session.attemptCount,
+              reminderCount: effectiveReminderCount,
+              expiresAt: activeSessionExpiresAt,
+              updatedAt: timestamp,
+            })
+            .where(eq(verificationSessions.id, row.session.id));
           if (row.session.attemptCount > 0 || row.session.reminderCount !== effectiveReminderCount) {
-            await tx
-              .update(verificationSessions)
-              .set({
-                attemptCount: 0,
-                reminderCount: effectiveReminderCount,
-                expiresAt: activeSessionExpiresAt,
-                updatedAt: timestamp,
-              })
-              .where(eq(verificationSessions.id, row.session.id));
             await tx.insert(auditLogs).values({
               actorUserId: 'customer-token',
               actorName: 'Customer',
