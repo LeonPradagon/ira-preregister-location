@@ -360,7 +360,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
           <button
             type="button"
             onClick={onBack}
-            className="p-2 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg transition-colors border border-gray-300 dark:border-gray-700 shadow-xs"
+            className="verification-back-button p-2 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg transition-colors border border-gray-300 dark:border-gray-700 shadow-xs"
             title="Kembali ke Daftar"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -406,7 +406,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
               title={
                 !canSendVerification ? 'Role ini tidak dapat mengirim ulang undangan' : 'Kirim ulang undangan WhatsApp'
               }
-              className="px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+              className="verification-resend-button px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
             >
               <Send className="w-3.5 h-3.5 text-gray-600 dark:text-gray-400" />
               <span>Kirim Ulang Undangan</span>
@@ -1235,11 +1235,11 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
 
       {/* MANUAL REVIEW MODAL (PRD Section 20.2 & AC-08) */}
       {reviewModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 max-w-lg w-full rounded-2xl shadow-xl overflow-hidden">
-            <div className="bg-white dark:bg-gray-900 px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto bg-black/60 p-2 backdrop-blur-xs animate-in fade-in sm:items-center sm:p-4">
+          <div className="coreui-modal verification-review-modal my-auto max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:max-h-[calc(100dvh-2rem)]">
+            <div className="coreui-modal-header verification-review-modal-header bg-white dark:bg-gray-900 px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 flex items-center justify-center">
+                <div className="verification-review-icon w-8 h-8 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 flex items-center justify-center">
                   <ShieldCheck className="w-4 h-4" />
                 </div>
                 <div>
@@ -1408,14 +1408,14 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                 <button
                   type="button"
                   onClick={() => setReviewModalOpen(false)}
-                  className="px-4 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
+                  className="coreui-modal-secondary verification-review-cancel px-4 py-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={reviewSubmitting}
-                  className="px-4 py-2 bg-gray-900 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg font-medium shadow-xs transition-colors"
+                  className="verification-review-submit px-4 py-2 bg-gray-900 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg font-medium shadow-xs transition-colors"
                 >
                   {reviewSubmitting ? 'Memproses...' : 'Simpan Keputusan Review'}
                 </button>

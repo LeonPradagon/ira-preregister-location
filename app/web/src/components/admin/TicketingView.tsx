@@ -1,9 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, Circle, Loader2, RefreshCw, Search, Ticket, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Circle, Loader2, RefreshCw, Search, Ticket, XCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { api, type TicketingCandidateApi } from '../../lib/apiClient';
+import { api, type TicketingCandidateApi, type TicketingMitraApi } from '../../lib/apiClient';
 import { showActionError, showActionSuccess } from '../../lib/swal';
 import { TablePagination, type TablePageSize } from '../common/AdminTable';
+
+const normalizeMitraName = (name: string) => name.trim().toLocaleLowerCase();
+const mitraEntriesForName = (name: string, mitraOptions: TicketingMitraApi[]) => {
+  const normalized = normalizeMitraName(name);
+  return normalized ? mitraOptions.filter((mitra) => normalizeMitraName(mitra.name) === normalized) : [];
+};
 
 interface TicketForm {
   title: string;
@@ -17,7 +23,6 @@ interface TicketForm {
   alert_interval_minutes: number;
   attachments: string;
   entity_email: string;
-  hardware_serial_number: string;
   additional_creator: string;
   mitra_name: string;
   station: string;
@@ -41,6 +46,12 @@ function formFor(candidate: TicketingCandidateApi): TicketForm {
   const fwaCovered = covered(candidate.coverageFwaStatus) || candidate.latestFwaCoverageStatus === 'COVERED';
   const ftthCovered = covered(candidate.coverageFtthStatus);
   const coverageLabel = [fwaCovered && 'FWA', ftthCovered && 'FTTH'].filter(Boolean).join(' dan ');
+  const matchedMitra =
+    candidate.mitraMatch.status === 'MATCHED' ||
+    candidate.mitraMatch.status === 'AMBIGUOUS' ||
+    candidate.mitraMatch.status === 'RECOMMENDED'
+      ? candidate.mitraMatch.candidates[0]
+      : null;
   return {
     title: `Tindak lanjut coverage ${coverageLabel}: ${candidate.name}`,
     description: '',
@@ -53,10 +64,9 @@ function formFor(candidate: TicketingCandidateApi): TicketForm {
     alert_interval_minutes: 60,
     attachments: '',
     entity_email: '',
-    hardware_serial_number: '',
     additional_creator: '-',
-    mitra_name: '',
-    station: '',
+    mitra_name: matchedMitra?.name ?? '',
+    station: matchedMitra?.stations.length === 1 ? matchedMitra.stations[0] : '',
   };
 }
 
@@ -117,14 +127,13 @@ const fieldLabels: Record<string, string> = {
   ticket_type: 'Jenis layanan',
   companies: 'Tim/perusahaan penanggung jawab',
   entity_email: 'Email pelanggan',
-  hardware_serial_number: 'Nomor seri perangkat',
   additional_creator: 'Pembuat tambahan',
   mitra_name: 'Nama mitra/dealer',
   station: 'Nama station',
 };
 
 export const TicketingView: React.FC = () => {
-  const { currentAdmin } = useApp();
+  const { currentAdmin, validationConfig } = useApp();
   const [items, setItems] = useState<TicketingCandidateApi[]>([]);
   const [selected, setSelected] = useState<TicketingCandidateApi | null>(null);
   const [form, setForm] = useState<TicketForm | null>(null);
@@ -136,6 +145,23 @@ export const TicketingView: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submissionProgress, setSubmissionProgress] = useState<TicketSubmissionProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mitraOptions, setMitraOptions] = useState<TicketingMitraApi[]>([]);
+  const [mitraLoadError, setMitraLoadError] = useState<string | null>(null);
+  const matchingMitras = form ? mitraEntriesForName(form.mitra_name, mitraOptions) : [];
+  const spatialMitra =
+    selected?.mitraMatch.status === 'MATCHED' ||
+    selected?.mitraMatch.status === 'AMBIGUOUS' ||
+    selected?.mitraMatch.status === 'RECOMMENDED'
+      ? selected.mitraMatch.candidates[0]
+      : null;
+  const spatialStations =
+    form && spatialMitra && normalizeMitraName(form.mitra_name) === normalizeMitraName(spatialMitra.name)
+      ? spatialMitra.stations
+      : [];
+  const stationOptions =
+    spatialStations.length > 0
+      ? spatialStations
+      : [...new Set(matchingMitras.flatMap((mitra) => mitra.locations))].sort((a, b) => a.localeCompare(b));
 
   const load = async () => {
     setLoading(true);
@@ -163,6 +189,21 @@ export const TicketingView: React.FC = () => {
     void load();
   }, [page, pageSize, search]);
 
+  useEffect(() => {
+    let mounted = true;
+    void api
+      .ticketingMitra()
+      .then((options) => {
+        if (mounted) setMitraOptions(options);
+      })
+      .catch((cause) => {
+        if (mounted) setMitraLoadError(cause instanceof Error ? cause.message : 'Daftar mitra gagal dimuat.');
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const selectCandidate = (candidate: TicketingCandidateApi) => {
     setSelected(candidate);
     setForm(formFor(candidate));
@@ -171,9 +212,25 @@ export const TicketingView: React.FC = () => {
   const update = (key: keyof TicketForm, value: string | number) =>
     setForm((previous) => (previous ? { ...previous, [key]: value } : previous));
 
+  const updateMitraName = (name: string) =>
+    setForm((previous) => {
+      if (!previous) return previous;
+      const matches = mitraEntriesForName(name, mitraOptions);
+      const locations = new Set(matches.flatMap((mitra) => mitra.locations));
+      return {
+        ...previous,
+        mitra_name: name,
+        station: locations.has(previous.station) ? previous.station : '',
+      };
+    });
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selected || !form) return;
+    if (!mitraEntriesForName(form.mitra_name, mitraOptions).length) {
+      setError('Pilih nama mitra/dealer dari opsi yang tersedia.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     setSubmissionProgress({ phase: 'SENDING' });
@@ -182,7 +239,7 @@ export const TicketingView: React.FC = () => {
         customerId: selected.customerId,
         payload: {
           title: form.title,
-          description: form.description,
+          description: form.description.trim(),
           solution: form.solution,
           error_category: form.error_category,
           priority: form.priority,
@@ -200,7 +257,6 @@ export const TicketingView: React.FC = () => {
         },
         entity: {
           ...(form.entity_email.trim() ? { entity_email: form.entity_email.trim() } : {}),
-          ...(form.hardware_serial_number.trim() ? { hardware_serial_number: form.hardware_serial_number.trim() } : {}),
           ...(form.additional_creator.trim() ? { additional_creator: form.additional_creator.trim() } : {}),
         },
         mitra_data: { name: form.mitra_name.trim(), station: form.station.trim() || null },
@@ -269,15 +325,17 @@ export const TicketingView: React.FC = () => {
       )}
 
       <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-800 dark:bg-gray-900">
-        <label className="relative block max-w-xl text-xs font-semibold text-gray-600 dark:text-gray-300">
+        <label className="block max-w-xl text-xs font-semibold text-gray-600 dark:text-gray-300">
           Cari pelanggan
-          <Search className="pointer-events-none absolute left-3 top-8 h-4 w-4 text-gray-400" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Cari nama atau nomor pelanggan"
-            className="mt-1.5 w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-9 pr-3 text-sm font-normal text-gray-900 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-          />
+          <span className="relative mt-1.5 block">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Cari nama atau nomor pelanggan"
+              className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-12 pr-4 text-sm font-normal text-gray-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+            />
+          </span>
         </label>
       </section>
 
@@ -374,7 +432,7 @@ export const TicketingView: React.FC = () => {
 
       {selected && form && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 sm:p-5"
+          className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto bg-slate-950/60 p-2 sm:items-center sm:p-5"
           role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget && !submitting) {
@@ -384,7 +442,7 @@ export const TicketingView: React.FC = () => {
           }}
         >
           <section
-            className="max-h-[95vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+            className="coreui-modal my-auto max-h-[calc(100dvh-1rem)] w-full max-w-4xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-4 shadow-2xl dark:border-gray-700 dark:bg-gray-900 sm:max-h-[calc(100dvh-2rem)] sm:p-5"
             role="dialog"
             aria-modal="true"
             aria-labelledby="ticketing-modal-title"
@@ -462,44 +520,62 @@ export const TicketingView: React.FC = () => {
                 </label>
                 <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">
                   {fieldLabels.priority}
-                  <select
-                    value={form.priority}
-                    onChange={(event) => update('priority', event.target.value)}
-                    required
-                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                  >
-                    <option value="LOW">Rendah</option>
-                    <option value="MEDIUM">Sedang</option>
-                    <option value="HIGH">Tinggi</option>
-                    <option value="CRITICAL">Kritis</option>
-                  </select>
+                  <div className="relative mt-1">
+                    <select
+                      value={form.priority}
+                      onChange={(event) => update('priority', event.target.value)}
+                      required
+                      className="block w-full appearance-none rounded-lg border border-gray-300 bg-white py-2.5 pl-3 pr-12 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                    >
+                      <option value="LOW">Rendah</option>
+                      <option value="MEDIUM">Sedang</option>
+                      <option value="HIGH">Tinggi</option>
+                      <option value="CRITICAL">Kritis</option>
+                    </select>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400"
+                    />
+                  </div>
                 </label>
                 <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">
                   {fieldLabels.severity}
-                  <select
-                    value={form.severity}
-                    onChange={(event) => update('severity', event.target.value)}
-                    required
-                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                  >
-                    <option value="LOW">Rendah</option>
-                    <option value="MEDIUM">Sedang</option>
-                    <option value="HIGH">Tinggi</option>
-                    <option value="CRITICAL">Kritis</option>
-                  </select>
+                  <div className="relative mt-1">
+                    <select
+                      value={form.severity}
+                      onChange={(event) => update('severity', event.target.value)}
+                      required
+                      className="block w-full appearance-none rounded-lg border border-gray-300 bg-white py-2.5 pl-3 pr-12 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                    >
+                      <option value="LOW">Rendah</option>
+                      <option value="MEDIUM">Sedang</option>
+                      <option value="HIGH">Tinggi</option>
+                      <option value="CRITICAL">Kritis</option>
+                    </select>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400"
+                    />
+                  </div>
                 </label>
                 <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">
                   {fieldLabels.ticket_type}
-                  <select
-                    value={form.ticket_type}
-                    onChange={(event) => update('ticket_type', event.target.value)}
-                    required
-                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                  >
-                    <option value="FWA">FWA</option>
-                    <option value="FTTH">FTTH</option>
-                    <option value="FWA+FTTH">FWA dan FTTH</option>
-                  </select>
+                  <div className="relative mt-1">
+                    <select
+                      value={form.ticket_type}
+                      onChange={(event) => update('ticket_type', event.target.value)}
+                      required
+                      className="block w-full appearance-none rounded-lg border border-gray-300 bg-white py-2.5 pl-3 pr-12 text-sm text-gray-900 focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                    >
+                      <option value="FWA">FWA</option>
+                      <option value="FTTH">FTTH</option>
+                      <option value="FWA+FTTH">FWA dan FTTH</option>
+                    </select>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400"
+                    />
+                  </div>
                 </label>
                 <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">
                   Interval pengingat (menit)
@@ -528,18 +604,129 @@ export const TicketingView: React.FC = () => {
                   Data teknis tambahan (nama mitra wajib)
                 </summary>
                 <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                  {(
-                    ['entity_email', 'hardware_serial_number', 'additional_creator', 'mitra_name', 'station'] as const
-                  ).map((key) => (
+                  {selected?.mitraMatch.status === 'MATCHED' && (
+                    <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 md:col-span-2">
+                      Mitra terdekat di FWA berjarak{' '}
+                      {Math.round(selected.mitraMatch.candidates[0]?.distanceMeters ?? 0)} m (≤
+                      {validationConfig.TICKETING_AUTO_MATCH_MAX_METERS} m). Pastikan hasilnya benar.
+                    </p>
+                  )}
+                  {selected?.mitraMatch.status === 'RECOMMENDED' && (
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200 md:col-span-2">
+                      Rekomendasi terdekat ({validationConfig.TICKETING_AUTO_MATCH_MAX_METERS + 1}–
+                      {validationConfig.TICKETING_RECOMMENDATION_MAX_METERS} m) sudah terisi sebagai pilihan awal:{' '}
+                      {selected.mitraMatch.candidates
+                        .map((candidate) => `${candidate.name} (${Math.round(candidate.distanceMeters)} m)`)
+                        .join(', ')}
+                      . Konfirmasi dengan memilih mitra secara manual.
+                    </p>
+                  )}
+                  {selected?.mitraMatch.status === 'AMBIGUOUS' && (
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200 md:col-span-2">
+                      Pilihan awal adalah mitra FWA terdekat: {selected.mitraMatch.candidates[0]?.name} (
+                      {Math.round(selected.mitraMatch.candidates[0]?.distanceMeters ?? 0)} m). Alternatif dalam radius
+                      auto-match (≤{validationConfig.TICKETING_AUTO_MATCH_MAX_METERS} m):{' '}
+                      {selected.mitraMatch.candidates
+                        .slice(1)
+                        .map((candidate) => `${candidate.name} (${Math.round(candidate.distanceMeters)} m)`)
+                        .join(', ') || 'tidak ada'}
+                      . Pastikan pilihan benar sebelum mengirim tiket.
+                    </p>
+                  )}
+                  {selected?.mitraMatch.status === 'FAR' && (
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200 md:col-span-2">
+                      Mitra FWA terdekat {selected.mitraMatch.candidates[0]?.name} berjarak{' '}
+                      {Math.round(selected.mitraMatch.candidates[0]?.distanceMeters ?? 0)} m (&gt;
+                      {validationConfig.TICKETING_RECOMMENDATION_MAX_METERS} m). Periksa koordinat dan pilih manual.
+                    </p>
+                  )}
+                  {selected?.mitraMatch.status === 'UNAVAILABLE' && (
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200 md:col-span-2">
+                      Lookup koordinat FWA belum tersedia. Pilih mitra secara manual.
+                    </p>
+                  )}
+                  {selected?.mitraMatch.status === 'NOT_FOUND' && (
+                    <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200 md:col-span-2">
+                      {selected.validatedCoordinates
+                        ? 'Tidak ditemukan mitra FWA dalam radius 5 km; pilih mitra secara manual.'
+                        : 'Koordinat tervalidasi tidak tersedia; pilih mitra secara manual.'}
+                    </p>
+                  )}
+                  <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                    Koordinat tervalidasi
+                    <input
+                      readOnly
+                      value={
+                        selected?.validatedCoordinates
+                          ? `${selected.validatedCoordinates.latitude.toFixed(7)}, ${selected.validatedCoordinates.longitude.toFixed(7)}`
+                          : 'Tidak tersedia'
+                      }
+                      className="mt-1 block w-full rounded-lg border border-gray-300 bg-gray-100 px-3 py-2.5 text-sm font-normal text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                    />
+                    <span className="mt-1 block font-normal text-gray-500 dark:text-gray-400">
+                      Koordinat validasi customer; CPE tidak diisi.
+                    </span>
+                  </label>
+                  {(['entity_email', 'additional_creator', 'mitra_name', 'station'] as const).map((key) => (
                     <label key={key} className="text-xs font-semibold text-gray-600 dark:text-gray-300">
                       {fieldLabels[key]}
                       <input
                         value={form[key]}
-                        onChange={(event) => update(key, event.target.value)}
+                        onChange={(event) =>
+                          key === 'mitra_name' ? updateMitraName(event.target.value) : update(key, event.target.value)
+                        }
                         type={key === 'entity_email' ? 'email' : 'text'}
+                        placeholder={
+                          key === 'mitra_name'
+                            ? 'Cari dan pilih mitra/dealer'
+                            : key === 'station'
+                              ? 'Pilih station/lokasi terkait'
+                              : undefined
+                        }
+                        list={
+                          key === 'mitra_name'
+                            ? 'ticketing-mitra-options'
+                            : key === 'station'
+                              ? 'ticketing-station-options'
+                              : undefined
+                        }
                         required={key === 'mitra_name'}
                         className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-normal text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                       />
+                      {key === 'mitra_name' && (
+                        <datalist id="ticketing-mitra-options">
+                          {mitraOptions.map((mitra, index) => (
+                            <option
+                              key={`${mitra.code}-${index}`}
+                              value={mitra.name}
+                              label={`${mitra.code ?? 'Tanpa kode'} · ${mitra.locations.length} site/lokasi`}
+                            />
+                          ))}
+                        </datalist>
+                      )}
+                      {key === 'mitra_name' && mitraLoadError && (
+                        <span className="mt-1 block font-normal text-rose-600 dark:text-rose-400">
+                          Daftar mitra gagal dimuat: {mitraLoadError}
+                        </span>
+                      )}
+                      {key === 'station' && (
+                        <>
+                          <datalist id="ticketing-station-options">
+                            {stationOptions.map((station) => (
+                              <option key={station} value={station} />
+                            ))}
+                          </datalist>
+                          <span className="mt-1 block font-normal text-gray-500 dark:text-gray-400">
+                            {matchingMitras.length > 1
+                              ? 'Nama mitra duplikat di sumber; pilih station/lokasi yang sesuai.'
+                              : matchingMitras.length === 0
+                                ? 'Pilih mitra terdaftar untuk melihat station/lokasinya.'
+                                : stationOptions.length > 0
+                                  ? `${stationOptions.length} station/lokasi tersedia untuk mitra ini.`
+                                  : 'Belum ada site/lokasi terdaftar untuk mitra ini.'}
+                          </span>
+                        </>
+                      )}
                     </label>
                   ))}
                 </div>
@@ -552,14 +739,14 @@ export const TicketingView: React.FC = () => {
                     setForm(null);
                   }}
                   disabled={submitting}
-                  className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                  className="coreui-modal-secondary rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={submitting || currentAdmin?.role === 'VIEWER'}
-                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="coreui-modal-primary inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                   Kirim tiket
@@ -572,11 +759,11 @@ export const TicketingView: React.FC = () => {
 
       {submissionProgress && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
+          className="fixed inset-0 z-[1110] flex items-start justify-center overflow-y-auto bg-slate-950/70 p-2 sm:items-center sm:p-5"
           role="presentation"
         >
           <section
-            className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+            className="coreui-modal my-auto max-h-[calc(100dvh-1rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-4 shadow-2xl dark:border-gray-700 dark:bg-gray-900 sm:max-h-[calc(100dvh-2rem)] sm:p-5"
             role="dialog"
             aria-modal="true"
             aria-labelledby="ticket-submit-progress-title"
@@ -704,7 +891,7 @@ export const TicketingView: React.FC = () => {
                 type="button"
                 onClick={() => void finishSubmission()}
                 disabled={submitting}
-                className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                className="coreui-modal-primary rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 {submissionProgress.phase === 'SENDING' ? 'Menunggu...' : 'Selesai'}
               </button>

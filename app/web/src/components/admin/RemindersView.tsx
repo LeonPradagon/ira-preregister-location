@@ -9,6 +9,8 @@ import {
   MessageCircle,
   RefreshCw,
   Search,
+  Settings2,
+  UserRound,
   XCircle,
 } from 'lucide-react';
 import { mapApiCustomer, mapApiSession, useApp } from '../../context/AppContext';
@@ -59,8 +61,12 @@ const sourceClassName = (source: ReminderSource) => {
   return 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300';
 };
 
-const sourceIcon = (source: ReminderSource) =>
-  source === 'UNOPENED_LINK' ? '⚙' : source === 'ADMIN_MANUAL' ? '✦' : source === 'SYSTEM_RECOVERY' ? '↻' : '✓';
+const SourceIcon: React.FC<{ source: ReminderSource }> = ({ source }) => {
+  if (source === 'UNOPENED_LINK') return <Settings2 className="h-3.5 w-3.5" aria-hidden="true" />;
+  if (source === 'ADMIN_MANUAL') return <UserRound className="h-3.5 w-3.5" aria-hidden="true" />;
+  if (source === 'SYSTEM_RECOVERY') return <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />;
+  return <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />;
+};
 
 export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerification }) => {
   const { validationConfig, dashboardSummary } = useApp();
@@ -74,7 +80,9 @@ export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerificati
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<TablePageSize>(25);
   const [cursors, setCursors] = useState<Record<number, string>>({});
-  const [sortKey, setSortKey] = useState<'customer' | 'step' | 'recipient' | 'schedule' | 'status'>('schedule');
+  const [sortKey, setSortKey] = useState<'recent' | 'customer' | 'step' | 'recipient' | 'schedule' | 'status'>(
+    'recent',
+  );
   const [sortDirection, setSortDirection] = useState<TableSortDirection>('desc');
 
   useEffect(() => {
@@ -91,7 +99,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerificati
         pageSize,
         search: searchTerm,
         status: statusFilter,
-        sortBy: sortKey,
+        sortBy: sortKey === 'recent' ? undefined : sortKey,
         sortDirection,
         cursor: page === 1 ? undefined : cursors[page],
       });
@@ -115,21 +123,20 @@ export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerificati
     void load();
   }, [page, pageSize, searchTerm, statusFilter, sortKey, sortDirection]);
 
-  const sortedRows = useMemo(
-    () =>
-      sortTableRows(
-        rows,
-        (row) => {
-          if (sortKey === 'customer') return row.customer.name;
-          if (sortKey === 'step') return row.reminder.reminderNumber;
-          if (sortKey === 'recipient') return row.session.registeredPhoneSnapshot;
-          if (sortKey === 'status') return row.reminder.status;
-          return new Date(row.reminder.sentAt || row.reminder.scheduledAt).getTime();
-        },
-        sortDirection,
-      ),
-    [rows, sortDirection, sortKey],
-  );
+  const sortedRows = useMemo(() => {
+    if (sortKey === 'recent') return rows;
+    return sortTableRows(
+      rows,
+      (row) => {
+        if (sortKey === 'customer') return row.customer.name;
+        if (sortKey === 'step') return row.reminder.reminderNumber;
+        if (sortKey === 'recipient') return row.session.registeredPhoneSnapshot;
+        if (sortKey === 'status') return row.reminder.status;
+        return new Date(row.reminder.sentAt || row.reminder.scheduledAt).getTime();
+      },
+      sortDirection,
+    );
+  }, [rows, sortDirection, sortKey]);
 
   const toggleSort = (nextKey: 'customer' | 'step' | 'recipient' | 'schedule' | 'status') => {
     if (sortKey === nextKey) setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
@@ -279,20 +286,45 @@ export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerificati
       >
         <thead className="border-b border-slate-200 bg-slate-50/80 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
           <tr>
-            <SortableTableHeader active={sortKey === 'customer'} direction={sortDirection} onClick={() => toggleSort('customer')} className="px-4 py-3">
+            <SortableTableHeader
+              active={sortKey === 'customer'}
+              direction={sortDirection}
+              onClick={() => toggleSort('customer')}
+              className="px-4 py-3"
+            >
               {t('reminders.customerAndCheck')}
             </SortableTableHeader>
-            <SortableTableHeader active={sortKey === 'step'} direction={sortDirection} onClick={() => toggleSort('step')} className="px-4 py-3">
+            <SortableTableHeader
+              active={sortKey === 'step'}
+              direction={sortDirection}
+              onClick={() => toggleSort('step')}
+              className="px-4 py-3"
+            >
               {t('reminders.step')}
             </SortableTableHeader>
             <th className="px-4 py-3">{t('reminders.source')}</th>
-            <SortableTableHeader active={sortKey === 'recipient'} direction={sortDirection} onClick={() => toggleSort('recipient')} className="px-4 py-3">
+            <SortableTableHeader
+              active={sortKey === 'recipient'}
+              direction={sortDirection}
+              onClick={() => toggleSort('recipient')}
+              className="px-4 py-3"
+            >
               {t('reminders.recipient')}
             </SortableTableHeader>
-            <SortableTableHeader active={sortKey === 'schedule'} direction={sortDirection} onClick={() => toggleSort('schedule')} className="px-4 py-3">
+            <SortableTableHeader
+              active={sortKey === 'schedule'}
+              direction={sortDirection}
+              onClick={() => toggleSort('schedule')}
+              className="px-4 py-3"
+            >
               {t('reminders.schedule')}
             </SortableTableHeader>
-            <SortableTableHeader active={sortKey === 'status'} direction={sortDirection} onClick={() => toggleSort('status')} className="px-4 py-3">
+            <SortableTableHeader
+              active={sortKey === 'status'}
+              direction={sortDirection}
+              onClick={() => toggleSort('status')}
+              className="px-4 py-3"
+            >
               {t('reminders.deliveryStatus')}
             </SortableTableHeader>
             <th className="px-4 py-3 text-right">{t('table.action')}</th>
@@ -317,7 +349,7 @@ export const RemindersView: React.FC<RemindersViewProps> = ({ onSelectVerificati
                     reminder.reminderSource ?? 'CUSTOMER_SELECTED',
                   )}`}
                 >
-                  <span aria-hidden="true">{sourceIcon(reminder.reminderSource ?? 'CUSTOMER_SELECTED')}</span>
+                  <SourceIcon source={reminder.reminderSource ?? 'CUSTOMER_SELECTED'} />
                   {t(`reminders.source.${reminder.reminderSource ?? 'CUSTOMER_SELECTED'}`)}
                 </span>
                 <div className="mt-1 text-[10px] leading-4 text-slate-500 dark:text-slate-400">

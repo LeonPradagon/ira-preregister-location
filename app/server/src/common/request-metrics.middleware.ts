@@ -7,8 +7,11 @@ import { MetricsService } from './metrics.service.js';
 import { AUTH_ANONYMOUS_ACTOR_ID } from '../auth/auth-audit.js';
 import type { RequestAdmin } from './request-user.js';
 
-const normalizePath = (path: string) =>
-  path.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':id').replace(/\/\d+(?=\/|$)/g, '/:id');
+export const normalizeRequestPath = (path: string) =>
+  path
+    .replace(/(\/v1\/public\/verifications\/)[^/]+/gi, '$1:token')
+    .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':id')
+    .replace(/\/\d+(?=\/|$)/g, '/:id');
 
 export const shouldRecordAuditResponse = (path: string, method: string, statusCode: number) =>
   path.startsWith('/v1/') &&
@@ -24,13 +27,13 @@ export class RequestMetricsMiddleware implements NestMiddleware {
     const startedAt = performance.now();
     response.once('finish', () => {
       const durationMs = performance.now() - startedAt;
-      const route = normalizePath(request.path);
+      const route = normalizeRequestPath(request.path);
       this.metrics.increment(`http_requests_total.${request.method}.${route}.${response.statusCode}`);
       this.metrics.observe(`http_request_duration_ms.${request.method}.${route}`, durationMs);
       if (response.statusCode >= 500) this.metrics.increment('http_errors_total.5xx');
       else if (response.statusCode >= 400) this.metrics.increment('http_errors_total.4xx');
-      void this.recordAuditResponse(request, response).catch((error) => {
-        console.error('Failed to record HTTP audit status', error);
+      void this.recordAuditResponse(request, response).catch(() => {
+      console.error('Failed to record HTTP audit status');
       });
     });
     next();
@@ -55,15 +58,16 @@ export class RequestMetricsMiddleware implements NestMiddleware {
     }
 
     const admin = (request as Request & { admin?: RequestAdmin }).admin;
+    const safePath = normalizeRequestPath(request.path);
     await db.insert(auditLogs).values({
       actorUserId: admin?.id ?? AUTH_ANONYMOUS_ACTOR_ID,
       actorName: admin?.name ?? 'Unknown account',
       action: 'HTTP_RESPONSE',
       entityType: 'HTTP_REQUEST',
-      entityId: request.path,
+      entityId: safePath,
       after: {
         method: request.method,
-        path: request.path,
+        path: safePath,
         httpStatusCode: response.statusCode,
         correlationId,
       },

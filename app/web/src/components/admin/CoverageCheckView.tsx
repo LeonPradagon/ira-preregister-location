@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Loader2, MapPin, RefreshCw, Search, UserRound, Wifi } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Loader2, MapPin, RefreshCw, Search, UserRound, Wifi } from 'lucide-react';
 import { api } from '../../lib/apiClient';
 import type { CoverageBatchApi } from '../../lib/apiClient';
 import type { CoverageCandidate, CoverageCandidateStatus } from '../../types';
@@ -92,9 +92,10 @@ export const CoverageCheckView: React.FC = () => {
 
   const allVisibleSelected = items.length > 0 && items.every((item) => selected.has(item.verificationId));
   const selectedCount = selected.size;
+  const batchIsRunning = Boolean(batch && !['COMPLETED', 'PARTIAL_FAILED', 'FAILED'].includes(batch.status));
   const batchProgress = useMemo(() => {
     if (!batch || !batch.totalCount) return 0;
-    return Math.round(((batch.completedCount + batch.failedCount) / batch.totalCount) * 100);
+    return Math.min(100, Math.round(((batch.completedCount + batch.failedCount) / batch.totalCount) * 100));
   }, [batch]);
 
   const toggle = (verificationId: string) => {
@@ -168,35 +169,62 @@ export const CoverageCheckView: React.FC = () => {
       </section>
 
       {batch && (
-        <section className="rounded-2xl border border-indigo-200 bg-white p-5 shadow-xs dark:border-indigo-900 dark:bg-gray-900">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                {t('coverage.batchProgress', { status: batch.status })}
-              </p>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {t('coverage.batchCounts', {
-                  completed: batch.completedCount,
-                  failed: batch.failedCount,
-                  total: batch.totalCount,
-                })}
-              </p>
-            </div>
-            <span className="text-sm font-bold tabular-nums text-indigo-700 dark:text-indigo-300">
-              {batchProgress}%
+        <section
+          aria-live="polite"
+          className={`overflow-hidden rounded-2xl border p-5 shadow-xs sm:p-6 ${
+            batchIsRunning
+              ? 'border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-white dark:border-indigo-900 dark:from-indigo-950/50 dark:via-gray-900 dark:to-gray-900'
+              : 'border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-white dark:border-emerald-900 dark:from-emerald-950/40 dark:via-gray-900 dark:to-gray-900'
+          }`}
+        >
+          <div className="flex items-start gap-4">
+            <span
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                batchIsRunning
+                  ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/70 dark:text-indigo-300'
+                  : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/60 dark:text-emerald-300'
+              }`}
+            >
+              {batchIsRunning ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle2 className="h-5 w-5" />}
             </span>
-          </div>
-          <div
-            className="mt-4 h-2.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"
-            role="progressbar"
-            aria-valuenow={batchProgress}
-            aria-valuemin={0}
-            aria-valuemax={100}
-          >
-            <div
-              className="h-full rounded-full bg-indigo-600 transition-all dark:bg-indigo-400"
-              style={{ width: `${batchProgress}%` }}
-            />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {batchIsRunning ? t('coverage.batchRunning') : t('coverage.batchFinished')}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                    {t('coverage.batchCounts', {
+                      completed: batch.completedCount,
+                      failed: batch.failedCount,
+                      total: batch.totalCount,
+                    })}
+                  </p>
+                </div>
+                <span
+                  className={`text-lg font-bold tabular-nums ${
+                    batchIsRunning ? 'text-indigo-700 dark:text-indigo-300' : 'text-emerald-700 dark:text-emerald-300'
+                  }`}
+                >
+                  {batchProgress}%
+                </span>
+              </div>
+              <div
+                className="mt-4 h-2.5 overflow-hidden rounded-full bg-gray-200/80 dark:bg-gray-700"
+                role="progressbar"
+                aria-label={batchIsRunning ? t('coverage.batchRunning') : t('coverage.batchFinished')}
+                aria-valuenow={batchProgress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <div
+                  className={`h-full rounded-full transition-[width] duration-500 ${
+                    batchIsRunning ? 'bg-indigo-600 dark:bg-indigo-400' : 'bg-emerald-600 dark:bg-emerald-400'
+                  }`}
+                  style={{ width: `${batchProgress}%` }}
+                />
+              </div>
+            </div>
           </div>
         </section>
       )}
@@ -217,17 +245,23 @@ export const CoverageCheckView: React.FC = () => {
           </label>
           <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">
             {t('coverage.status')}
-            <select
-              value={status}
-              onChange={(event) => setStatus(event.target.value as CoverageCandidateStatus | 'ALL')}
-              className="mt-1.5 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-            >
-              {statusOptions.map((option) => (
-                <option key={option} value={option}>
-                  {t(`coverage.status.${option}`)}
-                </option>
-              ))}
-            </select>
+            <span className="relative mt-1.5 block">
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value as CoverageCandidateStatus | 'ALL')}
+                className="block h-[42px] w-full appearance-none rounded-lg border border-gray-300 bg-white py-0 pl-4 pr-12 text-sm text-gray-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              >
+                {statusOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {t(`coverage.status.${option}`)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                aria-hidden="true"
+                className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400"
+              />
+            </span>
           </label>
           <button
             type="button"

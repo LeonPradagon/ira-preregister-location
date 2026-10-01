@@ -184,61 +184,61 @@ export const AuditLogsView: React.FC = () => {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="relative min-w-0 flex-1">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_12rem_14rem_auto] lg:items-end">
+          <div className="relative min-w-0">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               placeholder={t('audit.search')}
-              className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:ring-indigo-950"
+               className="h-10 w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:ring-indigo-950"
             />
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+          <label className="grid min-w-0 gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+            <span className="inline-flex items-center gap-1.5">
               <Filter className="h-3.5 w-3.5" />
-              <span>{t('audit.actor')}</span>
-              <select
-                value={actorFilter}
-                onChange={(event) => setActorFilter(event.target.value)}
-                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-              >
-                <option value="ALL">{t('audit.all')}</option>
-                <option value="CUSTOMER">{t('audit.customer')}</option>
-                <option value="SYSTEM">{t('audit.system')}</option>
-                <option value="ADMIN">{t('audit.admin')}</option>
-                <option value="AUTH">{t('audit.auth')}</option>
-              </select>
-            </label>
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-              <span>{t('audit.entity')}</span>
-              <select
-                value={entityFilter}
-                onChange={(event) => setEntityFilter(event.target.value)}
-                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-              >
-                <option value="ALL">{t('audit.all')}</option>
-                <option value="VERIFICATION_SESSION">{t('audit.verification')}</option>
-                <option value="VALIDATION">{t('audit.validation')}</option>
-                <option value="CUSTOMER">{t('audit.customer')}</option>
-                <option value="ADDRESS">{t('audit.address')}</option>
-                <option value="REMINDER">{t('audit.reminder')}</option>
-                <option value="REVIEW">{t('audit.review')}</option>
-                <option value="CONFIG">{t('audit.config')}</option>
-                <option value="CAMPAIGN">{t('audit.campaign')}</option>
-                <option value="CAMPAIGN_ITEM">{t('audit.campaignItem')}</option>
-                <option value="DELIVERY">{t('audit.delivery')}</option>
-                <option value="AUTH">{t('audit.auth')}</option>
-                <option value="HTTP_REQUEST">{t('audit.httpRequest')}</option>
-              </select>
-            </label>
-          </div>
+              {t('audit.actor')}
+            </span>
+            <select
+              value={actorFilter}
+              onChange={(event) => setActorFilter(event.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+            >
+              <option value="ALL">{t('audit.all')}</option>
+              <option value="CUSTOMER">{t('audit.customer')}</option>
+              <option value="SYSTEM">{t('audit.system')}</option>
+              <option value="ADMIN">{t('audit.admin')}</option>
+              <option value="AUTH">{t('audit.auth')}</option>
+            </select>
+          </label>
+          <label className="grid min-w-0 gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+            <span>{t('audit.entity')}</span>
+            <select
+              value={entityFilter}
+              onChange={(event) => setEntityFilter(event.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+            >
+              <option value="ALL">{t('audit.all')}</option>
+              <option value="VERIFICATION_SESSION">{t('audit.verification')}</option>
+              <option value="VALIDATION">{t('audit.validation')}</option>
+              <option value="CUSTOMER">{t('audit.customer')}</option>
+              <option value="ADDRESS">{t('audit.address')}</option>
+              <option value="REMINDER">{t('audit.reminder')}</option>
+              <option value="REVIEW">{t('audit.review')}</option>
+              <option value="CONFIG">{t('audit.config')}</option>
+              <option value="CAMPAIGN">{t('audit.campaign')}</option>
+              <option value="CAMPAIGN_ITEM">{t('audit.campaignItem')}</option>
+              <option value="DELIVERY">{t('audit.delivery')}</option>
+              <option value="AUTH">{t('audit.auth')}</option>
+              <option value="HTTP_REQUEST">{t('audit.httpRequest')}</option>
+            </select>
+          </label>
           <button
             type="button"
             onClick={() => void load()}
             disabled={loading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+             className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 sm:w-auto"
             aria-label={t('audit.refresh')}
           >
             {loading ? <AppLoader size={18} label={t('audit.apiLoading')} /> : <RefreshCw className="h-4 w-4" />}

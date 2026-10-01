@@ -18,6 +18,7 @@ import { CampaignController } from './modules/campaigns/campaign.controller.js';
 import { CampaignService } from './modules/campaigns/campaign.service.js';
 import { WhatsAppComplianceService } from './integrations/whatsapp/whatsapp-compliance.service.js';
 import { WhatsAppWebhookController } from './integrations/whatsapp/whatsapp-webhook.controller.js';
+import { WhatsAppWebhookGuard } from './integrations/whatsapp/whatsapp-webhook.guard.js';
 import { CustomerImportService } from './modules/imports/customer-import.service.js';
 import { RegionsController } from './modules/regions/regions.controller.js';
 import { RegionsService } from './modules/regions/regions.service.js';
@@ -46,6 +47,7 @@ import { TicketingService } from './modules/ticketing/ticketing.service.js';
     AdminExportService,
     CampaignService,
     WhatsAppComplianceService,
+    WhatsAppWebhookGuard,
     CustomerImportService,
     RegionsService,
     ReadCacheService,

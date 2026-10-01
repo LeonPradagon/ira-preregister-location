@@ -27,7 +27,7 @@ Prasyarat: Docker Engine/Desktop dengan Linux containers dan Docker Compose 2.24
 
    Linux/macOS: `cp .env.example .env.prod`.
 
-2. Edit `.env.prod`: isi `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET` (minimal 32 karakter acak), `SEED_ADMIN_EMAIL`, dan `SEED_ADMIN_PASSWORD`. Ubah `COMPOSE_ENV_FILE=./.env` menjadi `COMPOSE_ENV_FILE=./.env.prod`. Untuk password database gunakan karakter yang aman dalam URL, misalnya string hex acak, karena Compose menyusun `DATABASE_URL` dari nilai tersebut.
+2. Edit `.env.prod`: isi `POSTGRES_PASSWORD`, `APP_DATABASE_PASSWORD` (password berbeda, acak minimal 32 karakter), `BETTER_AUTH_SECRET` (minimal 32 karakter acak), `SEED_ADMIN_EMAIL`, dan `SEED_ADMIN_PASSWORD`. Ubah `COMPOSE_ENV_FILE=./.env` menjadi `COMPOSE_ENV_FILE=./.env.prod`. Buat password DB dengan format URL-safe, misalnya `openssl rand -hex 32`. Migration otomatis membuat role aplikasi non-superuser; API dan worker memakai role itu, bukan `POSTGRES_USER`.
 
    Untuk uji di komputer sendiri, URL contoh sudah memakai `http://localhost:8080`. Untuk server publik, ubah **keduanya**, `WEB_ORIGIN` dan `BETTER_AUTH_URL`, menjadi domain HTTPS aplikasi, misalnya `https://preregist.example.com`. Arahkan reverse proxy HTTPS ke `WEB_PORT` (default `8080`). Pertahankan `VITE_API_URL=/v1` agar browser memakai domain yang sama. GPS browser memerlukan HTTPS atau localhost.
 
@@ -50,7 +50,7 @@ Compose menjalankan PostgreSQL/PostGIS, Redis, migration, bootstrap admin, API, 
 | API gateway langsung, jika diperlukan | `http://localhost:3000/v1/health` |
 | PostgreSQL dan Redis | Hanya network internal Docker |
 
-Database, Redis, dan file import disimpan dalam named volume. `.env` tidak disalin ke image. `DATABASE_URL`, `DATABASE_SSL=false`, `REDIS_URL`, dan lokasi penyimpanan import diatur otomatis untuk service internal. Provider WhatsApp default `disabled`; aktifkan Mekari setelah credential, channel, dan template siap.
+Database, Redis, dan file import disimpan dalam named volume. `.env` tidak disalin ke image. `DATABASE_URL`, `DATABASE_SSL=false`, `REDIS_URL`, dan lokasi penyimpanan import diatur otomatis untuk service internal. Password `POSTGRES_PASSWORD` hanya dipakai PostgreSQL dan migration; password admin bootstrap hanya dipakai service seed. Callback WhatsApp wajib memakai header secret + timestamp + event ID + HMAC sesuai komentar `WHATSAPP_WEBHOOK_SECRET` di `.env.example`; konfigurasi callback provider sebelum mengaktifkannya. Provider WhatsApp default `disabled`; aktifkan Mekari setelah credential, channel, dan template siap.
 
 ```bash
 # Status, diagnosis, dan update aplikasi
@@ -114,7 +114,7 @@ Migration SQL bernomor dijalankan berurutan dan dicatat di `app_migrations`. Bas
 
 Aturan lokasi tersedia di Validation Settings dan environment: `GPS_MAX_ACCURACY_METERS`, `HOME_RADIUS_METERS`, `STREET_MATCH_THRESHOLD`, `ADDRESS_SCORE_THRESHOLD`, dan `ENABLE_AUTO_APPROVAL`. Dengan auto-approval aktif, konfirmasi data, GPS yang stabil/akurat, koordinat master presisi, dan jarak dalam `HOME_RADIUS_METERS` akan diverifikasi otomatis berdasarkan kecocokan koordinat; hasil yang belum memenuhi syarat ditahan untuk pemeriksaan.
 
-Untuk Mekari/Qontak, isi `WHATSAPP_PROVIDER=mekari`, `WHATSAPP_BASE_URL`, credential HMAC, channel integration ID, dan template ID undangan/reminder. Nama serta parameter template harus sesuai konfigurasi Qontak yang sudah disetujui. Webhook delivery: `POST /v1/webhooks/whatsapp/status` dengan secret webhook. Opt-out aktif selalu memblokir pengiriman. Metadata opt-in yang tersedia tetap disimpan; aplikasi tidak meminta konfirmasi opt-in WhatsApp tambahan.
+Untuk Mekari/Qontak, isi `WHATSAPP_PROVIDER=mekari`, `WHATSAPP_BASE_URL`, credential HMAC, channel integration ID, dan template ID undangan/reminder. Nama serta parameter template harus sesuai konfigurasi Qontak yang sudah disetujui. Webhook `POST /v1/webhooks/whatsapp/{status,inbound}` wajib mengirim `x-whatsapp-webhook-secret`, `x-whatsapp-webhook-timestamp`, `x-whatsapp-webhook-id`, dan `x-whatsapp-webhook-signature`. Signature format `sha256=<hex>` memakai HMAC-SHA256 dengan secret yang sama atas bytes `timestamp.eventId.rawBody`; timestamp harus dalam rentang ±5 menit dan event ID unik. Redis menolak event ID duplikat selama 10 menit; static-secret-only callback ditolak. Pastikan provider bisa membuat signature ini sebelum mengaktifkan webhook. Opt-out aktif selalu memblokir pengiriman. Metadata opt-in yang tersedia tetap disimpan; aplikasi tidak meminta konfirmasi opt-in WhatsApp tambahan.
 
 Geocoding memakai OSM Nominatim sebagai provider utama secara default, dengan Google Geocoding API sebagai fallback otomatis jika `GOOGLE_GEOCODING_API_KEY` diisi. Provider utama dapat diubah melalui `GEOCODING_PRIMARY=GOOGLE`. Jika Google tidak dikonfigurasi, aplikasi tetap mendukung provider HTTP pada `GEOCODING_*` atau langsung OSM sesuai `OSM_NOMINATIM_*`. Atur user agent OSM dengan kontak operator. API key Google hanya dibaca server-side dan tidak boleh dimasukkan ke frontend.
 

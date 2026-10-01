@@ -16,6 +16,7 @@ import type { RequestAdmin } from '../../common/request-user.js';
 import { queueNames } from '../../common/queue-names.js';
 import { campaignEligibleAddressSql, incompleteAddressSql } from '../validation/address-completeness.sql.js';
 import { campaignRecipientReservationStatuses } from '../campaigns/campaign-target.policy.js';
+import { safeCsvCell } from './csv-cell.js';
 
 export const EXPORT_MAX_DATA_ROWS = 50_000;
 
@@ -684,9 +685,8 @@ export class AdminExportService implements OnModuleDestroy {
       if (column === 6 || column === 7) return typeof value === 'number' ? value.toFixed(7) : String(value);
       return String(value);
     };
-    const escape = (value: string) => /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
     const lines = [EXPORT_HEADERS.join(',')];
-    for (const row of rows) lines.push(row.map((value, index) => escape(csvCell(value, index + 1))).join(','));
+    for (const row of rows) lines.push(row.map((value, index) => safeCsvCell(csvCell(value, index + 1))).join(','));
     return Buffer.from(`\uFEFF${lines.join('\r\n')}\r\n`, 'utf8');
   }
 

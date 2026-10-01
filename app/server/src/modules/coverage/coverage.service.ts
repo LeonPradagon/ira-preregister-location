@@ -18,6 +18,7 @@ import type { RequestAdmin } from '../../common/request-user.js';
 import { queueNames } from '../../common/queue-names.js';
 import { latestFwaCoverageValue } from './latest-fwa-coverage.sql.js';
 import { decodeCoverageCandidateCursor, encodeCoverageCandidateCursor } from '../../common/list-cursor.js';
+import { ValidationConfigService } from '../../config/validation-config.service.js';
 
 const PROVIDER_KEY = 'FWA';
 const now = () => new Date();
@@ -35,6 +36,7 @@ type CandidateRow = {
 
 @Injectable()
 export class CoverageService implements OnModuleDestroy {
+  private readonly validationConfig = new ValidationConfigService();
   private readonly connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
     maxRetriesPerRequest: null,
   }).on('error', () => undefined);
@@ -199,33 +201,31 @@ export class CoverageService implements OnModuleDestroy {
     };
   }
 
-  async enqueue(admin: RequestAdmin, input: CoverageCheckCreateInput) {
-    if (process.env.ENABLE_IRA_COVERAGE !== 'true')
-      throw new DomainError('Coverage FWA belum diaktifkan. Set ENABLE_IRA_COVERAGE=true.', 409, 'COVERAGE_DISABLED');
-    if (!process.env.FWA_COVERAGE_BASE_URL || !process.env.FWA_COVERAGE_API_KEY)
-      throw new DomainError('Konfigurasi API Coverage FWA belum lengkap.', 503, 'COVERAGE_NOT_CONFIGURED');
-
-    const query: CoverageCandidateQueryInput = { page: 1, pageSize: 5000, search: '' };
-    const rows = await db
-      .select(this.candidateSelection())
-      .from(verificationSessions)
-      .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
-      .innerJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
-      .where(and(...this.candidateFilters(query, input.verificationIds)));
-    if (!rows.length) throw new DomainError('Tidak ada verification terpilih yang eligible untuk dicek.', 409, 'NO_ELIGIBLE_COVERAGE_TARGETS');
-
+  private async enqueueRows(
+    rows: CandidateRow[],
+    requestedBy: string | null,
+    actorName: string,
+    requestedCount: number,
+    batchId: string = randomUUID(),
+    markFailedOnQueueError = true,
+  ) {
     const requestedAt = now();
-    const batchId = randomUUID();
     await db.transaction(async (tx) => {
-      await tx.insert(coverageCheckBatches).values({
-        id: batchId,
-        providerKey: PROVIDER_KEY,
-        status: 'QUEUED',
-        totalCount: rows.length,
-        requestedBy: admin.id,
-        createdAt: requestedAt,
-        updatedAt: requestedAt,
-      });
+      const [created] = await tx
+        .insert(coverageCheckBatches)
+        .values({
+          id: batchId,
+          providerKey: PROVIDER_KEY,
+          status: 'QUEUED',
+          totalCount: rows.length,
+          requestedBy,
+          createdAt: requestedAt,
+          updatedAt: requestedAt,
+        })
+        .onConflictDoNothing({ target: coverageCheckBatches.id })
+        .returning({ id: coverageCheckBatches.id });
+      if (!created) return;
+
       await tx.insert(coverageChecks).values(
         rows.map((row) => ({
           id: randomUUID(),
@@ -237,33 +237,94 @@ export class CoverageService implements OnModuleDestroy {
           latitude: String(row.latitude),
           longitude: String(row.longitude),
           status: 'QUEUED',
-          requestedBy: admin.id,
+          requestedBy,
           requestedAt,
           createdAt: requestedAt,
           updatedAt: requestedAt,
         })),
       );
       await tx.insert(auditLogs).values({
-        actorUserId: admin.id,
-        actorName: admin.name,
+        actorUserId: requestedBy ?? 'system',
+        actorName,
         action: 'COVERAGE_CHECK_QUEUED',
         entityType: 'COVERAGE_BATCH',
         entityId: batchId,
-        after: { provider: PROVIDER_KEY, requestedCount: input.verificationIds.length, queuedCount: rows.length },
+        after: { provider: PROVIDER_KEY, requestedCount, queuedCount: rows.length },
         timestamp: requestedAt,
       });
     });
 
-    try {
-      await this.queue.add('coverage-check', { batchId }, { jobId: batchId, removeOnComplete: 100, removeOnFail: 100 });
-    } catch (error) {
-      await db
-        .update(coverageCheckBatches)
-        .set({ status: 'FAILED', failedCount: rows.length, completedAt: now(), updatedAt: now() })
-        .where(eq(coverageCheckBatches.id, batchId));
-      throw error;
+    const [batch] = await db
+      .select({ status: coverageCheckBatches.status })
+      .from(coverageCheckBatches)
+      .where(eq(coverageCheckBatches.id, batchId))
+      .limit(1);
+    if (batch?.status === 'QUEUED') {
+      try {
+        await this.queue.add('coverage-check', { batchId }, { jobId: batchId, removeOnComplete: 100, removeOnFail: 100 });
+      } catch (error) {
+        if (markFailedOnQueueError)
+          await db
+            .update(coverageCheckBatches)
+            .set({ status: 'FAILED', failedCount: rows.length, completedAt: now(), updatedAt: now() })
+            .where(eq(coverageCheckBatches.id, batchId));
+        throw error;
+      }
     }
-    return { batchId, queuedCount: rows.length, skippedCount: input.verificationIds.length - rows.length };
+    return { batchId, queuedCount: rows.length };
+  }
+
+  async enqueue(admin: RequestAdmin, input: CoverageCheckCreateInput) {
+    if (!(await this.validationConfig.get()).ENABLE_IRA_COVERAGE)
+      throw new DomainError('Coverage FWA belum diaktifkan dari Aturan Pemeriksaan.', 409, 'COVERAGE_DISABLED');
+    if (!process.env.FWA_COVERAGE_BASE_URL || !process.env.FWA_COVERAGE_API_KEY)
+      throw new DomainError('Konfigurasi API Coverage FWA belum lengkap.', 503, 'COVERAGE_NOT_CONFIGURED');
+
+    const query: CoverageCandidateQueryInput = { page: 1, pageSize: 5000, search: '' };
+    const rows = await db
+      .select(this.candidateSelection())
+      .from(verificationSessions)
+      .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
+      .innerJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
+      .where(and(...this.candidateFilters(query, input.verificationIds)));
+    if (!rows.length) throw new DomainError('Tidak ada verification terpilih yang eligible untuk dicek.', 409, 'NO_ELIGIBLE_COVERAGE_TARGETS');
+    return {
+      ...(await this.enqueueRows(rows, admin.id, admin.name, input.verificationIds.length)),
+      skippedCount: input.verificationIds.length - rows.length,
+    };
+  }
+
+  async enqueueForVerifiedLocation(verificationSessionId: string, eventId: string) {
+    const config = await this.validationConfig.get();
+    if (
+      !config.ENABLE_AUTO_COVERAGE ||
+      !config.ENABLE_IRA_COVERAGE ||
+      !process.env.FWA_COVERAGE_BASE_URL ||
+      !process.env.FWA_COVERAGE_API_KEY
+    )
+      return null;
+
+    const [existing] = await db
+      .select({ status: coverageCheckBatches.status, totalCount: coverageCheckBatches.totalCount })
+      .from(coverageCheckBatches)
+      .where(eq(coverageCheckBatches.id, eventId))
+      .limit(1);
+    if (existing) {
+      if (existing.status === 'QUEUED')
+        await this.queue.add('coverage-check', { batchId: eventId }, { jobId: eventId, removeOnComplete: 100, removeOnFail: 100 });
+      return { batchId: eventId, queuedCount: existing.totalCount };
+    }
+
+    const query: CoverageCandidateQueryInput = { page: 1, pageSize: 5000, search: '' };
+    const rows = await db
+      .select(this.candidateSelection())
+      .from(verificationSessions)
+      .innerJoin(customers, eq(customers.id, verificationSessions.customerId))
+      .innerJoin(customerAddresses, eq(customerAddresses.id, verificationSessions.currentAddressId))
+      .where(and(...this.candidateFilters(query, [verificationSessionId])));
+    if (!rows.length) return null;
+
+    return this.enqueueRows(rows, null, 'Coverage Automation', rows.length, eventId, false);
   }
 
   async getBatch(batchId: string) {

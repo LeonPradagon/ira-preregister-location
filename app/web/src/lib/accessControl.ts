@@ -7,6 +7,7 @@ export type AdminCapability =
   | 'sendVerification'
   | 'manualReview'
   | 'changeValidationConfig'
+  | 'exportData'
   | 'view';
 
 const CAPABILITIES: Record<AdminCapability, readonly AdminRole[]> = {
@@ -17,6 +18,7 @@ const CAPABILITIES: Record<AdminCapability, readonly AdminRole[]> = {
   sendVerification: ['SUPER_ADMIN', 'ADMIN'],
   manualReview: ['SUPER_ADMIN', 'ADMIN', 'REVIEWER'],
   changeValidationConfig: ['SUPER_ADMIN'],
+  exportData: ['SUPER_ADMIN', 'ADMIN'],
 };
 
 export function hasCapability(role: AdminRole | undefined, capability: AdminCapability): boolean {

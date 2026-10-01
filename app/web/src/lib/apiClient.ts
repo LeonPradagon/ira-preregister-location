@@ -473,6 +473,17 @@ export interface TicketingCandidateApi {
   providerStatus: string | null;
   providerStatusForCustomer: string | null;
   providerResponse: unknown;
+  validatedCoordinates: { latitude: number; longitude: number } | null;
+  mitraMatch: {
+    status: 'MATCHED' | 'RECOMMENDED' | 'AMBIGUOUS' | 'FAR' | 'NOT_FOUND' | 'UNAVAILABLE';
+    candidates: Array<{ code: string | null; name: string; stations: string[]; distanceMeters: number }>;
+  };
+}
+
+export interface TicketingMitraApi {
+  code: string | null;
+  name: string;
+  locations: string[];
 }
 
 function queryString(query: AdminListQuery): string {
@@ -605,7 +616,16 @@ const adminApi = {
       pageSize?: number;
       search?: string;
       status?: string;
-      whatsappStatus?: 'ALL' | 'VALID_FORMAT' | 'FORMAT_INVALID' | 'NOT_CHECKED' | 'ACCEPTED' | 'DELIVERED' | 'READ' | 'FAILED' | 'NOT_ON_WHATSAPP';
+      whatsappStatus?:
+        | 'ALL'
+        | 'VALID_FORMAT'
+        | 'FORMAT_INVALID'
+        | 'NOT_CHECKED'
+        | 'ACCEPTED'
+        | 'DELIVERED'
+        | 'READ'
+        | 'FAILED'
+        | 'NOT_ON_WHATSAPP';
       locationStatus?: 'UNVERIFIED' | 'VERIFIED';
       coordinateAuditStatus?: 'PENDING' | 'MATCHED' | 'UNCERTAIN' | 'MISMATCH' | 'INVALID';
       addressCompleteness?: 'COMPLETE' | 'INCOMPLETE';
@@ -626,8 +646,10 @@ const adminApi = {
     if (query.locationStatus) params.set('locationStatus', query.locationStatus);
     if (query.coordinateAuditStatus) params.set('coordinateAuditStatus', query.coordinateAuditStatus);
     if (query.addressCompleteness) params.set('addressCompleteness', query.addressCompleteness);
-    if (query.coverageFwaStatus && query.coverageFwaStatus !== 'ALL') params.set('coverageFwaStatus', query.coverageFwaStatus);
-    if (query.coverageFtthStatus && query.coverageFtthStatus !== 'ALL') params.set('coverageFtthStatus', query.coverageFtthStatus);
+    if (query.coverageFwaStatus && query.coverageFwaStatus !== 'ALL')
+      params.set('coverageFwaStatus', query.coverageFwaStatus);
+    if (query.coverageFtthStatus && query.coverageFtthStatus !== 'ALL')
+      params.set('coverageFtthStatus', query.coverageFtthStatus);
     if (query.campaignAvailable) params.set('campaignAvailable', 'true');
     if (query.sortBy) params.set('sortBy', query.sortBy);
     if (query.sortDirection) params.set('sortDirection', query.sortDirection);
@@ -649,7 +671,15 @@ const adminApi = {
     format: 'xlsx' | 'csv';
     search?: string;
     status?: string;
-    whatsappStatus?: 'VALID_FORMAT' | 'FORMAT_INVALID' | 'NOT_CHECKED' | 'ACCEPTED' | 'DELIVERED' | 'READ' | 'FAILED' | 'NOT_ON_WHATSAPP';
+    whatsappStatus?:
+      | 'VALID_FORMAT'
+      | 'FORMAT_INVALID'
+      | 'NOT_CHECKED'
+      | 'ACCEPTED'
+      | 'DELIVERED'
+      | 'READ'
+      | 'FAILED'
+      | 'NOT_ON_WHATSAPP';
     coordinateAuditStatus?: 'PENDING' | 'MATCHED' | 'UNCERTAIN' | 'MISMATCH' | 'INVALID';
     addressCompleteness?: 'COMPLETE' | 'INCOMPLETE';
     coverageFwaStatus?: string;
@@ -660,17 +690,22 @@ const adminApi = {
       body: JSON.stringify({
         ...query,
         status: query.status && query.status !== 'ALL' ? query.status : undefined,
-        coverageFwaStatus: query.coverageFwaStatus && query.coverageFwaStatus !== 'ALL' ? query.coverageFwaStatus : undefined,
-        coverageFtthStatus: query.coverageFtthStatus && query.coverageFtthStatus !== 'ALL' ? query.coverageFtthStatus : undefined,
+        coverageFwaStatus:
+          query.coverageFwaStatus && query.coverageFwaStatus !== 'ALL' ? query.coverageFwaStatus : undefined,
+        coverageFtthStatus:
+          query.coverageFtthStatus && query.coverageFtthStatus !== 'ALL' ? query.coverageFtthStatus : undefined,
       }),
     }),
   getCustomerExportJob: (jobId: string) =>
     request<CustomerExportJob>(`/admin/exports/customers/jobs/${encodeURIComponent(jobId)}`),
-  downloadCustomerExport: async (jobId: string, query: { resource: 'customers' | 'addresses'; format: 'xlsx' | 'csv' }) => {
+  downloadCustomerExport: async (
+    jobId: string,
+    query: { resource: 'customers' | 'addresses'; format: 'xlsx' | 'csv' },
+  ) => {
     const response = await apiClient.get<ArrayBuffer>(
       `/admin/exports/customers/jobs/${encodeURIComponent(jobId)}/download`,
       {
-      responseType: 'arraybuffer',
+        responseType: 'arraybuffer',
         timeout: EXPORT_DOWNLOAD_TIMEOUT_MS,
       },
     );
@@ -708,9 +743,7 @@ const adminApi = {
         customer: Record<string, unknown>;
         address: Record<string, unknown>;
       }>
-    >(
-      `/admin/verifications${queryString(query)}`,
-    ),
+    >(`/admin/verifications${queryString(query)}`),
   verification: (id: string) => request<Record<string, unknown>>(`/admin/verifications/${encodeURIComponent(id)}`),
   addressFromGps: (id: string) =>
     request<{
@@ -803,6 +836,7 @@ const adminApi = {
       totalPages: number;
     }>(`/admin/ticketing/candidates${suffix}`);
   },
+  ticketingMitra: () => request<TicketingMitraApi[]>('/admin/ticketing/mitra'),
   createTicket: (body: {
     customerId: string;
     payload: {
@@ -823,10 +857,17 @@ const adminApi = {
       additional_creator?: string;
     };
     mitra_data?: { name?: string; station?: string | null } | null;
-  }) => request<{ status: string; customerId: string; eventId: string; providerTicketId?: string | null; providerResponse?: unknown }>('/admin/ticketing/tickets', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  }),
+  }) =>
+    request<{
+      status: string;
+      customerId: string;
+      eventId: string;
+      providerTicketId?: string | null;
+      providerResponse?: unknown;
+    }>('/admin/ticketing/tickets', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   ticketingProviderStatus: (customerId: string) =>
     request<{
       status: 'FOUND' | 'NOT_FOUND';

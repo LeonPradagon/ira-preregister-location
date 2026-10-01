@@ -33,7 +33,9 @@ const otherToggleItems: FeatureToggleItem[] = [
   { key: 'ENABLE_ADDRESS_EDIT', label: 'settings.feature.addressEdit', desc: 'settings.feature.addressEditDesc' },
   { key: 'ENABLE_REMINDERS', label: 'settings.feature.reminders', desc: 'settings.feature.remindersDesc' },
   { key: 'ENABLE_IRA_COVERAGE', label: 'settings.feature.iraCoverage', desc: 'settings.feature.iraCoverageDesc' },
+  { key: 'ENABLE_AUTO_COVERAGE', label: 'settings.feature.autoCoverage', desc: 'settings.feature.autoCoverageDesc' },
   { key: 'ENABLE_TICKETING', label: 'settings.feature.ticketing', desc: 'settings.feature.ticketingDesc' },
+  { key: 'ENABLE_AUTO_TICKETING', label: 'settings.feature.autoTicketing', desc: 'settings.feature.autoTicketingDesc' },
 ];
 
 export const ValidationSettingsView: React.FC = () => {
@@ -101,16 +103,22 @@ export const ValidationSettingsView: React.FC = () => {
     e.preventDefault();
     if (!canEditSettings) return;
     setSaveError(null);
+    const configToSave = { ...formData, ENABLE_MANUAL_REVIEW: true };
+    const enablingAutomaticTickets =
+      configToSave.ENABLE_AUTO_TICKETING &&
+      (!validationConfig.ENABLE_AUTO_TICKETING ||
+        configToSave.TICKETING_AUTO_MATCH_MAX_METERS > validationConfig.TICKETING_AUTO_MATCH_MAX_METERS);
     const confirmed = await confirmAction({
-      title: t('crud.updateQuestion'),
-      text: t('crud.updateText'),
+      title: enablingAutomaticTickets ? t('settings.autoTicketingConfirmTitle') : t('crud.updateQuestion'),
+      text: enablingAutomaticTickets
+        ? t('settings.autoTicketingConfirmText', { radius: configToSave.TICKETING_AUTO_MATCH_MAX_METERS })
+        : t('crud.updateText'),
       confirmButtonText: t('crud.continue'),
       cancelButtonText: t('crud.cancel'),
     });
     if (!confirmed) return;
     try {
       // Keep the legacy field enabled so the team-review fallback is always available.
-      const configToSave = { ...formData, ENABLE_MANUAL_REVIEW: true };
       await updateValidationConfig(configToSave);
       setFormData(configToSave);
       await showActionSuccess(t('crud.updated'), t('settings.saved'));
@@ -430,7 +438,9 @@ export const ValidationSettingsView: React.FC = () => {
                 }
                 className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
               />
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.whatsappDailyLimitHelp')}</p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                {t('settings.whatsappDailyLimitHelp')}
+              </p>
             </div>
 
             <div>
@@ -465,6 +475,77 @@ export const ValidationSettingsView: React.FC = () => {
                 className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-300 focus:border-gray-900 dark:focus:border-gray-300"
               />
               <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('settings.whatsappCooldownHelp')}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-xs dark:border-gray-800 dark:bg-gray-900">
+          <div>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-900 dark:text-white">
+              {t('settings.ticketingMatchRulesTitle')}
+            </h2>
+            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              {t('settings.ticketingMatchRulesHelp')}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 text-xs sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block font-medium text-gray-700 dark:text-gray-300">
+                {t('settings.ticketingAutoMatchRadius')}
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="300"
+                  disabled={!canEditSettings}
+                  value={formData.TICKETING_AUTO_MATCH_MAX_METERS}
+                  onChange={(event) => {
+                    const value = Math.min(300, Math.max(1, parseInt(event.target.value) || 1));
+                    setFormData((previous) => ({
+                      ...previous,
+                      TICKETING_AUTO_MATCH_MAX_METERS: value,
+                      TICKETING_RECOMMENDATION_MAX_METERS: Math.max(
+                        value,
+                        previous.TICKETING_RECOMMENDATION_MAX_METERS,
+                      ),
+                    }));
+                  }}
+                  className="w-32 rounded-lg border border-gray-300 bg-white p-2 font-mono text-gray-900 focus:border-gray-900 focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-gray-300 dark:focus:ring-gray-300"
+                />
+                <span className="text-gray-500 dark:text-gray-400">meter</span>
+              </div>
+              <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                {t('settings.ticketingAutoMatchRadiusHelp')}
+              </p>
+            </div>
+            <div>
+              <label className="mb-1 block font-medium text-gray-700 dark:text-gray-300">
+                {t('settings.ticketingRecommendationRadius')}
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={formData.TICKETING_AUTO_MATCH_MAX_METERS}
+                  max="1000"
+                  disabled={!canEditSettings}
+                  value={formData.TICKETING_RECOMMENDATION_MAX_METERS}
+                  onChange={(event) =>
+                    handleChangeNumber(
+                      'TICKETING_RECOMMENDATION_MAX_METERS',
+                      Math.min(
+                        1000,
+                        Math.max(formData.TICKETING_AUTO_MATCH_MAX_METERS, parseInt(event.target.value) || 1),
+                      ),
+                    )
+                  }
+                  className="w-32 rounded-lg border border-gray-300 bg-white p-2 font-mono text-gray-900 focus:border-gray-900 focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:focus:border-gray-300 dark:focus:ring-gray-300"
+                />
+                <span className="text-gray-500 dark:text-gray-400">meter</span>
+              </div>
+              <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                {t('settings.ticketingRecommendationRadiusHelp')}
+              </p>
             </div>
           </div>
         </div>

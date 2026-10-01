@@ -82,9 +82,9 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-xs">
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 max-w-xl w-full rounded-2xl shadow-xl overflow-hidden">
-        <div className="p-4 bg-gray-50/80 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+    <div className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto bg-gray-900/60 p-2 backdrop-blur-xs sm:items-center sm:p-4">
+      <div className="coreui-modal flex max-h-[calc(100dvh-1rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 sm:max-h-[calc(100dvh-2rem)]">
+        <div className="coreui-modal-header sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800 sm:p-4">
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             <div>
@@ -103,7 +103,8 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
           </button>
         </div>
 
-        <form onSubmit={handleUpload} aria-busy={isUploading} className="p-5 space-y-4 text-xs">
+        <form onSubmit={handleUpload} aria-busy={isUploading} className="flex min-h-0 flex-1 flex-col overflow-hidden text-xs">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 [overscroll-behavior:contain] sm:p-5">
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
             <p className="font-semibold">Format yang didukung</p>
             <p className="mt-1 leading-relaxed">
@@ -194,12 +195,13 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2 border-t border-gray-200 pt-3 dark:border-gray-800">
+          </div>
+          <div className="coreui-modal-footer flex shrink-0 flex-col-reverse items-stretch justify-end gap-2 border-t border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:px-5">
             <button
               type="button"
               onClick={onClose}
               disabled={isUploading}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+              className="coreui-modal-secondary rounded-lg border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
             >
               {result ? 'Tutup' : 'Batal'}
             </button>
@@ -207,7 +209,7 @@ export const CustomerImportModal: React.FC<CustomerImportModalProps> = ({ onClos
               <button
                 type="submit"
                 disabled={!file || isUploading}
-                className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 font-medium text-white shadow-xs hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
+                className="coreui-modal-primary inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 font-medium text-white shadow-xs hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isUploading && <AppLoader size={20} label="Importing" />}{' '}
                 {isUploading ? 'Mengimpor...' : 'Mulai Import'}

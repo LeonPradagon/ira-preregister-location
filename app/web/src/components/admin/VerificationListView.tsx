@@ -48,23 +48,20 @@ const Metric: React.FC<{
   tone: string;
   onClick?: () => void;
   expanded?: boolean;
-}> = ({
-  label,
-  value,
-  icon,
-  tone,
-  onClick,
-  expanded = false,
-}) => {
+}> = ({ label, value, icon, tone, onClick, expanded = false }) => {
   const content = (
     <div className="flex items-start justify-between gap-3">
       <div>
         <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
-        <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{numberFormat.format(value)}</p>
+        <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+          {numberFormat.format(value)}
+        </p>
       </div>
       <div className="flex items-center gap-2">
         <span className={`rounded-xl p-2.5 ${tone}`}>{icon}</span>
-        {onClick && <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />}
+        {onClick && (
+          <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        )}
       </div>
     </div>
   );
@@ -82,7 +79,11 @@ const Metric: React.FC<{
     );
   }
 
-  return <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">{content}</div>;
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      {content}
+    </div>
+  );
 };
 
 interface VerificationListViewProps {
@@ -168,7 +169,8 @@ const getStatusClassName = (status: string) => {
 
 const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
   if (status === 'LOCATION_VALID') return <CheckCircle2 className="h-3.5 w-3.5" />;
-  if (['LOW_GPS_ACCURACY', 'CUSTOMER_DATA_MISMATCH', 'LOCATION_MISMATCH'].includes(status)) return <XCircle className="h-3.5 w-3.5" />;
+  if (['LOW_GPS_ACCURACY', 'CUSTOMER_DATA_MISMATCH', 'LOCATION_MISMATCH'].includes(status))
+    return <XCircle className="h-3.5 w-3.5" />;
   if (status === 'MANUAL_REVIEW') return <ShieldCheck className="h-3.5 w-3.5" />;
   return <Clock3 className="h-3.5 w-3.5" />;
 };
@@ -191,9 +193,9 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
   const [cursors, setCursors] = useState<Record<number, string>>({});
   const latestRequestId = useRef(0);
   const [sortKey, setSortKey] = useState<
-    'customer' | 'address' | 'addressChange' | 'status' | 'location' | 'activity'
-  >('customer');
-  const [sortDirection, setSortDirection] = useState<TableSortDirection>('asc');
+    'recent' | 'customer' | 'address' | 'addressChange' | 'status' | 'location' | 'activity'
+  >('recent');
+  const [sortDirection, setSortDirection] = useState<TableSortDirection>('desc');
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [showAttentionBreakdown, setShowAttentionBreakdown] = useState(false);
 
@@ -217,7 +219,7 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
         pageSize,
         search: searchTerm,
         status: statusFilter,
-        sortBy: sortKey,
+        sortBy: sortKey === 'recent' ? undefined : sortKey,
         sortDirection,
         cursor: page === 1 ? undefined : cursors[page],
       });
@@ -252,33 +254,30 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
     void load();
   }, [page, pageSize, searchTerm, statusFilter, sortKey, sortDirection]);
 
-  const sortedRows = useMemo(
-    () =>
-      sortTableRows(
-        rows,
-        (row) => {
-          if (sortKey === 'customer') return row.customer.name;
-          if (sortKey === 'address') return row.address.rawAddress;
-          if (sortKey === 'addressChange')
-            return ['ADDRESS_EDITING', 'ADDRESS_PROPOSED'].includes(row.session.verificationStatus) ||
-              row.address.addressType === 'PROPOSED'
-              ? 1
-              : 0;
-          if (sortKey === 'status') return row.session.verificationStatus;
-          if (sortKey === 'location')
-            return isLocationMatched(row.session.verificationStatus, row.session.lastValidationResult?.result)
-              ? 'LOCATION_VALID'
-              : row.session.lastValidationResult?.result;
-          return row.session.attemptCount;
-        },
-        sortDirection,
-      ),
-    [rows, sortDirection, sortKey],
-  );
+  const sortedRows = useMemo(() => {
+    if (sortKey === 'recent') return rows;
+    return sortTableRows(
+      rows,
+      (row) => {
+        if (sortKey === 'customer') return row.customer.name;
+        if (sortKey === 'address') return row.address.rawAddress;
+        if (sortKey === 'addressChange')
+          return ['ADDRESS_EDITING', 'ADDRESS_PROPOSED'].includes(row.session.verificationStatus) ||
+            row.address.addressType === 'PROPOSED'
+            ? 1
+            : 0;
+        if (sortKey === 'status') return row.session.verificationStatus;
+        if (sortKey === 'location')
+          return isLocationMatched(row.session.verificationStatus, row.session.lastValidationResult?.result)
+            ? 'LOCATION_VALID'
+            : row.session.lastValidationResult?.result;
+        return row.session.attemptCount;
+      },
+      sortDirection,
+    );
+  }, [rows, sortDirection, sortKey]);
 
-  const toggleSort = (
-    nextKey: 'customer' | 'address' | 'addressChange' | 'status' | 'location' | 'activity',
-  ) => {
+  const toggleSort = (nextKey: 'customer' | 'address' | 'addressChange' | 'status' | 'location' | 'activity') => {
     if (sortKey === nextKey) setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
     else {
       setSortKey(nextKey);
@@ -365,13 +364,17 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
     <div className="mx-auto max-w-[1500px] space-y-5">
       <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-indigo-50/70 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/20">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="rounded-xl bg-indigo-100 p-2.5 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="shrink-0 rounded-xl bg-indigo-100 p-2.5 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
               <BarChart3 className="h-5 w-5" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">{t('verifications.title')}</h1>
-              <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">{t('verifications.description')}</p>
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
+                {t('verifications.title')}
+              </h1>
+              <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                {t('verifications.description')}
+              </p>
               {dashboardSummary.generatedAt && (
                 <p className="mt-2 text-[11px] text-slate-400">
                   {t('verifications.updated')}: {formatAppDateTime(dashboardSummary.generatedAt)}
@@ -389,26 +392,38 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
             {t('verifications.refresh')}
           </button>
         </div>
-        <div className="mt-4 grid gap-2 border-t border-slate-200 pt-4 dark:border-slate-800 sm:grid-cols-3">
-          <div className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
+        <div className="mt-4 space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+          <div className="flex items-start gap-3">
             <Compass className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-300" />
             <div>
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{t('verifications.step1Title')}</p>
-              <p className="mt-0.5 text-[11px] leading-4 text-slate-500 dark:text-slate-400">{t('verifications.step1Text')}</p>
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                {t('verifications.step1Title')}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-4 text-slate-500 dark:text-slate-400">
+                {t('verifications.step1Text')}
+              </p>
             </div>
           </div>
-          <div className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
+          <div className="flex items-start gap-3">
             <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-cyan-600 dark:text-cyan-300" />
             <div>
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{t('verifications.step2Title')}</p>
-              <p className="mt-0.5 text-[11px] leading-4 text-slate-500 dark:text-slate-400">{t('verifications.step2Text')}</p>
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                {t('verifications.step2Title')}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-4 text-slate-500 dark:text-slate-400">
+                {t('verifications.step2Text')}
+              </p>
             </div>
           </div>
-          <div className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
+          <div className="flex items-start gap-3">
             <CircleHelp className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
             <div>
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{t('verifications.step3Title')}</p>
-              <p className="mt-0.5 text-[11px] leading-4 text-slate-500 dark:text-slate-400">{t('verifications.step3Text')}</p>
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                {t('verifications.step3Title')}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-4 text-slate-500 dark:text-slate-400">
+                {t('verifications.step3Text')}
+              </p>
             </div>
           </div>
         </div>
@@ -433,11 +448,36 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Metric label={t('verifications.totalChecks')} value={verificationStats.total} icon={<Compass className="h-5 w-5" />} tone="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" />
-        <Metric label={t('verifications.invitationsSent')} value={verificationStats.invitationsSent} icon={<Send className="h-5 w-5" />} tone="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300" />
-        <Metric label={t('verifications.linksOpened')} value={verificationStats.linksOpened} icon={<ExternalLink className="h-5 w-5" />} tone="bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300" />
-        <Metric label={t('verifications.gpsCaptured')} value={verificationStats.gpsCaptured} icon={<MapPin className="h-5 w-5" />} tone="bg-cyan-50 text-cyan-600 dark:bg-cyan-950/40 dark:text-cyan-300" />
-        <Metric label={t('verifications.matched')} value={verificationStats.locationValid} icon={<CheckCircle2 className="h-5 w-5" />} tone="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300" />
+        <Metric
+          label={t('verifications.totalChecks')}
+          value={verificationStats.total}
+          icon={<Compass className="h-5 w-5" />}
+          tone="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+        />
+        <Metric
+          label={t('verifications.invitationsSent')}
+          value={verificationStats.invitationsSent}
+          icon={<Send className="h-5 w-5" />}
+          tone="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300"
+        />
+        <Metric
+          label={t('verifications.linksOpened')}
+          value={verificationStats.linksOpened}
+          icon={<ExternalLink className="h-5 w-5" />}
+          tone="bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300"
+        />
+        <Metric
+          label={t('verifications.gpsCaptured')}
+          value={verificationStats.gpsCaptured}
+          icon={<MapPin className="h-5 w-5" />}
+          tone="bg-cyan-50 text-cyan-600 dark:bg-cyan-950/40 dark:text-cyan-300"
+        />
+        <Metric
+          label={t('verifications.matched')}
+          value={verificationStats.locationValid}
+          icon={<CheckCircle2 className="h-5 w-5" />}
+          tone="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300"
+        />
         <Metric
           label={t('verifications.needsAttention')}
           value={attentionCount}
@@ -472,7 +512,9 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
                 className="rounded-xl border border-amber-200/80 bg-white/80 p-3 text-left transition-colors hover:border-amber-400 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 dark:border-amber-900/70 dark:bg-amber-950/20 dark:hover:border-amber-700 dark:hover:bg-amber-950/40"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-xs font-semibold leading-4 text-amber-950 dark:text-amber-100">{item.label}</span>
+                  <span className="text-xs font-semibold leading-4 text-amber-950 dark:text-amber-100">
+                    {item.label}
+                  </span>
                   <span className="shrink-0 text-lg font-bold tabular-nums text-amber-700 dark:text-amber-300">
                     {numberFormat.format(item.value)}
                   </span>
@@ -504,7 +546,10 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
             {t('verifications.workflowChecks')}
           </span>
         </div>
-        <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800" aria-label={t('verifications.workflowTitle')}>
+        <div
+          className="mt-4 flex h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
+          aria-label={t('verifications.workflowTitle')}
+        >
           {workflowStages.map((stage) => {
             const width = verificationStats.total > 0 ? (stage.value / verificationStats.total) * 100 : 0;
             return (
@@ -519,9 +564,13 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {workflowStages.map((stage) => {
-            const percentage = verificationStats.total > 0 ? Math.round((stage.value / verificationStats.total) * 100) : 0;
+            const percentage =
+              verificationStats.total > 0 ? Math.round((stage.value / verificationStats.total) * 100) : 0;
             return (
-              <div key={stage.label} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/60">
+              <div
+                key={stage.label}
+                className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/60"
+              >
                 <div className="flex min-w-0 items-center gap-2">
                   <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${stage.tone}`} />
                   <span className="truncate text-xs font-medium text-slate-700 dark:text-slate-200">{stage.label}</span>
@@ -533,7 +582,9 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
             );
           })}
         </div>
-        <p className="mt-3 text-[11px] leading-4 text-slate-400 dark:text-slate-500">{t('verifications.workflowNote')}</p>
+        <p className="mt-3 text-[11px] leading-4 text-slate-400 dark:text-slate-500">
+          {t('verifications.workflowNote')}
+        </p>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -557,14 +608,16 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
         </div>
         <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-              <Filter className="h-3.5 w-3.5 text-slate-400" />
-              <span>{t('verifications.detailFilterHeading')}</span>
+            <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 sm:flex-row sm:items-center sm:gap-5">
+              <span className="inline-flex items-center gap-2 sm:mr-5">
+                <Filter className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                {t('verifications.detailFilterHeading')}
+              </span>
               <select
                 aria-label={t('verifications.detailFilterHeading')}
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value)}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 sm:w-64"
               >
                 <option value="ALL">{t('verifications.allStatuses')}</option>
                 <optgroup label={t('verifications.detailFilters')}>
@@ -593,7 +646,10 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
             {statusFilter !== 'ALL' && (
               <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                 <span>
-                  {t('verifications.activeFilter')}: <strong className="font-semibold text-slate-700 dark:text-slate-200">{getFilterLabel(statusFilter, t)}</strong>
+                  {t('verifications.activeFilter')}:{' '}
+                  <strong className="font-semibold text-slate-700 dark:text-slate-200">
+                    {getFilterLabel(statusFilter, t)}
+                  </strong>
                 </span>
                 <button
                   type="button"
@@ -605,10 +661,12 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
               </div>
             )}
           </div>
-          <div className="mt-3 flex items-start gap-2 rounded-lg bg-indigo-50/70 px-3 py-2.5 text-[11px] text-indigo-800 dark:bg-indigo-950/20 dark:text-indigo-200">
-            <CircleHelp className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-600 dark:text-indigo-300" />
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
+            <CircleHelp className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
             <div>
-              <p className="font-semibold">{t('verifications.statusExplanationTitle')}</p>
+              <p className="font-semibold text-slate-700 dark:text-slate-200">
+                {t('verifications.statusExplanationTitle')}
+              </p>
               <p className="mt-0.5 leading-4">{t(`verifications.statusExplanation.${statusFilter}`)}</p>
             </div>
           </div>
@@ -632,7 +690,12 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
         >
           <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
             <tr>
-              <SortableTableHeader active={sortKey === 'customer'} direction={sortDirection} onClick={() => toggleSort('customer')} className="px-4 py-3">
+              <SortableTableHeader
+                active={sortKey === 'customer'}
+                direction={sortDirection}
+                onClick={() => toggleSort('customer')}
+                className="px-4 py-3"
+              >
                 {t('table.customerName')}
               </SortableTableHeader>
               <SortableTableHeader
@@ -652,14 +715,29 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
                 {t('verifications.addressChange')}
               </SortableTableHeader>
               <th className="px-4 py-3">{t('verifications.linkAndConfirmation')}</th>
-              <SortableTableHeader active={sortKey === 'status'} direction={sortDirection} onClick={() => toggleSort('status')} className="px-4 py-3">
+              <SortableTableHeader
+                active={sortKey === 'status'}
+                direction={sortDirection}
+                onClick={() => toggleSort('status')}
+                className="px-4 py-3"
+              >
                 {t('verifications.status')}
               </SortableTableHeader>
-              <SortableTableHeader active={sortKey === 'location'} direction={sortDirection} onClick={() => toggleSort('location')} className="px-4 py-3">
+              <SortableTableHeader
+                active={sortKey === 'location'}
+                direction={sortDirection}
+                onClick={() => toggleSort('location')}
+                className="px-4 py-3"
+              >
                 {t('verifications.location')}
               </SortableTableHeader>
               <th className="px-4 py-3">{t('verifications.manualCase')}</th>
-              <SortableTableHeader active={sortKey === 'activity'} direction={sortDirection} onClick={() => toggleSort('activity')} className="px-4 py-3">
+              <SortableTableHeader
+                active={sortKey === 'activity'}
+                direction={sortDirection}
+                onClick={() => toggleSort('activity')}
+                className="px-4 py-3"
+              >
                 {t('verifications.activity')}
               </SortableTableHeader>
               <th className="px-4 py-3 text-right">{t('table.action')}</th>
@@ -679,188 +757,277 @@ export const VerificationListView: React.FC<VerificationListViewProps> = ({
               const expanded = expandedSessionId === session.id;
               return (
                 <React.Fragment key={session.id}>
-                <tr className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
-                  <td className="px-4 py-3">
-                    <div className="font-semibold text-slate-900 dark:text-white">{customer.name}</div>
-                    <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                      {customer.externalId} · {customer.phoneE164}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setExpandedSessionId(expanded ? null : session.id)}
-                      aria-expanded={expanded}
-                      className="mt-2 inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
-                    >
-                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-                      {expanded ? t('monitoring.hideDetails') : t('monitoring.showDetails')}
-                    </button>
-                  </td>
-                  <td className="max-w-[320px] px-4 py-3">
-                    <div className="line-clamp-2 text-xs font-medium leading-5 text-slate-900 dark:text-white">
-                      {formatAddressForDisplay(address.rawAddress)}
-                    </div>
-                    <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                      {address.subdistrict}, {address.district}, {address.city}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {addressChangeStatus ? (
-                      <span className="inline-flex max-w-[190px] items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold leading-4 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
-                        <Edit3 className="h-3.5 w-3.5 shrink-0" />
-                        {addressChangeStatus}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400 dark:text-slate-500">
-                        {t('verifications.addressChangeNone')}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-                      {session.openedAt ? t('verifications.opened') : t('verifications.notOpened')}
-                    </div>
-                    {session.openedAt && <div className="mt-1 text-[10px] text-slate-400">{formatAppDateTime(session.openedAt)}</div>}
-                    <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                      {session.customerConfirmationStatus === 'CONFIRMED'
-                        ? t('verifications.confirmed')
-                        : session.customerConfirmationStatus === 'MISMATCH'
-                          ? t('verifications.customerMismatch')
-                          : t('verifications.notConfirmed')}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${getStatusClassName(session.verificationStatus)}`}
-                    >
-                      <StatusIcon status={session.verificationStatus} />
-                            {getStatusLabel(session.verificationStatus, t)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {lastVal ? (
-                      <div>
-                        <div
-                          className={`text-xs font-semibold ${locationMatched ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}
-                        >
-                          {locationMatched
-                            ? t('verifications.locationMatched')
-                            : t('verifications.locationNeedsReview')}
-                        </div>
-                        <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                          {lastVal.distanceFromReferenceMeters == null
-                            ? t('verifications.noReference')
-                            : `${lastVal.distanceFromReferenceMeters.toFixed(1)}m ${t('verifications.away')}`}{' '}
-                          · ±{lastVal.gpsAccuracyM}m {t('verifications.accuracy')}
-                        </div>
+                  <tr className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-slate-900 dark:text-white">{customer.name}</div>
+                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        {customer.externalId} · {customer.phoneE164}
                       </div>
-                    ) : (
-                      <span className="text-xs italic text-slate-400">{t('verifications.noLocation')}</span>
-                    )}
-                  </td>
-                  <td className="max-w-[260px] px-4 py-3">
-                    {manualCaseKeys.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {manualCaseKeys.map((caseKey) => (
-                          <span
-                            key={caseKey}
-                            className="inline-flex rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold leading-4 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
-                            title={t(`verifications.caseHelp.${caseKey}`)}
-                          >
-                            {t(`verifications.case.${caseKey}`)}
-                          </span>
-                        ))}
+                      <button
+                        type="button"
+                        onClick={() => setExpandedSessionId(expanded ? null : session.id)}
+                        aria-expanded={expanded}
+                        className="mt-2 inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                      >
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                        {expanded ? t('monitoring.hideDetails') : t('monitoring.showDetails')}
+                      </button>
+                    </td>
+                    <td className="max-w-[320px] px-4 py-3">
+                      <div className="line-clamp-2 text-xs font-medium leading-5 text-slate-900 dark:text-white">
+                        {formatAddressForDisplay(address.rawAddress)}
                       </div>
-                    ) : (
-                      <span className="text-xs text-slate-400 dark:text-slate-500">{t('verifications.manualCaseNone')}</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
-                    <div>
-                      {session.locationAttemptCount ?? session.attemptCount} {t('verifications.attempts')}
-                    </div>
-                    <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                      {session.sentReminderCount ?? session.reminderCount} / {validationConfig.MAX_REMINDERS_PER_SESSION}{' '}
-                      {t('verifications.reminders')}
-                    </div>
-                    <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                      Terakhir: {formatAppDateTime(session.updatedAt)}
-                    </div>
-                    <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                      Link berlaku sampai: {formatAppDateTime(session.expiresAt)}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => onSelectVerification(session.id)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
-                    >
-                      {t('verifications.viewDetails')}
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </button>
-                  </td>
-                </tr>
-                {expanded && (
-                  <tr className="bg-indigo-50/40 dark:bg-indigo-950/10">
-                    <td colSpan={9} className="px-4 py-4">
-                      <div className="grid gap-3 text-xs md:grid-cols-3">
-                        <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-                          <h3 className="font-semibold text-slate-900 dark:text-white">{t('verifications.customerDetails')}</h3>
-                          <dl className="mt-2 space-y-1.5 text-slate-600 dark:text-slate-300">
-                            <div><dt className="inline font-medium">{t('verifications.customerName')}:</dt> <dd className="inline">{customer.name}</dd></div>
-                            <div><dt className="inline font-medium">{t('verifications.customerId')}:</dt> <dd className="inline">{customer.externalId}</dd></div>
-                            <div><dt className="inline font-medium">{t('verifications.phoneNumber')}:</dt> <dd className="inline">{customer.phoneE164}</dd></div>
-                            <div><dt className="inline font-medium">{t('verifications.sessionId')}:</dt> <dd className="inline break-all">{session.id}</dd></div>
-                          </dl>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-                          <h3 className="font-semibold text-slate-900 dark:text-white">{t('verifications.addressDetails')}</h3>
-                          <div className="mt-2 space-y-2 text-slate-600 dark:text-slate-300">
-                            <div>
-                              <div className="font-medium text-slate-500 dark:text-slate-400">{t('verifications.currentAddress')}</div>
-                              <div className="mt-1 leading-relaxed">{formatAddressForDisplay(address.rawAddress)}</div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 text-[11px]">
-                              <div><span className="font-medium">{t('verifications.addressType')}:</span> {getEnumLabel(address.addressType, 'verifications.addressTypeValue', t)}</div>
-                              <div><span className="font-medium">{t('verifications.referencePrecision')}:</span> {getEnumLabel(address.referencePrecision, 'verifications.referencePrecisionValue', t)}</div>
-                              <div><span className="font-medium">{t('verifications.addressVerification')}:</span> {address.isVerified ? t('verifications.verified') : t('verifications.notVerified')}</div>
-                              <div><span className="font-medium">{t('verifications.auditStatus')}:</span> {getEnumLabel(address.coordinateAuditStatus, 'verifications.auditStatusValue', t)}</div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-                          <h3 className="font-semibold text-slate-900 dark:text-white">{t('verifications.checkDetails')}</h3>
-                          <dl className="mt-2 space-y-1.5 text-slate-600 dark:text-slate-300">
-                            <div><dt className="inline font-medium">{t('verifications.status')}:</dt> <dd className="inline">{getStatusLabel(session.verificationStatus, t)}</dd></div>
-                            <div><dt className="inline font-medium">{t('verifications.linkStatus')}:</dt> <dd className="inline">{session.openedAt ? `${t('verifications.opened')} · ${formatAppDateTime(session.openedAt)}` : t('verifications.notOpened')}</dd></div>
-                            <div><dt className="inline font-medium">{t('verifications.confirmation')}:</dt> <dd className="inline">{session.customerConfirmationStatus === 'CONFIRMED' ? t('verifications.confirmed') : session.customerConfirmationStatus === 'MISMATCH' ? t('verifications.customerMismatch') : t('verifications.notConfirmed')}</dd></div>
-                            <div><dt className="inline font-medium">{t('verifications.createdAt')}:</dt> <dd className="inline">{formatAppDateTime(session.createdAt)}</dd></div>
-                            <div><dt className="inline font-medium">{t('verifications.updatedAt')}:</dt> <dd className="inline">{formatAppDateTime(session.updatedAt)}</dd></div>
-                            <div><dt className="inline font-medium">{t('verifications.linkExpiresAt')}:</dt> <dd className="inline">{formatAppDateTime(session.expiresAt)}</dd></div>
-                          </dl>
-                        </div>
+                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        {address.subdistrict}, {address.district}, {address.city}
                       </div>
-                      {lastVal && (
-                        <div className="mt-3 rounded-xl border border-indigo-200 bg-white p-3 text-xs dark:border-indigo-900/60 dark:bg-slate-900">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <h3 className="font-semibold text-slate-900 dark:text-white">{t('verifications.locationEvidence')}</h3>
-                            {lastVal.capturedLocation?.googleMapsUrl && (
-                              <a href={lastVal.capturedLocation.googleMapsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-indigo-700 hover:underline dark:text-indigo-300">
-                                {t('verifications.openGoogleMaps')} <ExternalLink className="h-3.5 w-3.5" />
-                              </a>
-                            )}
-                          </div>
-                          <div className="mt-2 grid gap-2 text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
-                            <div><span className="font-medium">{t('verifications.result')}:</span> {getStatusLabel(locationMatched ? 'LOCATION_VALID' : lastVal.result, t)}</div>
-                            <div><span className="font-medium">{t('verifications.distance')}:</span> {lastVal.distanceFromReferenceMeters == null ? t('verifications.noReference') : `${lastVal.distanceFromReferenceMeters.toFixed(1)}m`}</div>
-                            <div><span className="font-medium">{t('verifications.gpsAccuracy')}:</span> ±{lastVal.gpsAccuracyM}m</div>
-                            <div><span className="font-medium">{t('verifications.reasonCodes')}:</span> {lastVal.reasonCodes.length ? lastVal.reasonCodes.map(userFriendlyReason).join(', ') : '—'}</div>
-                          </div>
-                        </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {addressChangeStatus ? (
+                        <span className="inline-flex max-w-[190px] items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold leading-4 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
+                          <Edit3 className="h-3.5 w-3.5 shrink-0" />
+                          {addressChangeStatus}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400 dark:text-slate-500">
+                          {t('verifications.addressChangeNone')}
+                        </span>
                       )}
                     </td>
+                    <td className="px-4 py-3">
+                      <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        {session.openedAt ? t('verifications.opened') : t('verifications.notOpened')}
+                      </div>
+                      {session.openedAt && (
+                        <div className="mt-1 text-[10px] text-slate-400">{formatAppDateTime(session.openedAt)}</div>
+                      )}
+                      <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        {session.customerConfirmationStatus === 'CONFIRMED'
+                          ? t('verifications.confirmed')
+                          : session.customerConfirmationStatus === 'MISMATCH'
+                            ? t('verifications.customerMismatch')
+                            : t('verifications.notConfirmed')}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${getStatusClassName(session.verificationStatus)}`}
+                      >
+                        <StatusIcon status={session.verificationStatus} />
+                        {getStatusLabel(session.verificationStatus, t)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {lastVal ? (
+                        <div>
+                          <div
+                            className={`text-xs font-semibold ${locationMatched ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}
+                          >
+                            {locationMatched
+                              ? t('verifications.locationMatched')
+                              : t('verifications.locationNeedsReview')}
+                          </div>
+                          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                            {lastVal.distanceFromReferenceMeters == null
+                              ? t('verifications.noReference')
+                              : `${lastVal.distanceFromReferenceMeters.toFixed(1)}m ${t('verifications.away')}`}{' '}
+                            · ±{lastVal.gpsAccuracyM}m {t('verifications.accuracy')}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs italic text-slate-400">{t('verifications.noLocation')}</span>
+                      )}
+                    </td>
+                    <td className="max-w-[260px] px-4 py-3">
+                      {manualCaseKeys.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {manualCaseKeys.map((caseKey) => (
+                            <span
+                              key={caseKey}
+                              className="inline-flex rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold leading-4 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+                              title={t(`verifications.caseHelp.${caseKey}`)}
+                            >
+                              {t(`verifications.case.${caseKey}`)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400 dark:text-slate-500">
+                          {t('verifications.manualCaseNone')}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
+                      <div>
+                        {session.locationAttemptCount ?? session.attemptCount} {t('verifications.attempts')}
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        {session.sentReminderCount ?? session.reminderCount} /{' '}
+                        {validationConfig.MAX_REMINDERS_PER_SESSION} {t('verifications.reminders')}
+                      </div>
+                      <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        Terakhir: {formatAppDateTime(session.updatedAt)}
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        Link berlaku sampai: {formatAppDateTime(session.expiresAt)}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onSelectVerification(session.id)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+                      >
+                        {t('verifications.viewDetails')}
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
                   </tr>
-                )}
+                  {expanded && (
+                    <tr className="bg-indigo-50/40 dark:bg-indigo-950/10">
+                      <td colSpan={9} className="px-4 py-4">
+                        <div className="grid gap-3 text-xs md:grid-cols-3">
+                          <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                            <h3 className="font-semibold text-slate-900 dark:text-white">
+                              {t('verifications.customerDetails')}
+                            </h3>
+                            <dl className="mt-2 space-y-1.5 text-slate-600 dark:text-slate-300">
+                              <div>
+                                <dt className="inline font-medium">{t('verifications.customerName')}:</dt>{' '}
+                                <dd className="inline">{customer.name}</dd>
+                              </div>
+                              <div>
+                                <dt className="inline font-medium">{t('verifications.customerId')}:</dt>{' '}
+                                <dd className="inline">{customer.externalId}</dd>
+                              </div>
+                              <div>
+                                <dt className="inline font-medium">{t('verifications.phoneNumber')}:</dt>{' '}
+                                <dd className="inline">{customer.phoneE164}</dd>
+                              </div>
+                              <div>
+                                <dt className="inline font-medium">{t('verifications.sessionId')}:</dt>{' '}
+                                <dd className="inline break-all">{session.id}</dd>
+                              </div>
+                            </dl>
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                            <h3 className="font-semibold text-slate-900 dark:text-white">
+                              {t('verifications.addressDetails')}
+                            </h3>
+                            <div className="mt-2 space-y-2 text-slate-600 dark:text-slate-300">
+                              <div>
+                                <div className="font-medium text-slate-500 dark:text-slate-400">
+                                  {t('verifications.currentAddress')}
+                                </div>
+                                <div className="mt-1 leading-relaxed">
+                                  {formatAddressForDisplay(address.rawAddress)}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                                <div>
+                                  <span className="font-medium">{t('verifications.addressType')}:</span>{' '}
+                                  {getEnumLabel(address.addressType, 'verifications.addressTypeValue', t)}
+                                </div>
+                                <div>
+                                  <span className="font-medium">{t('verifications.referencePrecision')}:</span>{' '}
+                                  {getEnumLabel(address.referencePrecision, 'verifications.referencePrecisionValue', t)}
+                                </div>
+                                <div>
+                                  <span className="font-medium">{t('verifications.addressVerification')}:</span>{' '}
+                                  {address.isVerified ? t('verifications.verified') : t('verifications.notVerified')}
+                                </div>
+                                <div>
+                                  <span className="font-medium">{t('verifications.auditStatus')}:</span>{' '}
+                                  {getEnumLabel(address.coordinateAuditStatus, 'verifications.auditStatusValue', t)}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                            <h3 className="font-semibold text-slate-900 dark:text-white">
+                              {t('verifications.checkDetails')}
+                            </h3>
+                            <dl className="mt-2 space-y-1.5 text-slate-600 dark:text-slate-300">
+                              <div>
+                                <dt className="inline font-medium">{t('verifications.status')}:</dt>{' '}
+                                <dd className="inline">{getStatusLabel(session.verificationStatus, t)}</dd>
+                              </div>
+                              <div>
+                                <dt className="inline font-medium">{t('verifications.linkStatus')}:</dt>{' '}
+                                <dd className="inline">
+                                  {session.openedAt
+                                    ? `${t('verifications.opened')} · ${formatAppDateTime(session.openedAt)}`
+                                    : t('verifications.notOpened')}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="inline font-medium">{t('verifications.confirmation')}:</dt>{' '}
+                                <dd className="inline">
+                                  {session.customerConfirmationStatus === 'CONFIRMED'
+                                    ? t('verifications.confirmed')
+                                    : session.customerConfirmationStatus === 'MISMATCH'
+                                      ? t('verifications.customerMismatch')
+                                      : t('verifications.notConfirmed')}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="inline font-medium">{t('verifications.createdAt')}:</dt>{' '}
+                                <dd className="inline">{formatAppDateTime(session.createdAt)}</dd>
+                              </div>
+                              <div>
+                                <dt className="inline font-medium">{t('verifications.updatedAt')}:</dt>{' '}
+                                <dd className="inline">{formatAppDateTime(session.updatedAt)}</dd>
+                              </div>
+                              <div>
+                                <dt className="inline font-medium">{t('verifications.linkExpiresAt')}:</dt>{' '}
+                                <dd className="inline">{formatAppDateTime(session.expiresAt)}</dd>
+                              </div>
+                            </dl>
+                          </div>
+                        </div>
+                        {lastVal && (
+                          <div className="mt-3 rounded-xl border border-indigo-200 bg-white p-3 text-xs dark:border-indigo-900/60 dark:bg-slate-900">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <h3 className="font-semibold text-slate-900 dark:text-white">
+                                {t('verifications.locationEvidence')}
+                              </h3>
+                              {lastVal.capturedLocation?.googleMapsUrl && (
+                                <a
+                                  href={lastVal.capturedLocation.googleMapsUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 font-semibold text-indigo-700 hover:underline dark:text-indigo-300"
+                                >
+                                  {t('verifications.openGoogleMaps')} <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              )}
+                            </div>
+                            <div className="mt-2 grid gap-2 text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
+                              <div>
+                                <span className="font-medium">{t('verifications.result')}:</span>{' '}
+                                {getStatusLabel(locationMatched ? 'LOCATION_VALID' : lastVal.result, t)}
+                              </div>
+                              <div>
+                                <span className="font-medium">{t('verifications.distance')}:</span>{' '}
+                                {lastVal.distanceFromReferenceMeters == null
+                                  ? t('verifications.noReference')
+                                  : `${lastVal.distanceFromReferenceMeters.toFixed(1)}m`}
+                              </div>
+                              <div>
+                                <span className="font-medium">{t('verifications.gpsAccuracy')}:</span> ±
+                                {lastVal.gpsAccuracyM}m
+                              </div>
+                              <div>
+                                <span className="font-medium">{t('verifications.reasonCodes')}:</span>{' '}
+                                {lastVal.reasonCodes.length
+                                  ? lastVal.reasonCodes.map(userFriendlyReason).join(', ')
+                                  : '—'}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
                 </React.Fragment>
               );
             })}

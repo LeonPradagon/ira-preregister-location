@@ -4,12 +4,19 @@ x-server-environment: &server-environment
   NODE_ENV: production
   PORT: 3000
   TRUST_PROXY: ${TRUST_PROXY:-1}
-  DATABASE_URL: postgresql://${POSTGRES_USER:-ira_preregist}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-ira_preregist}
+  DATABASE_URL: postgresql://${APP_DATABASE_USER:-ira_preregist_app}:${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-ira_preregist}
+  APP_DATABASE_USER: ${APP_DATABASE_USER:-ira_preregist_app}
+  APP_DATABASE_PASSWORD: ''
+  POSTGRES_PASSWORD: ''
+  SEED_ADMIN_PASSWORD: ''
   DATABASE_SSL: 'false'
   REDIS_URL: redis://redis:6379
   BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}
   BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL must be set}
   WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN must be set}
+  ENABLE_AUTO_TICKETING: ${ENABLE_AUTO_TICKETING:-false}
+  TICKETING_AUTO_MATCH_MAX_METERS: ${TICKETING_AUTO_MATCH_MAX_METERS:-50}
+  TICKETING_RECOMMENDATION_MAX_METERS: ${TICKETING_RECOMMENDATION_MAX_METERS:-300}
   ACTIVE_SESSION_TTL_DAYS: ${ACTIVE_SESSION_TTL_DAYS:-7}
   IMPORT_STORAGE_DIR: /workspace/app/server/var/imports
   EXPORT_STORAGE_DIR: /workspace/app/server/var/exports
@@ -62,6 +69,8 @@ services:
     <<: *server-defaults
     environment:
       <<: *server-environment
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ira_preregist}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-ira_preregist}
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD must be set}
       # Keep the longer timeout isolated to this one-shot service.
       DATABASE_STATEMENT_TIMEOUT_MS: ${MIGRATION_STATEMENT_TIMEOUT_MS:-600000}
       DATABASE_QUERY_TIMEOUT_MS: ${MIGRATION_QUERY_TIMEOUT_MS:-660000}

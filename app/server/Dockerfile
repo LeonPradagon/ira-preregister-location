@@ -15,6 +15,7 @@ COPY --from=build /workspace/app/server/package.json ./package.json
 COPY --from=build /workspace/app/server/dist ./dist
 COPY --from=build /workspace/app/server/scripts/import-prereg-xlsx.mjs ./scripts/import-prereg-xlsx.mjs
 COPY --from=build /workspace/app/server/scripts/address-parser.mjs ./scripts/address-parser.mjs
+COPY --from=build /workspace/app/server/scripts/xlsx-archive-safety.mjs ./scripts/xlsx-archive-safety.mjs
 COPY --from=build /workspace/node_modules /workspace/node_modules
 RUN mkdir -p var/imports var/exports && chown -R node:node var
 USER node

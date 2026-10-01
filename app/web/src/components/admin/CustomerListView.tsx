@@ -136,8 +136,7 @@ const statusBadgeClass = (status: CustomerStatus) => {
 };
 
 const whatsappStatusBadgeClass = (status: WhatsappStatus) => {
-  if (status === 'READ' || status === 'DELIVERED')
-    return 'text-emerald-700 dark:text-emerald-300';
+  if (status === 'READ' || status === 'DELIVERED') return 'text-emerald-700 dark:text-emerald-300';
   if (status === 'FAILED' || status === 'FORMAT_INVALID' || status === 'NOT_ON_WHATSAPP')
     return 'text-rose-700 dark:text-rose-300';
   if (status === 'ACCEPTED') return 'text-blue-700 dark:text-blue-300';
@@ -178,6 +177,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
   } = useApp();
   const { t } = useTranslation();
   const canManageCustomers = hasCapability(currentAdmin?.role, 'manageCustomers');
+  const canExportCustomers = hasCapability(currentAdmin?.role, 'exportData');
   const coordinateAuditCounts = dashboardSummary.coordinateAudits.statusCounts;
   const coordinateAuditTotal = COORDINATE_AUDIT_CARDS.reduce(
     (total, card) => total + Number(coordinateAuditCounts[card.status] ?? 0),
@@ -185,14 +185,15 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
   );
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [addressCompletenessFilter, setAddressCompletenessFilter] =
-    useState<AddressCompletenessFilter>('ALL');
+  const [addressCompletenessFilter, setAddressCompletenessFilter] = useState<AddressCompletenessFilter>('ALL');
   const [coordinateAuditFilter, setCoordinateAuditFilter] = useState<CoordinateAuditFilter>('ALL');
   const [whatsappStatusFilter, setWhatsappStatusFilter] = useState<WhatsappStatusFilter>('ALL');
   const [coverageFwaFilter, setCoverageFwaFilter] = useState('ALL');
   const [coverageFtthFilter, setCoverageFtthFilter] = useState('ALL');
-  const [sortKey, setSortKey] = useState<'id' | 'name' | 'whatsapp' | 'address' | 'latitude' | 'longitude' | 'coverage' | 'status'>('name');
-  const [sortDirection, setSortDirection] = useState<TableSortDirection>('asc');
+  const [sortKey, setSortKey] = useState<
+    'recent' | 'id' | 'name' | 'whatsapp' | 'address' | 'latitude' | 'longitude' | 'coverage' | 'status'
+  >('recent');
+  const [sortDirection, setSortDirection] = useState<TableSortDirection>('desc');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -230,27 +231,28 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
   const [loadError, setLoadError] = useState('');
   const customerRefreshInFlight = useRef(false);
 
-  const sortedCustomers = useMemo(
-    () =>
-      sortTableRows(
-        customers,
-        (customer) => {
-          const address = customer.activeAddress;
-          if (sortKey === 'id') return customer.externalId;
-          if (sortKey === 'name') return customer.name;
-          if (sortKey === 'whatsapp') return customer.phoneE164;
-          if (sortKey === 'address') return address?.rawAddress;
-          if (sortKey === 'latitude') return address?.referenceLocation?.latitude;
-          if (sortKey === 'longitude') return address?.referenceLocation?.longitude;
-          if (sortKey === 'coverage') return customer.coverageStatus;
-          return customer.status;
-        },
-        sortDirection,
-      ),
-    [customers, sortDirection, sortKey],
-  );
+  const sortedCustomers = useMemo(() => {
+    if (sortKey === 'recent') return customers;
+    return sortTableRows(
+      customers,
+      (customer) => {
+        const address = customer.activeAddress;
+        if (sortKey === 'id') return customer.externalId;
+        if (sortKey === 'name') return customer.name;
+        if (sortKey === 'whatsapp') return customer.phoneE164;
+        if (sortKey === 'address') return address?.rawAddress;
+        if (sortKey === 'latitude') return address?.referenceLocation?.latitude;
+        if (sortKey === 'longitude') return address?.referenceLocation?.longitude;
+        if (sortKey === 'coverage') return customer.coverageStatus;
+        return customer.status;
+      },
+      sortDirection,
+    );
+  }, [customers, sortDirection, sortKey]);
 
-  const toggleSort = (nextKey: 'id' | 'name' | 'whatsapp' | 'address' | 'latitude' | 'longitude' | 'coverage' | 'status') => {
+  const toggleSort = (
+    nextKey: 'id' | 'name' | 'whatsapp' | 'address' | 'latitude' | 'longitude' | 'coverage' | 'status',
+  ) => {
     if (sortKey === nextKey) setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
     else {
       setSortKey(nextKey);
@@ -435,7 +437,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           whatsappStatusFilter,
           coverageFwaFilter,
           coverageFtthFilter,
-          sortKey,
+          sortKey === 'recent' ? undefined : sortKey,
           sortDirection,
         ),
         refreshDashboard(),
@@ -494,7 +496,18 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
       void refreshCustomerData(true, 1);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [searchTerm, statusFilter, addressCompletenessFilter, coordinateAuditFilter, whatsappStatusFilter, coverageFwaFilter, coverageFtthFilter, sortKey, sortDirection, t]);
+  }, [
+    searchTerm,
+    statusFilter,
+    addressCompletenessFilter,
+    coordinateAuditFilter,
+    whatsappStatusFilter,
+    coverageFwaFilter,
+    coverageFtthFilter,
+    sortKey,
+    sortDirection,
+    t,
+  ]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -617,7 +630,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
           whatsappStatusFilter,
           coverageFwaFilter,
           coverageFtthFilter,
-          sortKey,
+          sortKey === 'recent' ? undefined : sortKey,
           sortDirection,
         );
       }
@@ -678,71 +691,75 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
   return (
     <div className="space-y-5">
       {/* Top Header & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs">
-        <div>
-          <h1 className="text-base font-semibold text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
-            <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            <span>{t('customers.title')}</span>
+      <div className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-xs dark:border-gray-800 dark:bg-gray-900 sm:p-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 lg:flex-1">
+          <h1 className="flex max-w-2xl items-center gap-2 text-lg font-semibold leading-tight tracking-tight text-gray-900 dark:text-white sm:text-xl">
+            <Users className="h-5 w-5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+            <span className="min-w-0">{t('customers.title')}</span>
           </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('customers.description')}</p>
+          <p className="mt-2 max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-gray-400 sm:text-sm">
+            {t('customers.description')}
+          </p>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setIsExportMenuOpen((current) => !current)}
-              disabled={Boolean(exporting)}
-              title={t('customers.export')}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-indigo-600 bg-gradient-to-r from-indigo-600 to-violet-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-indigo-500/25 transition-all hover:from-indigo-700 hover:to-violet-700 hover:shadow-md hover:shadow-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-500 dark:from-indigo-500 dark:to-violet-500 dark:hover:from-indigo-400 dark:hover:to-violet-400"
-            >
-              <Download className="h-4 w-4" />
-              <span>{exporting ? '...' : t('customers.export')}</span>
-              <ChevronDown className="h-3.5 w-3.5" />
-            </button>
-            {isExportMenuOpen && !exporting && (
-              <div className="absolute right-0 z-20 mt-1.5 min-w-44 rounded-lg border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsExportMenuOpen(false);
-                    void handleExport('customers', 'xlsx');
-                  }}
-                  className="flex w-full items-center rounded-md px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
-                >
-                  {t('customers.exportCustomersXlsx')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsExportMenuOpen(false);
-                    void handleExport('customers', 'csv');
-                  }}
-                  className="flex w-full items-center rounded-md px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
-                >
-                  {t('customers.exportCustomersCsv')}
-                </button>
-              </div>
-            )}
-          </div>
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end lg:w-auto lg:max-w-[44rem]">
+          {canExportCustomers && (
+            <div className="relative w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setIsExportMenuOpen((current) => !current)}
+                disabled={Boolean(exporting)}
+                title={t('customers.export')}
+                className="inline-flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-indigo-600 bg-gradient-to-r from-indigo-600 to-violet-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-indigo-500/25 transition-all hover:from-indigo-700 hover:to-violet-700 hover:shadow-md hover:shadow-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-indigo-500 dark:from-indigo-500 dark:to-violet-500 dark:hover:from-indigo-400 dark:hover:to-violet-400 sm:w-auto"
+              >
+                <Download className="h-4 w-4 shrink-0" />
+                <span>{exporting ? '...' : t('customers.export')}</span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+              </button>
+              {isExportMenuOpen && !exporting && (
+                <div className="absolute right-0 z-20 mt-1.5 min-w-44 rounded-lg border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      void handleExport('customers', 'xlsx');
+                    }}
+                    className="flex w-full items-center rounded-md px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                  >
+                    {t('customers.exportCustomersXlsx')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      void handleExport('customers', 'csv');
+                    }}
+                    className="flex w-full items-center rounded-md px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                  >
+                    {t('customers.exportCustomersCsv')}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <button
             type="button"
             onClick={() => setIsImportModalOpen(true)}
             disabled={!canManageCustomers}
             title={!canManageCustomers ? 'Role ini tidak dapat mengimpor customer' : t('customers.import')}
-            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium transition-colors shadow-xs disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-medium text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
           >
-            <Upload className="w-4 h-4" />
+            <Upload className="h-4 w-4 shrink-0" />
             <span>{t('customers.import')}</span>
           </button>
           <button
             type="button"
             onClick={() => void refreshCustomerData(true)}
             disabled={isLoading}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            className="customer-refresh-button inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-slate-500 dark:hover:bg-slate-700 sm:w-auto"
             title={t('customers.refresh')}
           >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 shrink-0 ${isLoading ? 'animate-spin' : ''}`} />
             <span>{t('customers.refresh')}</span>
           </button>
           <button
@@ -752,81 +769,86 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
               setIsAddModalOpen(true);
             }}
             disabled={!canManageCustomers}
-            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg text-xs font-medium transition-colors shadow-xs"
+            className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-gray-900 px-3.5 py-2 text-xs font-medium text-white shadow-xs transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white sm:w-auto"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="h-4 w-4 shrink-0" />
             <span>{t('customers.add')}</span>
           </button>
         </div>
       </div>
 
-      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('customers.summary')}</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-              <Users className="h-4 w-4" />
+      <section className="customer-summary space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-4">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-white sm:text-lg">{t('customers.summary')}</h2>
+        <div className="customer-summary-grid grid gap-3 sm:grid-cols-3">
+          <div className="flex min-h-[7rem] min-w-0 flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+              <Users className="h-4 w-4 shrink-0" />
               {t('customers.total')}
             </div>
-            <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
+            <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">
               {dashboardSummary.customers.total.toLocaleString('en-US')}
             </p>
-            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{t('customers.totalHelp')}</p>
+            <p className="mt-auto pt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              {t('customers.totalHelp')}
+            </p>
           </div>
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/20">
-            <div className="flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2 className="h-4 w-4" />
+          <div className="flex min-h-[7rem] min-w-0 flex-col rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/20">
+            <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
               {t('customers.verifiedCount')}
             </div>
-            <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-300">
+            <p className="mt-1 text-xl font-bold text-emerald-700 dark:text-emerald-300">
               {dashboardSummary.customers.verified.toLocaleString('en-US')}
             </p>
-            <p className="mt-1 text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
+            <p className="mt-auto pt-3 text-xs leading-relaxed text-emerald-700/80 dark:text-emerald-300/80">
               {t('customers.verifiedCountHelp')}
             </p>
           </div>
-          <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/20">
-            <div className="flex items-center gap-2 text-xs font-medium text-indigo-700 dark:text-indigo-300">
-              <Clock className="h-4 w-4" />
+          <div className="flex min-h-[7rem] min-w-0 flex-col rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/20">
+            <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-indigo-700 dark:text-indigo-300">
+              <Clock className="h-4 w-4 shrink-0" />
               {t('customers.activeCount')}
             </div>
-            <p className="mt-2 text-2xl font-bold text-indigo-700 dark:text-indigo-300">
+            <p className="mt-1 text-xl font-bold text-indigo-700 dark:text-indigo-300">
               {dashboardSummary.customers.active.toLocaleString('en-US')}
             </p>
-            <p className="mt-1 text-[11px] text-indigo-700/80 dark:text-indigo-300/80">
+            <p className="mt-auto pt-3 text-xs leading-relaxed text-indigo-700/80 dark:text-indigo-300/80">
               {t('customers.activeCountHelp')}
             </p>
           </div>
         </div>
 
-        <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+        <div className="space-y-3 border-t border-slate-200 pt-3 dark:border-slate-800">
           <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white sm:text-lg">
               {t('customers.coordinateAuditSummary')}
             </h2>
-            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
               {t('customers.coordinateAuditTotalHelp')}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3">
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 dark:border-indigo-900 dark:bg-indigo-950/20">
-              <div className="flex items-center gap-2 text-xs font-medium text-indigo-700 dark:text-indigo-300">
-                <MapPin className="h-4 w-4" />
-                {t('customers.coordinateAuditTotal')}
+          <div className="coordinate-summary-grid grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="flex min-h-[6.5rem] min-w-0 flex-col rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 dark:border-indigo-900 dark:bg-indigo-950/20">
+              <div className="flex min-w-0 items-start gap-2 text-xs font-medium text-indigo-700 dark:text-indigo-300">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="min-w-0 leading-4">{t('customers.coordinateAuditTotal')}</span>
               </div>
-              <p className="mt-2 text-xl font-bold text-indigo-700 dark:text-indigo-300">
+              <p className="mt-auto pt-2 text-xl font-bold text-indigo-700 dark:text-indigo-300">
                 {coordinateAuditTotal.toLocaleString('en-US')}
               </p>
             </div>
             {COORDINATE_AUDIT_CARDS.map((card) => {
               const Icon = card.icon;
               return (
-                <div key={card.status} className={`rounded-xl border p-3 ${card.className}`}>
-                  <div className={`flex items-center gap-2 text-xs font-medium ${card.iconClassName}`}>
-                    <Icon className="h-4 w-4" />
-                    <span className="truncate">{t(COORDINATE_AUDIT_STATUS_LABEL[card.status])}</span>
+                <div
+                  key={card.status}
+                  className={`flex min-h-[6.5rem] min-w-0 flex-col rounded-xl border p-3 ${card.className}`}
+                >
+                  <div className={`flex min-w-0 items-start gap-2 text-xs font-medium ${card.iconClassName}`}>
+                    <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span className="min-w-0 leading-4">{t(COORDINATE_AUDIT_STATUS_LABEL[card.status])}</span>
                   </div>
-                  <p className={`mt-2 text-xl font-bold ${card.iconClassName}`}>
+                  <p className={`mt-auto pt-2 text-xl font-bold ${card.iconClassName}`}>
                     {Number(coordinateAuditCounts[card.status] ?? 0).toLocaleString('en-US')}
                   </p>
                 </div>
@@ -860,91 +882,149 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
             />
           </div>
 
-          <label htmlFor="customer-status-filter" className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300">
+          <label
+            htmlFor="customer-status-filter"
+            className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300"
+          >
             <span className="font-medium text-slate-500 dark:text-slate-400">{t('customers.status')}</span>
-            <select
-              id="customer-status-filter"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
-            >
-              <option value="ALL">{t('customers.allStatuses')}</option>
-              <option value="PENDING_INSTALLATION">{t('customers.waitingInstallation')}</option>
-              <option value="VERIFIED">{t('customers.verified')}</option>
-              <option value="ACTIVE">{t('customers.active')}</option>
-              <option value="SUSPENDED">{t('customers.suspended')}</option>
-            </select>
+            <div className="relative">
+              <select
+                id="customer-status-filter"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="h-10 w-full min-w-0 appearance-none rounded-lg border border-gray-300 bg-white pl-3 pr-10 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
+              >
+                <option value="ALL">{t('customers.allStatuses')}</option>
+                <option value="PENDING_INSTALLATION">{t('customers.waitingInstallation')}</option>
+                <option value="VERIFIED">{t('customers.verified')}</option>
+                <option value="ACTIVE">{t('customers.active')}</option>
+                <option value="SUSPENDED">{t('customers.suspended')}</option>
+              </select>
+              <ChevronDown
+                aria-hidden="true"
+                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400"
+              />
+            </div>
           </label>
-          <label htmlFor="customer-address-completeness-filter" className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300">
+          <label
+            htmlFor="customer-address-completeness-filter"
+            className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300"
+          >
             <span className="font-medium text-slate-500 dark:text-slate-400">{t('customers.addressFilter')}</span>
-            <select
-              id="customer-address-completeness-filter"
-              value={addressCompletenessFilter}
-              onChange={(e) => setAddressCompletenessFilter(e.target.value as AddressCompletenessFilter)}
-              className="h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
-            >
-              <option value="ALL">{t('customers.addressFilterAll')}</option>
-              <option value="INCOMPLETE">{t('customers.addressFilterIncomplete')}</option>
-              <option value="COMPLETE">{t('customers.addressFilterComplete')}</option>
-            </select>
+            <div className="relative">
+              <select
+                id="customer-address-completeness-filter"
+                value={addressCompletenessFilter}
+                onChange={(e) => setAddressCompletenessFilter(e.target.value as AddressCompletenessFilter)}
+                className="h-10 w-full min-w-0 appearance-none rounded-lg border border-gray-300 bg-white pl-3 pr-10 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
+              >
+                <option value="ALL">{t('customers.addressFilterAll')}</option>
+                <option value="INCOMPLETE">{t('customers.addressFilterIncomplete')}</option>
+                <option value="COMPLETE">{t('customers.addressFilterComplete')}</option>
+              </select>
+              <ChevronDown
+                aria-hidden="true"
+                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400"
+              />
+            </div>
           </label>
-          <label htmlFor="customer-coordinate-audit-filter" className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300">
-            <span className="font-medium text-slate-500 dark:text-slate-400">{t('customers.coordinateAuditFilter')}</span>
-            <select
-              id="customer-coordinate-audit-filter"
-              value={coordinateAuditFilter}
-              onChange={(e) => setCoordinateAuditFilter(e.target.value as CoordinateAuditFilter)}
-              className="h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
-            >
-              <option value="ALL">{t('customers.coordinateAuditAll')}</option>
-              {(Object.keys(COORDINATE_AUDIT_STATUS_LABEL) as CoordinateAuditStatus[]).map((status) => (
-                <option key={status} value={status}>
-                  {t(COORDINATE_AUDIT_STATUS_LABEL[status])}
-                </option>
-              ))}
-            </select>
+          <label
+            htmlFor="customer-coordinate-audit-filter"
+            className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300"
+          >
+            <span className="font-medium text-slate-500 dark:text-slate-400">
+              {t('customers.coordinateAuditFilter')}
+            </span>
+            <div className="relative">
+              <select
+                id="customer-coordinate-audit-filter"
+                value={coordinateAuditFilter}
+                onChange={(e) => setCoordinateAuditFilter(e.target.value as CoordinateAuditFilter)}
+                className="h-10 w-full min-w-0 appearance-none rounded-lg border border-gray-300 bg-white pl-3 pr-10 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
+              >
+                <option value="ALL">{t('customers.coordinateAuditAll')}</option>
+                {(Object.keys(COORDINATE_AUDIT_STATUS_LABEL) as CoordinateAuditStatus[]).map((status) => (
+                  <option key={status} value={status}>
+                    {t(COORDINATE_AUDIT_STATUS_LABEL[status])}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                aria-hidden="true"
+                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400"
+              />
+            </div>
           </label>
-          <label htmlFor="customer-whatsapp-status-filter" className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300">
-            <span className="font-medium text-slate-500 dark:text-slate-400">{t('customers.whatsappStatusFilter')}</span>
-            <select
-              id="customer-whatsapp-status-filter"
-              value={whatsappStatusFilter}
-              onChange={(e) => setWhatsappStatusFilter(e.target.value as WhatsappStatusFilter)}
-              className="h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
-            >
-              <option value="ALL">{t('customers.whatsappStatusAll')}</option>
-              {(Object.keys(WHATSAPP_STATUS_LABEL) as WhatsappStatus[]).map((status) => (
-                <option key={status} value={status}>
-                  {t(WHATSAPP_STATUS_LABEL[status])}
-                </option>
-              ))}
-            </select>
+          <label
+            htmlFor="customer-whatsapp-status-filter"
+            className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300"
+          >
+            <span className="font-medium text-slate-500 dark:text-slate-400">
+              {t('customers.whatsappStatusFilter')}
+            </span>
+            <div className="relative">
+              <select
+                id="customer-whatsapp-status-filter"
+                value={whatsappStatusFilter}
+                onChange={(e) => setWhatsappStatusFilter(e.target.value as WhatsappStatusFilter)}
+                className="h-10 w-full min-w-0 appearance-none rounded-lg border border-gray-300 bg-white pl-3 pr-10 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
+              >
+                <option value="ALL">{t('customers.whatsappStatusAll')}</option>
+                {(Object.keys(WHATSAPP_STATUS_LABEL) as WhatsappStatus[]).map((status) => (
+                  <option key={status} value={status}>
+                    {t(WHATSAPP_STATUS_LABEL[status])}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                aria-hidden="true"
+                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400"
+              />
+            </div>
           </label>
-          <label htmlFor="customer-fwa-coverage-filter" className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300">
+          <label
+            htmlFor="customer-fwa-coverage-filter"
+            className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300"
+          >
             <span className="font-medium text-slate-500 dark:text-slate-400">{t('customers.coverageFwaFilter')}</span>
-            <select
-              id="customer-fwa-coverage-filter"
-              value={coverageFwaFilter}
-              onChange={(e) => setCoverageFwaFilter(e.target.value)}
-              className="h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
-            >
-              <option value="ALL">{t('customers.coverageAll')}</option>
-              <option value="Coverage FWA ON Air & Integreted">{t('customers.coverageFwaCovered')}</option>
-              <option value="Not Coverage">{t('customers.coverageNotAvailable')}</option>
-            </select>
+            <div className="relative">
+              <select
+                id="customer-fwa-coverage-filter"
+                value={coverageFwaFilter}
+                onChange={(e) => setCoverageFwaFilter(e.target.value)}
+                className="h-10 w-full min-w-0 appearance-none rounded-lg border border-gray-300 bg-white pl-3 pr-10 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
+              >
+                <option value="ALL">{t('customers.coverageAll')}</option>
+                <option value="Coverage FWA ON Air & Integreted">{t('customers.coverageFwaCovered')}</option>
+                <option value="Not Coverage">{t('customers.coverageNotAvailable')}</option>
+              </select>
+              <ChevronDown
+                aria-hidden="true"
+                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400"
+              />
+            </div>
           </label>
-          <label htmlFor="customer-ftth-coverage-filter" className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300">
+          <label
+            htmlFor="customer-ftth-coverage-filter"
+            className="flex min-w-0 flex-col gap-1.5 text-gray-600 dark:text-gray-300"
+          >
             <span className="font-medium text-slate-500 dark:text-slate-400">{t('customers.coverageFtthFilter')}</span>
-            <select
-              id="customer-ftth-coverage-filter"
-              value={coverageFtthFilter}
-              onChange={(e) => setCoverageFtthFilter(e.target.value)}
-              className="h-10 w-full min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
-            >
-              <option value="ALL">{t('customers.coverageAll')}</option>
-              <option value="Coverage FTTH">{t('customers.coverageFtthCovered')}</option>
-              <option value="Not Coverage">{t('customers.coverageNotAvailable')}</option>
-            </select>
+            <div className="relative">
+              <select
+                id="customer-ftth-coverage-filter"
+                value={coverageFtthFilter}
+                onChange={(e) => setCoverageFtthFilter(e.target.value)}
+                className="h-10 w-full min-w-0 appearance-none rounded-lg border border-gray-300 bg-white pl-3 pr-10 text-gray-800 focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:focus:border-gray-400 dark:focus:ring-gray-400"
+              >
+                <option value="ALL">{t('customers.coverageAll')}</option>
+                <option value="Coverage FTTH">{t('customers.coverageFtthCovered')}</option>
+                <option value="Not Coverage">{t('customers.coverageNotAvailable')}</option>
+              </select>
+              <ChevronDown
+                aria-hidden="true"
+                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 dark:text-slate-400"
+              />
+            </div>
           </label>
         </div>
       </section>
@@ -993,28 +1073,68 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
       >
         <thead className="bg-gray-50/80 dark:bg-gray-800/60 text-gray-600 dark:text-gray-400 font-semibold border-b border-gray-200 dark:border-gray-800">
           <tr>
-            <SortableTableHeader active={sortKey === 'id'} direction={sortDirection} onClick={() => toggleSort('id')} className="w-[175px] px-4 py-3 whitespace-nowrap">
+            <SortableTableHeader
+              active={sortKey === 'id'}
+              direction={sortDirection}
+              onClick={() => toggleSort('id')}
+              className="w-[175px] px-4 py-3 whitespace-nowrap"
+            >
               {t('table.customerId')}
             </SortableTableHeader>
-            <SortableTableHeader active={sortKey === 'name'} direction={sortDirection} onClick={() => toggleSort('name')} className="w-[155px] px-4 py-3 whitespace-nowrap">
+            <SortableTableHeader
+              active={sortKey === 'name'}
+              direction={sortDirection}
+              onClick={() => toggleSort('name')}
+              className="w-[155px] px-4 py-3 whitespace-nowrap"
+            >
               {t('table.customerName')}
             </SortableTableHeader>
-            <SortableTableHeader active={sortKey === 'whatsapp'} direction={sortDirection} onClick={() => toggleSort('whatsapp')} className="w-[145px] px-4 py-3 whitespace-nowrap">
+            <SortableTableHeader
+              active={sortKey === 'whatsapp'}
+              direction={sortDirection}
+              onClick={() => toggleSort('whatsapp')}
+              className="w-[145px] px-4 py-3 whitespace-nowrap"
+            >
               {t('table.whatsapp')}
             </SortableTableHeader>
-            <SortableTableHeader active={sortKey === 'address'} direction={sortDirection} onClick={() => toggleSort('address')} className="w-[260px] px-4 py-3">
+            <SortableTableHeader
+              active={sortKey === 'address'}
+              direction={sortDirection}
+              onClick={() => toggleSort('address')}
+              className="w-[260px] px-4 py-3"
+            >
               {t('table.address')}
             </SortableTableHeader>
-            <SortableTableHeader active={sortKey === 'latitude'} direction={sortDirection} onClick={() => toggleSort('latitude')} className="w-[110px] px-4 py-3 whitespace-nowrap">
+            <SortableTableHeader
+              active={sortKey === 'latitude'}
+              direction={sortDirection}
+              onClick={() => toggleSort('latitude')}
+              className="w-[110px] px-4 py-3 whitespace-nowrap"
+            >
               {t('table.latitude')}
             </SortableTableHeader>
-            <SortableTableHeader active={sortKey === 'longitude'} direction={sortDirection} onClick={() => toggleSort('longitude')} className="w-[110px] px-4 py-3 whitespace-nowrap">
+            <SortableTableHeader
+              active={sortKey === 'longitude'}
+              direction={sortDirection}
+              onClick={() => toggleSort('longitude')}
+              className="w-[110px] px-4 py-3 whitespace-nowrap"
+            >
               {t('table.longitude')}
             </SortableTableHeader>
-            <SortableTableHeader active={sortKey === 'coverage'} direction={sortDirection} onClick={() => toggleSort('coverage')} className="w-[145px] px-4 py-3">
+            <SortableTableHeader
+              active={sortKey === 'coverage'}
+              direction={sortDirection}
+              onClick={() => toggleSort('coverage')}
+              className="w-[145px] px-4 py-3"
+            >
               {t('table.coverage')}
             </SortableTableHeader>
-            <SortableTableHeader active={sortKey === 'status'} direction={sortDirection} onClick={() => toggleSort('status')} className="w-[160px] px-4 py-3">
+            <SortableTableHeader
+              active={sortKey === 'status'}
+              direction={sortDirection}
+              onClick={() => toggleSort('status')}
+              className="w-[160px] px-4 py-3"
+            >
               {t('table.status')}
             </SortableTableHeader>
             <th className="w-[190px] px-4 py-3 text-right whitespace-nowrap">{t('table.action')}</th>
@@ -1080,28 +1200,29 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                           masterAddr.referenceSource === 'PREREG_IMPORT' &&
                           masterAddr.referenceLocation &&
                           masterAddr.coordinateAuditStatus && (
-                          <div
-                            className={`mt-1 text-[10px] font-semibold ${
-                              masterAddr.coordinateAuditStatus === 'MATCHED'
-                                ? 'text-emerald-700 dark:text-emerald-300'
-                                : masterAddr.coordinateAuditStatus === 'MISMATCH' || masterAddr.coordinateAuditStatus === 'INVALID'
-                                  ? 'text-rose-700 dark:text-rose-300'
-                                  : 'text-amber-700 dark:text-amber-300'
-                            }`}
-                          >
-                            {t(
-                              masterAddr.coordinateAuditStatus === 'MATCHED'
-                                ? 'customers.coordinateAuditMatched'
-                                : masterAddr.coordinateAuditStatus === 'MISMATCH'
-                                  ? 'customers.coordinateAuditMismatch'
-                                  : masterAddr.coordinateAuditStatus === 'INVALID'
-                                    ? 'customers.coordinateAuditInvalid'
-                                    : masterAddr.coordinateAuditStatus === 'UNCERTAIN'
-                                      ? 'customers.coordinateAuditUncertain'
-                                      : 'customers.coordinateAuditPending',
-                            )}
-                          </div>
-                        )}
+                            <div
+                              className={`mt-1 text-[10px] font-semibold ${
+                                masterAddr.coordinateAuditStatus === 'MATCHED'
+                                  ? 'text-emerald-700 dark:text-emerald-300'
+                                  : masterAddr.coordinateAuditStatus === 'MISMATCH' ||
+                                      masterAddr.coordinateAuditStatus === 'INVALID'
+                                    ? 'text-rose-700 dark:text-rose-300'
+                                    : 'text-amber-700 dark:text-amber-300'
+                              }`}
+                            >
+                              {t(
+                                masterAddr.coordinateAuditStatus === 'MATCHED'
+                                  ? 'customers.coordinateAuditMatched'
+                                  : masterAddr.coordinateAuditStatus === 'MISMATCH'
+                                    ? 'customers.coordinateAuditMismatch'
+                                    : masterAddr.coordinateAuditStatus === 'INVALID'
+                                      ? 'customers.coordinateAuditInvalid'
+                                      : masterAddr.coordinateAuditStatus === 'UNCERTAIN'
+                                        ? 'customers.coordinateAuditUncertain'
+                                        : 'customers.coordinateAuditPending',
+                              )}
+                            </div>
+                          )}
                       </div>
                     ) : (
                       <span className="text-gray-400 dark:text-gray-500 italic">{t('customers.noAddress')}</span>
@@ -1122,7 +1243,12 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
 
                   <td className="px-4 py-3.5 align-top">
                     <div className="text-gray-800 dark:text-gray-200 break-words whitespace-normal leading-4">
-                      {t(networkAvailabilityLabel(cust.latestCoverageStatus ?? masterAddr?.latestCoverageStatus, cust.coverageStatus))}
+                      {t(
+                        networkAvailabilityLabel(
+                          cust.latestCoverageStatus ?? masterAddr?.latestCoverageStatus,
+                          cust.coverageStatus,
+                        ),
+                      )}
                     </div>
                     <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 break-words whitespace-normal leading-4">
                       {cust.btsName || (cust.isCoverBts ? t('customers.btsAvailable') : t('customers.btsNameMissing'))}
@@ -1130,7 +1256,12 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                     <div className="mt-1 space-y-0.5 text-[10px] text-gray-500 dark:text-gray-400 break-words whitespace-normal leading-4">
                       <div>
                         <span className="font-semibold">FWA:</span>{' '}
-                        {t(fwaCoverageLabel(cust.latestCoverageStatus ?? masterAddr?.latestCoverageStatus, cust.coverageFwaStatus))}
+                        {t(
+                          fwaCoverageLabel(
+                            cust.latestCoverageStatus ?? masterAddr?.latestCoverageStatus,
+                            cust.coverageFwaStatus,
+                          ),
+                        )}
                       </div>
                       <div>
                         <span className="font-semibold">FTTH:</span> {cust.coverageFtthStatus || '—'}
@@ -1211,9 +1342,9 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
 
       {/* ADD / EDIT CUSTOMER MODAL */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-xs animate-in fade-in">
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900">
-            <div className="p-4 bg-gray-50/80 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-[1100] flex items-start justify-center overflow-y-auto bg-gray-900/60 p-2 backdrop-blur-xs animate-in fade-in sm:items-center sm:p-4">
+          <div className="coreui-modal flex h-[calc(100dvh-1rem)] max-h-[56rem] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900 sm:h-[calc(100dvh-2rem)]">
+            <div className="coreui-modal-header z-10 flex shrink-0 items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800 sm:px-5">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
                 {editingCustomer ? t('customers.editTitle') : t('customers.addTitle')}
               </h3>
@@ -1226,197 +1357,201 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
               </button>
             </div>
 
-            <form onSubmit={handleCreateCustomerSubmit} className="p-5 space-y-3.5 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+            <form
+              onSubmit={handleCreateCustomerSubmit}
+              className="flex min-h-0 flex-1 flex-col overflow-hidden text-xs"
+            >
+              <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto p-4 [overscroll-behavior:contain] sm:p-5">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                      {t('customers.fullName')}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Contoh: Hendra Gunawan"
+                      value={newCustName}
+                      onChange={(e) => setNewCustName(e.target.value)}
+                      className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                      {t('customers.externalId')}{' '}
+                      <span className="font-normal text-gray-400">({t('customers.autoGenerated')})</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newCustExtId}
+                      disabled
+                      title={t('customers.idReadOnly')}
+                      className="w-full rounded-lg border border-gray-300 bg-gray-100 p-2 text-xs font-mono text-gray-500 disabled:cursor-not-allowed dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                      {t('customers.whatsapp')} (+62)
+                    </label>
+                    <div className="flex overflow-hidden rounded-lg border border-gray-300 bg-white dark:border-gray-700 dark:bg-gray-800">
+                      <span className="flex items-center border-r border-gray-300 bg-gray-50 px-2 font-mono text-xs text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+                        +62
+                      </span>
+                      <input
+                        type="tel"
+                        required
+                        inputMode="numeric"
+                        pattern="8[0-9]{7,12}"
+                        placeholder="812345678"
+                        value={getPhoneNationalPart(newCustPhone)}
+                        onChange={(e) => setPhoneNationalPart(e.target.value)}
+                        aria-label={t('customers.whatsappLabel')}
+                        className="min-w-0 flex-1 bg-transparent p-2 text-xs font-mono text-gray-900 outline-none focus:ring-1 focus:ring-gray-900 dark:text-white dark:focus:ring-gray-400"
+                      />
+                    </div>
+                    <p className="mt-1 text-[10px] leading-4 text-gray-500">{t('customers.countryCodeHelp')}</p>
+                  </div>
+                </div>
+
+                {editingCustomer && (
+                  <div>
+                    <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                      {t('customers.statusLabelText')}
+                    </label>
+                    <select
+                      value={newCustStatus}
+                      onChange={(e) => setNewCustStatus(e.target.value as CustomerStatus)}
+                      className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-xs"
+                    >
+                      <option value="ACTIVE">{t('customers.statusLabel.ACTIVE')}</option>
+                      <option value="PENDING_INSTALLATION">{t('customers.statusLabel.PENDING_INSTALLATION')}</option>
+                      <option value="VERIFIED">{t('customers.statusLabel.VERIFIED')}</option>
+                      <option value="SUSPENDED">{t('customers.statusLabel.SUSPENDED')}</option>
+                    </select>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                    {t('customers.fullName')}
+                    {t('customers.street')} <span className="text-rose-600">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="Contoh: Hendra Gunawan"
-                    value={newCustName}
-                    onChange={(e) => setNewCustName(e.target.value)}
+                    placeholder="Contoh: Jl. Gatot Subroto Kav. 52"
+                    value={newCustStreet}
+                    onChange={(e) => setNewCustStreet(e.target.value)}
                     className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400"
                   />
                 </div>
-                <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                    {t('customers.externalId')}{' '}
-                    <span className="font-normal text-gray-400">({t('customers.autoGenerated')})</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={newCustExtId}
-                    disabled
-                    title={t('customers.idReadOnly')}
-                    className="w-full rounded-lg border border-gray-300 bg-gray-100 p-2 text-xs font-mono text-gray-500 disabled:cursor-not-allowed dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-400"
-                  />
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {renderRegionField('province', t('customers.province'))}
+                  {renderRegionField('city', t('customers.city'))}
                 </div>
-                <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                    {t('customers.whatsapp')} (+62)
-                  </label>
-                  <div className="flex overflow-hidden rounded-lg border border-gray-300 bg-white dark:border-gray-700 dark:bg-gray-800">
-                    <span className="flex items-center border-r border-gray-300 bg-gray-50 px-2 font-mono text-xs text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
-                      +62
-                    </span>
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {renderRegionField('district', t('customers.district'))}
+                  {renderRegionField('subdistrict', t('customers.subdistrict'))}
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                      {t('customers.houseNumber')}{' '}
+                      <span className="font-normal text-gray-400">({t('customers.optional')})</span>
+                    </label>
                     <input
-                      type="tel"
-                      required
+                      type="text"
+                      placeholder="Contoh: 12 atau A-12"
+                      value={newCustHouseNo}
+                      onChange={(e) => setNewCustHouseNo(e.target.value)}
+                      className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400"
+                    />
+                    <p className="mt-1 text-[10px] leading-4 text-gray-500">{t('customers.houseNumberHelp')}</p>
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                      {t('customers.postalCode')}{' '}
+                      <span className="font-normal text-gray-400">({t('customers.optional')})</span>
+                    </label>
+                    <input
                       inputMode="numeric"
-                      pattern="8[0-9]{7,12}"
-                      placeholder="812345678"
-                      value={getPhoneNationalPart(newCustPhone)}
-                      onChange={(e) => setPhoneNationalPart(e.target.value)}
-                      aria-label={t('customers.whatsappLabel')}
-                      className="min-w-0 flex-1 bg-transparent p-2 text-xs font-mono text-gray-900 outline-none focus:ring-1 focus:ring-gray-900 dark:text-white dark:focus:ring-gray-400"
+                      maxLength={5}
+                      pattern="[0-9]{5}"
+                      placeholder="Contoh: 11540"
+                      value={newCustPostalCode}
+                      onChange={(e) => setNewCustPostalCode(e.target.value)}
+                      className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-xs"
                     />
                   </div>
-                  <p className="mt-1 text-[10px] leading-4 text-gray-500">{t('customers.countryCodeHelp')}</p>
                 </div>
-              </div>
 
-              {editingCustomer && (
-                <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                    {t('customers.statusLabelText')}
-                  </label>
-                  <select
-                    value={newCustStatus}
-                    onChange={(e) => setNewCustStatus(e.target.value as CustomerStatus)}
-                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-xs"
-                  >
-                    <option value="ACTIVE">{t('customers.statusLabel.ACTIVE')}</option>
-                    <option value="PENDING_INSTALLATION">{t('customers.statusLabel.PENDING_INSTALLATION')}</option>
-                    <option value="VERIFIED">{t('customers.statusLabel.VERIFIED')}</option>
-                    <option value="SUSPENDED">{t('customers.statusLabel.SUSPENDED')}</option>
-                  </select>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                      {t('customers.addressDetail')}{' '}
+                      <span className="font-normal text-gray-400">({t('customers.optional')})</span>
+                    </label>
+                    <textarea
+                      rows={2}
+                      maxLength={1000}
+                      placeholder="Contoh: Blok A lantai 2, dekat pos satpam, sebelah minimarket"
+                      value={newCustAddressDetail}
+                      onChange={(e) => setNewCustAddressDetail(e.target.value)}
+                      className="w-full resize-y rounded-lg border border-gray-300 bg-white p-2 text-xs dark:border-gray-700 dark:bg-gray-800"
+                    />
+                  </div>
                 </div>
-              )}
 
-              <div>
-                <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                  {t('customers.street')} <span className="text-rose-600">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Jl. Gatot Subroto Kav. 52"
-                  value={newCustStreet}
-                  onChange={(e) => setNewCustStreet(e.target.value)}
-                  className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                {renderRegionField('province', t('customers.province'))}
-                {renderRegionField('city', t('customers.city'))}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                {renderRegionField('district', t('customers.district'))}
-                {renderRegionField('subdistrict', t('customers.subdistrict'))}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                    {t('customers.houseNumber')}{' '}
-                    <span className="font-normal text-gray-400">({t('customers.optional')})</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Contoh: 12 atau A-12"
-                    value={newCustHouseNo}
-                    onChange={(e) => setNewCustHouseNo(e.target.value)}
-                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400"
-                  />
-                  <p className="mt-1 text-[10px] leading-4 text-gray-500">{t('customers.houseNumberHelp')}</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                      {t('customers.referenceLatitude')}{' '}
+                      <span className="font-normal text-gray-400">({t('customers.optional')})</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: -6.2088"
+                      value={newCustLat}
+                      onChange={(e) => setNewCustLat(e.target.value)}
+                      className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
+                      {t('customers.referenceLongitude')}{' '}
+                      <span className="font-normal text-gray-400">({t('customers.optional')})</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: 106.8456"
+                      value={newCustLng}
+                      onChange={(e) => setNewCustLng(e.target.value)}
+                      className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                    {t('customers.postalCode')}{' '}
-                    <span className="font-normal text-gray-400">({t('customers.optional')})</span>
-                  </label>
-                  <input
-                    inputMode="numeric"
-                    maxLength={5}
-                    pattern="[0-9]{5}"
-                    placeholder="Contoh: 11540"
-                    value={newCustPostalCode}
-                    onChange={(e) => setNewCustPostalCode(e.target.value)}
-                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-xs"
-                  />
-                </div>
+                <p className="text-[10px] leading-4 text-gray-500">{t('customers.coordinateHelp')}</p>
+
+                {regionError && (
+                  <p role="alert" className="text-xs text-rose-600">
+                    {regionError}
+                  </p>
+                )}
+                {formError && <p className="text-xs text-rose-600">{formError}</p>}
               </div>
-
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                    {t('customers.addressDetail')}{' '}
-                    <span className="font-normal text-gray-400">({t('customers.optional')})</span>
-                  </label>
-                  <textarea
-                    rows={2}
-                    maxLength={1000}
-                    placeholder="Contoh: Blok A lantai 2, dekat pos satpam, sebelah minimarket"
-                    value={newCustAddressDetail}
-                    onChange={(e) => setNewCustAddressDetail(e.target.value)}
-                    className="w-full resize-y rounded-lg border border-gray-300 bg-white p-2 text-xs dark:border-gray-700 dark:bg-gray-800"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                    {t('customers.referenceLatitude')}{' '}
-                    <span className="font-normal text-gray-400">({t('customers.optional')})</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Contoh: -6.2088"
-                    value={newCustLat}
-                    onChange={(e) => setNewCustLat(e.target.value)}
-                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-gray-700 dark:text-gray-300 font-medium mb-1">
-                    {t('customers.referenceLongitude')}{' '}
-                    <span className="font-normal text-gray-400">({t('customers.optional')})</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Contoh: 106.8456"
-                    value={newCustLng}
-                    onChange={(e) => setNewCustLng(e.target.value)}
-                    className="w-full p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-xs font-mono focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400 focus:border-gray-900 dark:focus:border-gray-400"
-                  />
-                </div>
-              </div>
-              <p className="text-[10px] leading-4 text-gray-500">{t('customers.coordinateHelp')}</p>
-
-              {regionError && (
-                <p role="alert" className="text-xs text-rose-600">
-                  {regionError}
-                </p>
-              )}
-              {formError && <p className="text-xs text-rose-600">{formError}</p>}
-
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-gray-200 dark:border-gray-800">
+              <div className="coreui-modal-footer customer-modal-actions flex shrink-0 flex-col-reverse items-stretch justify-end gap-2 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:px-5">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium"
+                  className="coreui-modal-secondary customer-modal-cancel rounded-lg border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                 >
                   {t('customers.cancel')}
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white font-medium rounded-lg shadow-xs"
+                  className="customer-modal-submit rounded-lg bg-gray-900 px-4 py-2 font-medium text-white shadow-xs hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white"
                 >
                   {editingCustomer ? t('customers.saveChanges') : t('customers.save')}
                 </button>

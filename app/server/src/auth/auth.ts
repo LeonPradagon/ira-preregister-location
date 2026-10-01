@@ -3,6 +3,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { db } from '../db/client.js';
 import { authAccounts, authSessions, authUsers, authVerifications } from '../db/schema/index.js';
+import { emailAndPasswordSettings } from './auth-settings.js';
 import {
   AUTH_ANONYMOUS_ACTOR_ID,
   findAuthActor,
@@ -40,7 +41,7 @@ export const auth = betterAuth({
       .map((origin) => origin.trim())
       .filter(Boolean),
   ],
-  emailAndPassword: { enabled: true },
+  emailAndPassword: emailAndPasswordSettings,
   hooks: {
     after: async (rawContext) => {
       const context = rawContext as unknown as AuthAfterHookContext;

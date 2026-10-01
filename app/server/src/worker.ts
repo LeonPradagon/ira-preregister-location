@@ -59,9 +59,14 @@ import {
   shouldAuditImportedCoordinate,
   shouldAutoVerifyCoordinateAudit,
 } from './modules/validation/coordinate-audit.policy.js';
-import { coordinateAuditEnqueueLimit } from './modules/validation/coordinate-audit-queue.policy.js';
+import {
+  coordinateAuditEnqueueLimit,
+  shouldRetryFailedCoordinateAudit,
+} from './modules/validation/coordinate-audit-queue.policy.js';
 import { AdminExportService } from './modules/admin/admin-export.service.js';
 import { FwaCoverageAdapter } from './integrations/coverage/fwa-coverage.adapter.js';
+import { TicketingService } from './modules/ticketing/ticketing.service.js';
+import { CoverageService } from './modules/coverage/coverage.service.js';
 
 const connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null }).on(
   'error',
@@ -70,6 +75,7 @@ const connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', 
 const execFileAsync = promisify(execFile);
 const workerRole = process.env.WORKER_ROLE ?? 'all';
 const runs = (role: string) => workerRole === 'all' || workerRole === role;
+const ticketingService = new TicketingService();
 const importStorageDirectory = resolve(process.env.IMPORT_STORAGE_DIR ?? resolve(process.cwd(), 'var', 'imports'));
 const resolveImportFilePath = (storedPath: string) =>
   resolve(importStorageDirectory, basename(storedPath.replaceAll('\\', '/')));
@@ -96,12 +102,14 @@ const coordinateAuditQueue = new Queue(coordinateAuditQueueName, { connection })
 const exportQueue = new Queue(exportQueueName, { connection });
 const coverageQueue = new Queue(coverageQueueName, { connection });
 const adminExportService = runs('maintenance') ? new AdminExportService() : null;
+const automaticCoverage = runs('messaging') ? new CoverageService() : null;
 const positiveIntegerEnv = (value: string | undefined, fallback: number) => {
   const parsed = Number(value ?? fallback);
   return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : fallback;
 };
 const coordinateAuditQueueBuffer = positiveIntegerEnv(process.env.COORDINATE_AUDIT_QUEUE_BUFFER, 2000);
 const coordinateAuditBatchSize = positiveIntegerEnv(process.env.COORDINATE_AUDIT_BATCH_SIZE, 500);
+const coordinateAuditRetryDelayMs = 15 * 60 * 1000;
 const reminderProcessingTimeoutMinutes = positiveIntegerEnv(process.env.REMINDER_PROCESSING_TIMEOUT_MINUTES, 15);
 const reminderRecoveryIntervalSeconds = positiveIntegerEnv(process.env.REMINDER_RECOVERY_INTERVAL_SECONDS, 60);
 const reminderRecoveryBatchSize = positiveIntegerEnv(process.env.REMINDER_RECOVERY_BATCH_SIZE, 50);
@@ -124,12 +132,10 @@ const whatsapp: WhatsAppPort =
 const campaigns = new CampaignService(new ValidationConfigService(), new ReadCacheService());
 const reminderConfig = new ValidationConfigService();
 const messagingConfig = new ValidationConfigService();
+const ticketingConfig = new ValidationConfigService();
 const fwaCoverage = new FwaCoverageAdapter();
 
-const cancelClaimedReminder = async (
-  reminderId: string,
-  reason: Parameters<typeof reminderCancellationFields>[0],
-) => {
+const cancelClaimedReminder = async (reminderId: string, reason: Parameters<typeof reminderCancellationFields>[0]) => {
   const cancelledAt = new Date();
   const [cancelled] = await db
     .update(reminders)
@@ -140,9 +146,9 @@ const cancelClaimedReminder = async (
     .where(and(eq(reminders.id, reminderId), eq(reminders.status, 'PROCESSING')))
     .returning({ id: reminders.id });
   if (cancelled)
-    await db.insert(auditLogs).values(
-      reminderCancellationAudit(cancelled.id, reason, cancelledAt, 'system', 'Reminder Worker'),
-    );
+    await db
+      .insert(auditLogs)
+      .values(reminderCancellationAudit(cancelled.id, reason, cancelledAt, 'system', 'Reminder Worker'));
 };
 
 const enqueuePendingCoordinateAudits = async () => {
@@ -150,7 +156,10 @@ const enqueuePendingCoordinateAudits = async () => {
   coordinateAuditEnqueueInFlight = true;
   try {
     const counts = await coordinateAuditQueue.getJobCounts('waiting', 'active', 'delayed', 'prioritized', 'paused');
-    const enqueueLimit = Math.min(coordinateAuditBatchSize, coordinateAuditEnqueueLimit(counts, coordinateAuditQueueBuffer));
+    const enqueueLimit = Math.min(
+      coordinateAuditBatchSize,
+      coordinateAuditEnqueueLimit(counts, coordinateAuditQueueBuffer),
+    );
     if (!enqueueLimit) return 0;
     const pending = await db
       .select({ id: customerAddresses.id })
@@ -166,13 +175,29 @@ const enqueuePendingCoordinateAudits = async () => {
       )
       .limit(enqueueLimit);
     if (!pending.length) return 0;
-    await coordinateAuditQueue.addBulk(
-      pending.map(({ id }) => ({
-        name: 'audit-imported-coordinate',
-        data: { addressId: id },
-        opts: { jobId: queueSafeJobId('coordinate-audit', id), removeOnComplete: true, removeOnFail: false },
-      })),
-    );
+    const jobsToAdd = [];
+    for (const { id } of pending) {
+      const jobId = queueSafeJobId('coordinate-audit', id);
+      const existingJob = await coordinateAuditQueue.getJob(jobId);
+      if (!existingJob) {
+        jobsToAdd.push({
+          name: 'audit-imported-coordinate',
+          data: { addressId: id },
+          opts: { jobId, removeOnComplete: true, removeOnFail: false },
+        });
+        continue;
+      }
+      if (
+        shouldRetryFailedCoordinateAudit(
+          await existingJob.getState(),
+          existingJob.finishedOn,
+          Date.now(),
+          coordinateAuditRetryDelayMs,
+        )
+      )
+        await existingJob.retry('failed');
+    }
+    if (jobsToAdd.length) await coordinateAuditQueue.addBulk(jobsToAdd);
     return pending.length;
   } finally {
     coordinateAuditEnqueueInFlight = false;
@@ -223,11 +248,7 @@ const dispatchSafety = async (phoneE164: string, campaignId?: string, campaignDa
     .where(eq(whatsappDeliveryLogs.phoneHash, hashPhone(phoneE164)))
     .orderBy(desc(whatsappDeliveryLogs.sentAt))
     .limit(1);
-  const retryAt = nextAllowedSendAt(
-    last?.sentAt ?? null,
-    runtimeConfig.WHATSAPP_MIN_INTERVAL_MINUTES,
-    current,
-  );
+  const retryAt = nextAllowedSendAt(last?.sentAt ?? null, runtimeConfig.WHATSAPP_MIN_INTERVAL_MINUTES, current);
   if (retryAt) return { allowed: false, retryAt };
   const cooldownKey = `whatsapp:cooldown:${hashPhone(phoneE164)}`;
   const cooldownSeconds = runtimeConfig.WHATSAPP_MIN_INTERVAL_MINUTES * 60;
@@ -300,6 +321,15 @@ const outboxWorker = runs('messaging')
           .set({ status: 'PROCESSING', attemptCount: event.attemptCount + 1, updatedAt: processingAt })
           .where(eq(integrationOutbox.id, outboxId));
         try {
+          if (event.eventType === 'location.verified.v1') {
+            const batch = await automaticCoverage?.enqueueForVerifiedLocation(event.aggregateId, event.eventId);
+            if (batch)
+              logEvent('info', 'coverage.auto_check_queued', {
+                eventId: event.eventId,
+                batchId: batch.batchId,
+                queuedCount: batch.queuedCount,
+              });
+          }
           // Provider-specific consumers remain disabled until credentials are
           // configured. Publishing the durable event is still observable and safe.
           logEvent('info', 'outbox.published', { eventId: event.eventId, eventType: event.eventType });
@@ -330,7 +360,11 @@ const coverageWorker = runs('coverage')
       coverageQueueName,
       async (job) => {
         const batchId = String(job.data.batchId);
-        const [batch] = await db.select().from(coverageCheckBatches).where(eq(coverageCheckBatches.id, batchId)).limit(1);
+        const [batch] = await db
+          .select()
+          .from(coverageCheckBatches)
+          .where(eq(coverageCheckBatches.id, batchId))
+          .limit(1);
         if (!batch || ['COMPLETED', 'PARTIAL_FAILED', 'FAILED'].includes(batch.status)) return;
         const startedAt = new Date();
         await db
@@ -376,6 +410,33 @@ const coverageWorker = runs('coverage')
                   .where(eq(coverageChecks.id, check.id));
               }),
             );
+            const ticketingRules = await ticketingConfig.get();
+            if (ticketingRules.ENABLE_AUTO_TICKETING) {
+              const coveredChecks = chunk.filter((_, index) => results[index]?.status === 'COVERED');
+              for (let index = 0; index < coveredChecks.length; index += 5) {
+                await Promise.all(
+                  coveredChecks.slice(index, index + 5).map(async (check) => {
+                    try {
+                      const result = await ticketingService.createAutomatically(
+                        check.customerId,
+                        check.id,
+                        ticketingRules,
+                      );
+                      logEvent('info', 'ticketing.auto_create_evaluated', {
+                        coverageCheckId: check.id,
+                        status: result.status,
+                        reason: 'reason' in result ? result.reason : undefined,
+                      });
+                    } catch (error) {
+                      logEvent('error', 'ticketing.auto_create_failed', {
+                        coverageCheckId: check.id,
+                        error: error instanceof Error ? error.message : String(error),
+                      });
+                    }
+                  }),
+                );
+              }
+            }
           } catch (error) {
             const message = (error instanceof Error ? error.message : String(error)).slice(0, 1000);
             await db
@@ -400,7 +461,13 @@ const coverageWorker = runs('coverage')
         const finalStatus = failed === 0 ? 'COMPLETED' : completed === 0 ? 'FAILED' : 'PARTIAL_FAILED';
         await db
           .update(coverageCheckBatches)
-          .set({ status: finalStatus, completedCount: completed, failedCount: failed, completedAt: new Date(), updatedAt: new Date() })
+          .set({
+            status: finalStatus,
+            completedCount: completed,
+            failedCount: failed,
+            completedAt: new Date(),
+            updatedAt: new Date(),
+          })
           .where(eq(coverageCheckBatches.id, batchId));
       },
       { connection, concurrency: 2 },
@@ -720,7 +787,9 @@ const campaignWorker = runs('campaign')
           });
           providerAccepted = true;
           const sentAt = new Date();
-          const initialLinkExpiresAt = new Date(sentAt.getTime() + runtimeConfig.VERIFICATION_TOKEN_TTL_DAYS * 86400000);
+          const initialLinkExpiresAt = new Date(
+            sentAt.getTime() + runtimeConfig.VERIFICATION_TOKEN_TTL_DAYS * 86400000,
+          );
           const sessionExpiresAt = verificationSessionExpiresAt(
             initialLinkExpiresAt,
             runtimeConfig.MAX_REMINDERS_PER_SESSION,
@@ -1049,7 +1118,12 @@ const coordinateAuditWorker = runs('import')
             const activeSessions = await tx
               .select({ id: verificationSessions.id })
               .from(verificationSessions)
-              .where(and(eq(verificationSessions.customerId, row.address.customerId), isNull(verificationSessions.completedAt)));
+              .where(
+                and(
+                  eq(verificationSessions.customerId, row.address.customerId),
+                  isNull(verificationSessions.completedAt),
+                ),
+              );
             if (activeSessions.length) {
               const sessionIds = activeSessions.map(({ id }) => id);
               await tx
@@ -1071,17 +1145,19 @@ const coordinateAuditWorker = runs('import')
                 .where(and(inArray(reminders.sessionId, sessionIds), eq(reminders.status, 'SCHEDULED')))
                 .returning({ id: reminders.id });
               if (cancelledReminders.length)
-                await tx.insert(auditLogs).values(
-                  cancelledReminders.map(({ id }) =>
-                    reminderCancellationAudit(
-                      id,
-                      'COORDINATE_AUDIT_AUTO_VERIFIED',
-                      auditedAt,
-                      'system',
-                      'Coordinate Audit Worker',
+                await tx
+                  .insert(auditLogs)
+                  .values(
+                    cancelledReminders.map(({ id }) =>
+                      reminderCancellationAudit(
+                        id,
+                        'COORDINATE_AUDIT_AUTO_VERIFIED',
+                        auditedAt,
+                        'system',
+                        'Coordinate Audit Worker',
+                      ),
                     ),
-                  ),
-                );
+                  );
             }
             await tx.insert(auditLogs).values({
               actorUserId: 'system',
@@ -1532,9 +1608,7 @@ const recoverMissingReminderSlots = async () => {
           .set({
             reminderCount: reminderNumber,
             verificationStatus:
-              reminderNumber >= runtimeConfig.MAX_REMINDERS_PER_SESSION
-                ? 'REMINDER_LIMIT_REACHED'
-                : 'WAITING_FOR_HOME',
+              reminderNumber >= runtimeConfig.MAX_REMINDERS_PER_SESSION ? 'REMINDER_LIMIT_REACHED' : 'WAITING_FOR_HOME',
             updatedAt: recoveryStartedAt,
           })
           .where(eq(verificationSessions.id, session.id));
@@ -1615,12 +1689,7 @@ const scheduleStaleCustomerFollowUps = async () => {
         const [activeReminder] = await tx
           .select({ id: reminders.id })
           .from(reminders)
-          .where(
-            and(
-              eq(reminders.sessionId, candidate.id),
-              inArray(reminders.status, ['SCHEDULED', 'PROCESSING']),
-            ),
-          )
+          .where(and(eq(reminders.sessionId, candidate.id), inArray(reminders.status, ['SCHEDULED', 'PROCESSING'])))
           .limit(1);
         if (
           !shouldScheduleSystemFollowUp(
@@ -1649,9 +1718,7 @@ const scheduleStaleCustomerFollowUps = async () => {
             retryCount: reminders.retryCount,
           })
           .from(reminders)
-          .where(
-            and(eq(reminders.sessionId, candidate.id), eq(reminders.reminderNumber, reminderNumber)),
-          )
+          .where(and(eq(reminders.sessionId, candidate.id), eq(reminders.reminderNumber, reminderNumber)))
           .limit(1);
         const reason =
           current.session.verificationStatus === 'ADDRESS_EDITING' ||
@@ -1894,9 +1961,16 @@ importWorker?.on('failed', (job, error) =>
 coordinateAuditWorker?.on('completed', (job) =>
   logEvent('info', 'coordinate_audit.worker_completed', { jobId: job.id }),
 );
-coordinateAuditWorker?.on('failed', (job, error) =>
-  logEvent('error', 'coordinate_audit.worker_failed', { jobId: job?.id, error: error.message }),
-);
+coordinateAuditWorker?.on('failed', (job, error) => {
+  const cause = error.cause;
+  const causeCode =
+    cause && typeof cause === 'object' && 'code' in cause && typeof cause.code === 'string' ? cause.code : undefined;
+  logEvent('error', 'coordinate_audit.worker_failed', {
+    jobId: job?.id,
+    error: error.message.split('\n', 1)[0],
+    causeCode,
+  });
+});
 exportWorker?.on('completed', (job) => logEvent('info', 'export.worker_completed', { jobId: job.id }));
 exportWorker?.on('failed', (job, error) =>
   logEvent('error', 'export.worker_failed', { jobId: job?.id, error: error.message }),
@@ -1927,6 +2001,7 @@ const shutdown = async () => {
   await exportQueue.close();
   await coverageQueue.close();
   await adminExportService?.onModuleDestroy();
+  await automaticCoverage?.onModuleDestroy();
   if (coordinateGeocoder && 'onModuleDestroy' in coordinateGeocoder)
     await (coordinateGeocoder as { onModuleDestroy?: () => Promise<void> }).onModuleDestroy?.();
   await connection.quit();

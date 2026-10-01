@@ -3,12 +3,21 @@ import { readdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { sql } from 'drizzle-orm';
 import { db, pool } from './client.js';
+import { provisionRuntimeDatabaseRole } from './provision-runtime-role.js';
 
 const migrationsDir = resolve(import.meta.dirname, 'migrations');
 const migrationName = /^\d{4}_.+\.sql$/;
 const noTransactionMarker = '-- migration: no-transaction';
 
 const main = async () => {
+  if (process.env.NODE_ENV === 'production') {
+    await provisionRuntimeDatabaseRole(
+      pool,
+      process.env.APP_DATABASE_USER ?? '',
+      process.env.APP_DATABASE_PASSWORD ?? '',
+    );
+  }
+
   const migrationFiles = (await readdir(migrationsDir))
     .filter((fileName) => migrationName.test(fileName))
     // 0000_ambiguous_kree.sql is a local Drizzle-generated artifact. The
@@ -49,8 +58,8 @@ const main = async () => {
   await pool.end();
 };
 
-main().catch(async (error) => {
-  console.error(error);
+main().catch(async () => {
+  console.error('Database migration failed');
   await pool.end();
   process.exitCode = 1;
 });

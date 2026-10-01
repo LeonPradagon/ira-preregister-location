@@ -1,6 +1,7 @@
 import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import '@coreui/coreui/dist/css/coreui.min.css';
 import './index.css';
 
 class RootErrorBoundary extends React.Component<React.PropsWithChildren, { hasError: boolean }> {
@@ -17,9 +18,9 @@ class RootErrorBoundary extends React.Component<React.PropsWithChildren, { hasEr
         role="alert"
         style={{
           alignItems: 'center',
-          background: '#fff5f5',
+          background: '#f3f4f7',
           boxSizing: 'border-box',
-          color: '#172033',
+          color: '#2f353a',
           display: 'flex',
           fontFamily: 'system-ui, sans-serif',
           justifyContent: 'center',
@@ -31,9 +32,9 @@ class RootErrorBoundary extends React.Component<React.PropsWithChildren, { hasEr
         <section
           style={{
             background: '#fff',
-            border: '1px solid #fecdd3',
-            borderRadius: '20px',
-            boxShadow: '0 8px 30px rgba(183, 23, 29, 0.12)',
+            border: '1px solid #d8dbe0',
+            borderRadius: '8px',
+            boxShadow: '0 3px 10px rgba(44, 56, 74, 0.12)',
             maxWidth: '420px',
             padding: '28px',
             width: '100%',

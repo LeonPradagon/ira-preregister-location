@@ -1,12 +1,15 @@
 import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
+  bigserial,
   customType,
+  doublePrecision,
   integer,
   jsonb,
   numeric,
   index,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -25,6 +28,7 @@ export const geographyPoint = customType<{
 const id = () => uuid('id').defaultRandom().primaryKey();
 const createdAt = () => timestamp('created_at', { withTimezone: true }).defaultNow().notNull();
 const updatedAt = () => timestamp('updated_at', { withTimezone: true }).defaultNow().notNull();
+const postgresPolygon = customType<{ data: string; driverData: string }>({ dataType: () => 'polygon' });
 
 // Better Auth tables. Customer records intentionally do not use these tables.
 export const authUsers = pgTable('user', {
@@ -81,32 +85,36 @@ export const authVerifications = pgTable('verification', {
   updatedAt: updatedAt(),
 });
 
-export const customers = pgTable('customers', {
-  id: id(),
-  externalId: varchar('external_id', { length: 128 }).notNull().unique(),
-  name: varchar('name', { length: 255 }).notNull(),
-  phoneE164: varchar('phone_e164', { length: 32 }).notNull(),
-  whatsappStatus: varchar('whatsapp_status', { length: 32 }).notNull().default('NOT_CHECKED'),
-  whatsappOptInAt: timestamp('whatsapp_opt_in_at', { withTimezone: true }),
-  whatsappOptInSource: varchar('whatsapp_opt_in_source', { length: 128 }),
-  whatsappOptOutAt: timestamp('whatsapp_opt_out_at', { withTimezone: true }),
-  status: varchar('status', { length: 48 }).notNull().default('ACTIVE'),
-  sourceRecordId: varchar('source_record_id', { length: 128 }).unique(),
-  sourceCreatedAt: timestamp('source_created_at', { withTimezone: true }),
-  isCoverBts: boolean('is_cover_bts'),
-  btsName: varchar('bts_name', { length: 255 }),
-  coverageStatus: varchar('coverage_status', { length: 64 }),
-  coverageFwaStatus: varchar('coverage_fwa_status', { length: 64 }),
-  coverageFtthStatus: varchar('coverage_ftth_status', { length: 64 }),
-  sourceMetadata: jsonb('source_metadata'),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-}, (table) => [
-  index('customers_name_id_idx').on(table.name, table.id),
-  index('customers_whatsapp_status_idx').on(table.whatsappStatus),
-  index('customers_coverage_fwa_status_idx').on(table.coverageFwaStatus),
-  index('customers_coverage_ftth_status_idx').on(table.coverageFtthStatus),
-]);
+export const customers = pgTable(
+  'customers',
+  {
+    id: id(),
+    externalId: varchar('external_id', { length: 128 }).notNull().unique(),
+    name: varchar('name', { length: 255 }).notNull(),
+    phoneE164: varchar('phone_e164', { length: 32 }).notNull(),
+    whatsappStatus: varchar('whatsapp_status', { length: 32 }).notNull().default('NOT_CHECKED'),
+    whatsappOptInAt: timestamp('whatsapp_opt_in_at', { withTimezone: true }),
+    whatsappOptInSource: varchar('whatsapp_opt_in_source', { length: 128 }),
+    whatsappOptOutAt: timestamp('whatsapp_opt_out_at', { withTimezone: true }),
+    status: varchar('status', { length: 48 }).notNull().default('ACTIVE'),
+    sourceRecordId: varchar('source_record_id', { length: 128 }).unique(),
+    sourceCreatedAt: timestamp('source_created_at', { withTimezone: true }),
+    isCoverBts: boolean('is_cover_bts'),
+    btsName: varchar('bts_name', { length: 255 }),
+    coverageStatus: varchar('coverage_status', { length: 64 }),
+    coverageFwaStatus: varchar('coverage_fwa_status', { length: 64 }),
+    coverageFtthStatus: varchar('coverage_ftth_status', { length: 64 }),
+    sourceMetadata: jsonb('source_metadata'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('customers_name_id_idx').on(table.name, table.id),
+    index('customers_whatsapp_status_idx').on(table.whatsappStatus),
+    index('customers_coverage_fwa_status_idx').on(table.coverageFwaStatus),
+    index('customers_coverage_ftth_status_idx').on(table.coverageFtthStatus),
+  ],
+);
 
 export const administrativeRegions = pgTable('administrative_regions', {
   code: varchar('code', { length: 13 }).primaryKey(),
@@ -353,22 +361,26 @@ export const verificationCampaignItems = pgTable('verification_campaign_items', 
   updatedAt: updatedAt(),
 });
 
-export const whatsappDeliveryLogs = pgTable('whatsapp_delivery_logs', {
-  id: id(),
-  customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
-  phoneHash: varchar('phone_hash', { length: 64 }).notNull(),
-  messageType: varchar('message_type', { length: 32 }).notNull(),
-  idempotencyKey: varchar('idempotency_key', { length: 255 }).notNull().unique(),
-  providerMessageId: varchar('provider_message_id', { length: 255 }),
-  status: varchar('status', { length: 32 }).notNull().default('ACCEPTED'),
-  deliveredAt: timestamp('delivered_at', { withTimezone: true }),
-  readAt: timestamp('read_at', { withTimezone: true }),
-  failedAt: timestamp('failed_at', { withTimezone: true }),
-  providerErrorCode: varchar('provider_error_code', { length: 64 }),
-  lastError: text('last_error'),
-  sentAt: timestamp('sent_at', { withTimezone: true }).notNull(),
-  createdAt: createdAt(),
-}, (table) => [index('whatsapp_delivery_logs_customer_status_idx').on(table.customerId, table.status)]);
+export const whatsappDeliveryLogs = pgTable(
+  'whatsapp_delivery_logs',
+  {
+    id: id(),
+    customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
+    phoneHash: varchar('phone_hash', { length: 64 }).notNull(),
+    messageType: varchar('message_type', { length: 32 }).notNull(),
+    idempotencyKey: varchar('idempotency_key', { length: 255 }).notNull().unique(),
+    providerMessageId: varchar('provider_message_id', { length: 255 }),
+    status: varchar('status', { length: 32 }).notNull().default('ACCEPTED'),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    failedAt: timestamp('failed_at', { withTimezone: true }),
+    providerErrorCode: varchar('provider_error_code', { length: 64 }),
+    lastError: text('last_error'),
+    sentAt: timestamp('sent_at', { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index('whatsapp_delivery_logs_customer_status_idx').on(table.customerId, table.status)],
+);
 
 export const integrationOutbox = pgTable('integration_outbox', {
   id: id(),
@@ -379,6 +391,7 @@ export const integrationOutbox = pgTable('integration_outbox', {
   correlationId: varchar('correlation_id', { length: 128 }).notNull(),
   idempotencyKey: varchar('idempotency_key', { length: 255 }).notNull().unique(),
   payload: jsonb('payload').notNull(),
+  internalMetadata: jsonb('internal_metadata'),
   status: varchar('status', { length: 32 }).notNull().default('PENDING'),
   providerTicketId: varchar('provider_ticket_id', { length: 255 }),
   providerResponse: jsonb('provider_response'),
@@ -401,6 +414,56 @@ export const integrationConfigs = pgTable('integration_configs', {
   updatedAt: updatedAt(),
 });
 
+export const ticketingMitra = pgTable(
+  'ticketing_mitra',
+  {
+    sourceId: uuid('source_id').defaultRandom().primaryKey(),
+    mitraCode: varchar('mitra_code', { length: 64 }),
+    mitraName: varchar('mitra_name', { length: 255 }).notNull(),
+    locations: text('locations')
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    isActive: boolean('is_active').notNull().default(true),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index('ticketing_mitra_name_idx').on(table.mitraName)],
+);
+
+export const ticketingMitraAreas = pgTable(
+  'ticketing_mitra_areas',
+  {
+    sourceSiteId: uuid('source_site_id').notNull(),
+    mitraSourceId: uuid('mitra_source_id')
+      .notNull()
+      .references(() => ticketingMitra.sourceId, { onDelete: 'cascade' }),
+    siteName: varchar('site_name', { length: 255 }).notNull(),
+    locationName: varchar('location_name', { length: 255 }),
+    boundary: postgresPolygon('boundary').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.sourceSiteId, table.mitraSourceId] }),
+    index('ticketing_mitra_areas_mitra_idx').on(table.mitraSourceId),
+  ],
+);
+
+export const ticketingFwaCustomerPoints = pgTable(
+  'ticketing_fwa_customer_points',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    mitraSourceId: uuid('mitra_source_id')
+      .notNull()
+      .references(() => ticketingMitra.sourceId, { onDelete: 'cascade' }),
+    latitude: doublePrecision('latitude').notNull(),
+    longitude: doublePrecision('longitude').notNull(),
+    importedAt: timestamp('imported_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('ticketing_fwa_points_lat_lon_idx').on(table.latitude, table.longitude),
+    index('ticketing_fwa_points_mitra_idx').on(table.mitraSourceId),
+  ],
+);
+
 export const coverageCheckBatches = pgTable('coverage_check_batches', {
   id: id(),
   providerKey: varchar('provider_key', { length: 64 }).notNull().default('FWA'),
@@ -408,9 +471,7 @@ export const coverageCheckBatches = pgTable('coverage_check_batches', {
   totalCount: integer('total_count').notNull(),
   completedCount: integer('completed_count').notNull().default(0),
   failedCount: integer('failed_count').notNull().default(0),
-  requestedBy: text('requested_by')
-    .notNull()
-    .references(() => authUsers.id),
+  requestedBy: text('requested_by').references(() => authUsers.id),
   startedAt: timestamp('started_at', { withTimezone: true }),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   createdAt: createdAt(),
@@ -440,16 +501,18 @@ export const coverageChecks = pgTable(
     providerStatus: varchar('provider_status', { length: 32 }),
     response: jsonb('response'),
     error: text('error'),
-    requestedBy: text('requested_by')
-      .notNull()
-      .references(() => authUsers.id),
+    requestedBy: text('requested_by').references(() => authUsers.id),
     requestedAt: timestamp('requested_at', { withTimezone: true }).notNull(),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
-    index('coverage_checks_session_provider_created_idx').on(table.verificationSessionId, table.providerKey, table.createdAt),
+    index('coverage_checks_session_provider_created_idx').on(
+      table.verificationSessionId,
+      table.providerKey,
+      table.createdAt,
+    ),
     index('coverage_checks_batch_status_idx').on(table.batchId, table.status),
   ],
 );

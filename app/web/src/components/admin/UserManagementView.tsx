@@ -23,24 +23,23 @@ export const UserManagementView: React.FC = () => {
   const [editing, setEditing] = useState<AdminManagedUser | null>(null);
   const [form, setForm] = useState<UserForm>(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [sortKey, setSortKey] = useState<'user' | 'role' | 'department' | 'status'>('user');
-  const [sortDirection, setSortDirection] = useState<TableSortDirection>('asc');
+  const [sortKey, setSortKey] = useState<'recent' | 'user' | 'role' | 'department' | 'status'>('recent');
+  const [sortDirection, setSortDirection] = useState<TableSortDirection>('desc');
 
   const roleLabel = useMemo(() => (role: string) => t(`users.role.${role}`), [t]);
-  const sortedUsers = useMemo(
-    () =>
-      sortTableRows(
-        users,
-        (user) => {
-          if (sortKey === 'user') return user.name;
-          if (sortKey === 'role') return user.role;
-          if (sortKey === 'department') return user.department;
-          return user.disabledAt ? 0 : 1;
-        },
-        sortDirection,
-      ),
-    [sortDirection, sortKey, users],
-  );
+  const sortedUsers = useMemo(() => {
+    if (sortKey === 'recent') return users;
+    return sortTableRows(
+      users,
+      (user) => {
+        if (sortKey === 'user') return user.name;
+        if (sortKey === 'role') return user.role;
+        if (sortKey === 'department') return user.department;
+        return user.disabledAt ? 0 : 1;
+      },
+      sortDirection,
+    );
+  }, [sortDirection, sortKey, users]);
   const toggleSort = (nextKey: 'user' | 'role' | 'department' | 'status') => {
     if (sortKey === nextKey) setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
     else {
@@ -203,16 +202,36 @@ export const UserManagementView: React.FC = () => {
             <table className="w-full min-w-[760px] text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
                 <tr>
-                  <SortableTableHeader active={sortKey === 'user'} direction={sortDirection} onClick={() => toggleSort('user')} className="px-4 py-3">
+                  <SortableTableHeader
+                    active={sortKey === 'user'}
+                    direction={sortDirection}
+                    onClick={() => toggleSort('user')}
+                    className="px-4 py-3"
+                  >
                     {t('users.user')}
                   </SortableTableHeader>
-                  <SortableTableHeader active={sortKey === 'role'} direction={sortDirection} onClick={() => toggleSort('role')} className="px-4 py-3">
+                  <SortableTableHeader
+                    active={sortKey === 'role'}
+                    direction={sortDirection}
+                    onClick={() => toggleSort('role')}
+                    className="px-4 py-3"
+                  >
                     {t('users.role')}
                   </SortableTableHeader>
-                  <SortableTableHeader active={sortKey === 'department'} direction={sortDirection} onClick={() => toggleSort('department')} className="px-4 py-3">
+                  <SortableTableHeader
+                    active={sortKey === 'department'}
+                    direction={sortDirection}
+                    onClick={() => toggleSort('department')}
+                    className="px-4 py-3"
+                  >
                     {t('users.department')}
                   </SortableTableHeader>
-                  <SortableTableHeader active={sortKey === 'status'} direction={sortDirection} onClick={() => toggleSort('status')} className="px-4 py-3">
+                  <SortableTableHeader
+                    active={sortKey === 'status'}
+                    direction={sortDirection}
+                    onClick={() => toggleSort('status')}
+                    className="px-4 py-3"
+                  >
                     {t('users.status')}
                   </SortableTableHeader>
                   <th className="px-4 py-3 text-right">{t('table.action')}</th>
@@ -284,14 +303,14 @@ export const UserManagementView: React.FC = () => {
 
       {formOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-0 sm:items-center sm:p-4"
+          className="fixed inset-0 z-[1100] flex items-end justify-center overflow-y-auto bg-slate-950/60 p-0 sm:items-center sm:p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) closeForm();
           }}
         >
           <form
             onSubmit={handleSubmit}
-            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl dark:bg-slate-900 sm:rounded-2xl"
+            className="coreui-modal my-auto max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-4 shadow-2xl dark:bg-slate-900 sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:p-5"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -365,14 +384,14 @@ export const UserManagementView: React.FC = () => {
               <button
                 type="button"
                 onClick={closeForm}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="coreui-modal-secondary rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 {t('crud.cancel')}
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                className="coreui-modal-primary inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
               >
                 {saving && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
                 {editing ? t('users.save') : t('users.create')}

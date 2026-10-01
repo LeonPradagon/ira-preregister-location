@@ -29,11 +29,24 @@ export const addressStatusSchema = z.object({ sameAddress: z.boolean() });
 
 const unsafeAddressCharacterPattern = /[\u0000-\u001F\u007F-\u009F<>]/;
 const addressTextSchema = (max: number) =>
-  z.string().trim().max(max).refine((value) => !unsafeAddressCharacterPattern.test(value), {
-    message: 'Alamat mengandung karakter yang tidak diizinkan',
-  });
+  z
+    .string()
+    .trim()
+    .max(max)
+    .refine((value) => !unsafeAddressCharacterPattern.test(value), {
+      message: 'Alamat mengandung karakter yang tidak diizinkan',
+    });
 const requiredAddressTextSchema = (max: number) => addressTextSchema(max).min(1);
-const noHouseNumberValues = new Set(['unknown', 'tidak diketahui', 'tanpa nomor', 'tanpa no', 'n/a', 'na', '-', '00000']);
+const noHouseNumberValues = new Set([
+  'unknown',
+  'tidak diketahui',
+  'tanpa nomor',
+  'tanpa no',
+  'n/a',
+  'na',
+  '-',
+  '00000',
+]);
 
 const optionalHouseNumberSchema = addressTextSchema(64)
   .optional()
@@ -186,7 +199,10 @@ export const customerListQuerySchema = z.object({
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
   coordinateAuditStatus: z.enum(['PENDING', 'MATCHED', 'UNCERTAIN', 'MISMATCH', 'INVALID']).optional(),
   addressCompleteness: z.enum(['COMPLETE', 'INCOMPLETE']).optional(),
-  campaignAvailable: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  campaignAvailable: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
   sortBy: z.string().trim().max(64).optional(),
   sortDirection: z.enum(['asc', 'desc']).optional(),
   cursor: z.string().max(2048).optional(),
@@ -214,7 +230,10 @@ export const customerExportQuerySchema = z.object({
   locationStatus: z.enum(['UNVERIFIED', 'VERIFIED']).optional(),
   coordinateAuditStatus: z.enum(['PENDING', 'MATCHED', 'UNCERTAIN', 'MISMATCH', 'INVALID']).optional(),
   addressCompleteness: z.enum(['COMPLETE', 'INCOMPLETE']).optional(),
-  campaignAvailable: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  campaignAvailable: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
 });
 
 export const adminListQuerySchema = z.object({
@@ -237,7 +256,11 @@ export const coverageCandidateQuerySchema = z.object({
 });
 
 export const coverageCheckCreateSchema = z.object({
-  verificationIds: z.array(z.string().uuid()).min(1).max(5000).transform((ids) => [...new Set(ids)]),
+  verificationIds: z
+    .array(z.string().uuid())
+    .min(1)
+    .max(5000)
+    .transform((ids) => [...new Set(ids)]),
 });
 
 export type CoverageCandidateQueryInput = z.infer<typeof coverageCandidateQuerySchema>;
@@ -316,9 +339,13 @@ export const validationConfigSchema = z.object({
   WHATSAPP_DAILY_SEND_LIMIT: z.number().int().min(1).max(10000).optional(),
   WHATSAPP_RATE_LIMIT_PER_SECOND: z.number().int().positive().optional(),
   WHATSAPP_MIN_INTERVAL_MINUTES: z.number().int().positive().optional(),
+  TICKETING_AUTO_MATCH_MAX_METERS: z.number().int().min(1).max(300).optional(),
+  TICKETING_RECOMMENDATION_MAX_METERS: z.number().int().min(50).max(1000).optional(),
   ENABLE_CUSTOMER_OTP: z.boolean().optional(),
   ENABLE_IRA_COVERAGE: z.boolean().optional(),
+  ENABLE_AUTO_COVERAGE: z.boolean().optional(),
   ENABLE_TICKETING: z.boolean().optional(),
+  ENABLE_AUTO_TICKETING: z.boolean().optional(),
   ENABLE_MANUAL_REVIEW: z.boolean().optional(),
   ENABLE_AUTO_APPROVAL: z.boolean().optional(),
   ENABLE_ADDRESS_EDIT: z.boolean().optional(),

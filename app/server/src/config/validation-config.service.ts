@@ -20,9 +20,7 @@ const normalizePositiveInteger = (value: unknown, fallback: number) => {
 
 const normalizeAutoApprovalScoreThreshold = (value: unknown) => {
   const parsed = Number(value);
-  return Number.isFinite(parsed)
-    ? Math.min(1, Math.max(AUTO_APPROVAL_SCORE_MIN, parsed))
-    : AUTO_APPROVAL_SCORE_DEFAULT;
+  return Number.isFinite(parsed) ? Math.min(1, Math.max(AUTO_APPROVAL_SCORE_MIN, parsed)) : AUTO_APPROVAL_SCORE_DEFAULT;
 };
 
 export interface RuntimeValidationConfig extends Record<string, unknown> {
@@ -46,9 +44,13 @@ export interface RuntimeValidationConfig extends Record<string, unknown> {
   WHATSAPP_DAILY_SEND_LIMIT: number;
   WHATSAPP_RATE_LIMIT_PER_SECOND: number;
   WHATSAPP_MIN_INTERVAL_MINUTES: number;
+  TICKETING_AUTO_MATCH_MAX_METERS: number;
+  TICKETING_RECOMMENDATION_MAX_METERS: number;
   ENABLE_CUSTOMER_OTP: boolean;
   ENABLE_IRA_COVERAGE: boolean;
+  ENABLE_AUTO_COVERAGE: boolean;
   ENABLE_TICKETING: boolean;
+  ENABLE_AUTO_TICKETING: boolean;
   ENABLE_MANUAL_REVIEW: boolean;
   ENABLE_AUTO_APPROVAL: boolean;
   ENABLE_ADDRESS_EDIT: boolean;
@@ -81,9 +83,13 @@ export class ValidationConfigService {
       WHATSAPP_DAILY_SEND_LIMIT: normalizeWhatsAppDailySendLimit(process.env.WHATSAPP_DAILY_SEND_LIMIT),
       WHATSAPP_RATE_LIMIT_PER_SECOND: normalizePositiveInteger(process.env.WHATSAPP_RATE_LIMIT_PER_SECOND, 1),
       WHATSAPP_MIN_INTERVAL_MINUTES: normalizePositiveInteger(process.env.WHATSAPP_MIN_INTERVAL_MINUTES, 60),
+      TICKETING_AUTO_MATCH_MAX_METERS: Number(process.env.TICKETING_AUTO_MATCH_MAX_METERS ?? 50),
+      TICKETING_RECOMMENDATION_MAX_METERS: Number(process.env.TICKETING_RECOMMENDATION_MAX_METERS ?? 300),
       ENABLE_CUSTOMER_OTP: process.env.ENABLE_CUSTOMER_OTP === 'true',
       ENABLE_IRA_COVERAGE: process.env.ENABLE_IRA_COVERAGE === 'true',
+      ENABLE_AUTO_COVERAGE: process.env.ENABLE_AUTO_COVERAGE === 'true',
       ENABLE_TICKETING: process.env.ENABLE_TICKETING === 'true',
+      ENABLE_AUTO_TICKETING: process.env.ENABLE_AUTO_TICKETING === 'true',
       ENABLE_MANUAL_REVIEW: process.env.ENABLE_MANUAL_REVIEW !== 'false',
       ENABLE_AUTO_APPROVAL: process.env.ENABLE_AUTO_APPROVAL === 'true',
       ENABLE_ADDRESS_EDIT: process.env.ENABLE_ADDRESS_EDIT !== 'false',
@@ -110,6 +116,14 @@ export class ValidationConfigService {
       WHATSAPP_DAILY_SEND_LIMIT: normalizeWhatsAppDailySendLimit(merged.WHATSAPP_DAILY_SEND_LIMIT),
       WHATSAPP_RATE_LIMIT_PER_SECOND: normalizePositiveInteger(merged.WHATSAPP_RATE_LIMIT_PER_SECOND, 1),
       WHATSAPP_MIN_INTERVAL_MINUTES: normalizePositiveInteger(merged.WHATSAPP_MIN_INTERVAL_MINUTES, 60),
+      TICKETING_AUTO_MATCH_MAX_METERS: Math.min(
+        300,
+        normalizePositiveInteger(merged.TICKETING_AUTO_MATCH_MAX_METERS, 50),
+      ),
+      TICKETING_RECOMMENDATION_MAX_METERS: Math.max(
+        Math.min(1000, normalizePositiveInteger(merged.TICKETING_RECOMMENDATION_MAX_METERS, 300)),
+        Math.min(300, normalizePositiveInteger(merged.TICKETING_AUTO_MATCH_MAX_METERS, 50)),
+      ),
     };
   }
 
@@ -122,6 +136,6 @@ export class ValidationConfigService {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    return values;
+    return this.get();
   }
 }

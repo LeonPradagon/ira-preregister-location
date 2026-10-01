@@ -17,6 +17,7 @@ async function bootstrap() {
       .filter(Boolean),
   ];
   const app = await NestFactory.create(AppModule, {
+    rawBody: true,
     cors: {
       origin: (requestOrigin, callback) => callback(null, !requestOrigin || allowedOrigins.includes(requestOrigin)),
       credentials: true,

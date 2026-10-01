@@ -29,7 +29,8 @@ const messages: Record<Language, Record<TranslationKey, string>> = {
     'customers.whatsappStatus.NOT_ON_WHATSAPP': 'Tidak terdaftar di WhatsApp',
     'customers.summary': 'Ringkasan pelanggan & lokasi',
     'customers.filtersTitle': 'Filter daftar',
-    'customers.filtersHelp': 'Cari data atau pilih status untuk mempersempit hasil. Format valid belum berarti nomor terdaftar di WhatsApp.',
+    'customers.filtersHelp':
+      'Cari data atau pilih status untuk mempersempit hasil. Format valid belum berarti nomor terdaftar di WhatsApp.',
     'detail.addressIncomplete': 'Alamat belum lengkap — koordinat tidak boleh dianggap sebagai bukti alamat lengkap.',
     'customer.postalCodeInvalid': 'Kode pos harus terdiri dari 5 digit angka.',
     'customer.gpsAutomatic': 'GPS sedang diambil otomatis. Mohon tunggu sebentar.',
@@ -380,7 +381,8 @@ const messages: Record<Language, Record<TranslationKey, string>> = {
     'customers.whatsappStatus.NOT_ON_WHATSAPP': 'Not registered on WhatsApp',
     'customers.summary': 'Customer & location summary',
     'customers.filtersTitle': 'List filters',
-    'customers.filtersHelp': 'Search or choose a status to narrow the results. A valid format does not prove the number is registered on WhatsApp.',
+    'customers.filtersHelp':
+      'Search or choose a status to narrow the results. A valid format does not prove the number is registered on WhatsApp.',
     'detail.addressIncomplete': 'Address incomplete — coordinates must not be treated as proof of a complete address.',
     'customer.postalCodeInvalid': 'The postal code must contain exactly 5 digits.',
     'customer.gpsAutomatic': 'GPS is being captured automatically. Please wait a moment.',
@@ -669,7 +671,8 @@ const messages: Record<Language, Record<TranslationKey, string>> = {
     'customer.requestNewAddress': 'Submit a new address',
     'customer.submitAddress': 'Submit address for re-verification',
     'customer.addressCorrectionRequired': 'Your address needs correction first',
-    'customer.addressCorrectionHint': 'Complete the address with accurate details before continuing the location check.',
+    'customer.addressCorrectionHint':
+      'Complete the address with accurate details before continuing the location check.',
     'customer.submittingAddress': 'Saving address...',
     'customer.waitingAtHome': 'Waiting for you to arrive home',
     'customer.reminderScheduled': 'A reminder has been scheduled. Reopen this link when you are at the location.',
@@ -766,7 +769,8 @@ const extraMessages: Record<Language, Record<string, string>> = {
       'Belum ada event yang dipublikasikan. Selesaikan verifikasi lokasi untuk melihat payload Outbox.',
     'nav.coverageCheck': 'Cek Coverage FWA',
     'coverage.title': 'Cek Coverage FWA',
-    'coverage.description': 'Pilih lokasi yang sudah terverifikasi untuk mengecek jangkauan FWA. Hasil tidak mengubah status verifikasi atau data import lama.',
+    'coverage.description':
+      'Pilih lokasi yang sudah terverifikasi untuk mengecek jangkauan FWA. Hasil tidak mengubah status verifikasi atau data import lama.',
     'coverage.selected': '{count} data terpilih',
     'coverage.search': 'Cari customer',
     'coverage.searchPlaceholder': 'Nama, ID customer, atau alamat...',
@@ -783,6 +787,8 @@ const extraMessages: Record<Language, Record<string, string>> = {
     'coverage.checkSelected': 'Cek data terpilih',
     'coverage.batchProgress': 'Batch: {status}',
     'coverage.batchCounts': '{completed} selesai, {failed} gagal dari {total}',
+    'coverage.batchRunning': 'Pemeriksaan jaringan sedang berjalan',
+    'coverage.batchFinished': 'Pemeriksaan jaringan selesai',
     'coverage.customer': 'Customer',
     'coverage.address': 'Alamat terverifikasi',
     'coverage.coordinates': 'Koordinat exact',
@@ -814,13 +820,17 @@ const extraMessages: Record<Language, Record<string, string>> = {
     'campaigns.info':
       'Pilih semua eligible memakai filter backend dan diproses worker per batch. Sistem tetap memblokir customer opt-out dan provider yang tidak tersedia tidak dianggap berhasil.',
     'campaigns.processing': 'Memproses...',
+    'campaigns.deliveryRunning': 'Blasting WhatsApp sedang berjalan',
+    'campaigns.deliveryFinished': 'Blasting WhatsApp selesai',
+    'campaigns.deliveryCounts': '{sent} terkirim, {pending} menunggu, {failed} gagal dari {target} penerima',
     'campaigns.createStart': 'Buat & mulai campaign',
     'campaigns.created': 'Campaign dibuat dan dijadwalkan untuk {count} customer.',
     'campaigns.itemLoadError': 'Status item tidak dapat dimuat.',
     'campaigns.deliveryTitle': 'Status pengiriman per customer',
     'campaigns.itemsDescription': 'Item ditampilkan secara paginasi agar campaign besar tidak dimuat sekaligus.',
     'campaigns.monitoringTitle': 'Monitoring proses campaign',
-    'campaigns.monitoringDescription': 'Ringkasan seluruh penerima campaign, tidak terpengaruh pagination daftar customer.',
+    'campaigns.monitoringDescription':
+      'Ringkasan seluruh penerima campaign, tidak terpengaruh pagination daftar customer.',
     'campaigns.monitoringTarget': 'Total target',
     'campaigns.monitoringPending': 'Menunggu dikirim',
     'campaigns.monitoringSent': 'Diterima provider',
@@ -857,8 +867,26 @@ const extraMessages: Record<Language, Record<string, string>> = {
       'Kirim satu reminder sesuai jadwal customer. Jika link tidak dibuka, lanjutkan setiap 2 hari pada jam yang sama sampai maksimal 3 kali.',
     'settings.feature.iraCoverage': 'Integrasi IRA Coverage (Port Ready)',
     'settings.feature.iraCoverageDesc': 'Koneksi ke port IRA GIS untuk pengecekan kapasitas FAT dan polygon.',
+    'settings.feature.autoCoverage': 'Cek coverage otomatis setelah lokasi valid',
+    'settings.feature.autoCoverageDesc':
+      'Antrekan pengecekan coverage FWA otomatis setelah lokasi customer valid. Integrasi IRA Coverage dan kredensial API harus aktif.',
     'settings.feature.ticketing': 'Integrasi Ticketing Dispatch (Port Ready)',
     'settings.feature.ticketingDesc': 'Koneksi ke port sistem tiket instalasi teknisi lapangan.',
+    'settings.feature.autoTicketing': 'Buat tiket otomatis setelah coverage FWA',
+    'settings.feature.autoTicketingDesc':
+      'Kirim tiket tanpa klik admin hanya jika coverage COVERED dan mitra tunggal berada dalam radius auto-match. Toggle Ticketing dan kredensial API juga harus aktif.',
+    'settings.ticketingMatchRulesTitle': 'Aturan jarak pencocokan mitra tiket',
+    'settings.ticketingMatchRulesHelp':
+      'Mitra unik dalam radius auto-match dapat dipilih otomatis. Di luar radius tersebut hingga batas rekomendasi, mitra terdekat menjadi pilihan awal untuk diperiksa admin.',
+    'settings.ticketingAutoMatchRadius': 'Radius auto-match mitra tunggal',
+    'settings.ticketingAutoMatchRadiusHelp':
+      'Batas jarak tertinggi untuk auto-match dan syarat jarak auto-ticket; jika ada beberapa mitra, admin tetap memilih.',
+    'settings.ticketingRecommendationRadius': 'Batas rekomendasi manual',
+    'settings.ticketingRecommendationRadiusHelp':
+      'Mitra terdekat di atas radius auto-match hingga batas ini ditampilkan sebagai rekomendasi untuk admin.',
+    'settings.autoTicketingConfirmTitle': 'Aktifkan pembuatan tiket otomatis?',
+    'settings.autoTicketingConfirmText':
+      'Tiket akan dikirim ke provider setelah hasil coverage FWA COVERED jika hanya satu mitra berada dalam radius {radius} m. Pastikan template dan koneksi ticketing sudah benar.',
     'settings.decimalPrecisionHelp': 'Standar GPS: 6 desimal.',
     'customer.addressChangeConfirmTitle': 'Konfirmasi perubahan alamat',
     'customer.addressChangeConfirmText':
@@ -937,7 +965,8 @@ const extraMessages: Record<Language, Record<string, string>> = {
     'integrations.empty': 'No events have been published. Complete a location verification to view the Outbox payload.',
     'nav.coverageCheck': 'FWA Coverage Check',
     'coverage.title': 'FWA Coverage Check',
-    'coverage.description': 'Select verified locations to check FWA availability. The result does not change verification status or imported data.',
+    'coverage.description':
+      'Select verified locations to check FWA availability. The result does not change verification status or imported data.',
     'coverage.selected': '{count} selected',
     'coverage.search': 'Search customer',
     'coverage.searchPlaceholder': 'Name, customer ID, or address...',
@@ -954,6 +983,8 @@ const extraMessages: Record<Language, Record<string, string>> = {
     'coverage.checkSelected': 'Check selected data',
     'coverage.batchProgress': 'Batch: {status}',
     'coverage.batchCounts': '{completed} completed, {failed} failed of {total}',
+    'coverage.batchRunning': 'Network check in progress',
+    'coverage.batchFinished': 'Network check complete',
     'coverage.customer': 'Customer',
     'coverage.address': 'Verified address',
     'coverage.coordinates': 'Exact coordinates',
@@ -985,6 +1016,9 @@ const extraMessages: Record<Language, Record<string, string>> = {
     'campaigns.info':
       'Select all eligible customers using the backend filter and process them in worker batches. Opt-outs remain blocked, and unavailable providers are not counted as successful.',
     'campaigns.processing': 'Processing...',
+    'campaigns.deliveryRunning': 'WhatsApp blast in progress',
+    'campaigns.deliveryFinished': 'WhatsApp blast complete',
+    'campaigns.deliveryCounts': '{sent} sent, {pending} pending, {failed} failed of {target} recipients',
     'campaigns.createStart': 'Create & start campaign',
     'campaigns.created': 'Campaign created and scheduled for {count} customers.',
     'campaigns.itemLoadError': 'Campaign item status could not be loaded.',
@@ -1004,8 +1038,26 @@ const extraMessages: Record<Language, Record<string, string>> = {
       'Send one reminder based on the customer schedule. If the link is not opened, continue every 2 days at the same time, up to 3 times.',
     'settings.feature.iraCoverage': 'IRA Coverage Integration (Port Ready)',
     'settings.feature.iraCoverageDesc': 'Connects to the IRA GIS port to check FAT and polygon capacity.',
+    'settings.feature.autoCoverage': 'Check coverage automatically after location is valid',
+    'settings.feature.autoCoverageDesc':
+      'Automatically queue an FWA coverage check after a customer location is valid. IRA Coverage integration and API credentials must be enabled.',
     'settings.feature.ticketing': 'Dispatch Ticketing Integration (Port Ready)',
     'settings.feature.ticketingDesc': 'Connects to the field technician installation ticketing system.',
+    'settings.feature.autoTicketing': 'Automatically create tickets after FWA coverage',
+    'settings.feature.autoTicketingDesc':
+      'Send tickets without an admin click only when coverage is COVERED and exactly one mitra is within the auto-match radius. The Ticketing toggle and API credentials must also be enabled.',
+    'settings.ticketingMatchRulesTitle': 'Ticket mitra matching distances',
+    'settings.ticketingMatchRulesHelp':
+      'A unique mitra within the auto-match radius may be selected automatically. Beyond that radius and up to the recommendation limit, the nearest mitra is preselected for admin review.',
+    'settings.ticketingAutoMatchRadius': 'Unique mitra auto-match radius',
+    'settings.ticketingAutoMatchRadiusHelp':
+      'Maximum distance for auto-match and auto-ticketing; if multiple mitras qualify, admin review is still required.',
+    'settings.ticketingRecommendationRadius': 'Manual recommendation limit',
+    'settings.ticketingRecommendationRadiusHelp':
+      'The nearest mitra above the auto-match radius and within this limit is shown as an admin recommendation.',
+    'settings.autoTicketingConfirmTitle': 'Enable automatic ticket creation?',
+    'settings.autoTicketingConfirmText':
+      'Tickets will be sent to the provider after FWA coverage is COVERED when exactly one mitra is within {radius} m. Confirm the ticket template and provider connection are correct.',
     'settings.decimalPrecisionHelp': 'GPS standard: 6 decimal places.',
     'customer.addressChangeConfirmTitle': 'Confirm address change',
     'customer.addressChangeConfirmText':
@@ -1303,31 +1355,51 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'verifications.filterStatusHelp': 'Pilih status pemeriksaan untuk menampilkan data yang sesuai kebutuhan.',
     'verifications.detailFilterHeading': 'Status detail',
     'verifications.statusExplanationTitle': 'Maksud status & langkah berikutnya',
-    'verifications.statusExplanation.ALL': 'Menampilkan semua pemeriksaan. Gunakan status tertentu jika ingin fokus pada pekerjaan tertentu.',
-    'verifications.statusExplanation.WORKFLOW_NOT_STARTED': 'Menampilkan sesi yang belum dimulai atau belum dikirimkan ke customer.',
-    'verifications.statusExplanation.WORKFLOW_INVITATION_SENT': 'Menampilkan sesi yang undangannya sudah terkirim tetapi link belum dibuka.',
-    'verifications.statusExplanation.WORKFLOW_LINK_OPENED': 'Menampilkan customer yang sudah membuka link tetapi belum mengirim GPS.',
-    'verifications.statusExplanation.WORKFLOW_GPS_RECEIVED': 'Menampilkan sesi yang sudah menerima GPS tetapi belum selesai diproses.',
+    'verifications.statusExplanation.ALL':
+      'Menampilkan semua pemeriksaan. Gunakan status tertentu jika ingin fokus pada pekerjaan tertentu.',
+    'verifications.statusExplanation.WORKFLOW_NOT_STARTED':
+      'Menampilkan sesi yang belum dimulai atau belum dikirimkan ke customer.',
+    'verifications.statusExplanation.WORKFLOW_INVITATION_SENT':
+      'Menampilkan sesi yang undangannya sudah terkirim tetapi link belum dibuka.',
+    'verifications.statusExplanation.WORKFLOW_LINK_OPENED':
+      'Menampilkan customer yang sudah membuka link tetapi belum mengirim GPS.',
+    'verifications.statusExplanation.WORKFLOW_GPS_RECEIVED':
+      'Menampilkan sesi yang sudah menerima GPS tetapi belum selesai diproses.',
     'verifications.statusExplanation.WORKFLOW_TEAM_ACTION': 'Menampilkan sesi yang membutuhkan tindak lanjut dari tim.',
-    'verifications.statusExplanation.WORKFLOW_MATCHED': 'Menampilkan sesi yang lokasinya sudah sesuai dan terverifikasi.',
-    'verifications.statusExplanation.WAITING_FOR_CUSTOMER': 'Customer belum menyelesaikan proses lokasi. Tunggu customer atau kirim pengingat jika diperlukan.',
-    'verifications.statusExplanation.NEEDS_ATTENTION': 'Ada pemeriksaan yang membutuhkan tindakan tim, seperti review, GPS ulang, atau pengecekan alamat.',
-    'verifications.statusExplanation.ADDRESS_CHANGED': 'Customer sedang mengubah atau mengajukan alamat baru. Periksa alamat sebelum menyetujuinya.',
-    'verifications.statusExplanation.LOCATION_VALID': 'Lokasi sudah cocok dan pemeriksaan telah selesai sebagai terverifikasi.',
-    'verifications.statusExplanation.REMINDER_LIMIT_REACHED': 'Batas pengingat sudah tercapai. Periksa hasil terakhir atau mulai siklus pemeriksaan baru.',
+    'verifications.statusExplanation.WORKFLOW_MATCHED':
+      'Menampilkan sesi yang lokasinya sudah sesuai dan terverifikasi.',
+    'verifications.statusExplanation.WAITING_FOR_CUSTOMER':
+      'Customer belum menyelesaikan proses lokasi. Tunggu customer atau kirim pengingat jika diperlukan.',
+    'verifications.statusExplanation.NEEDS_ATTENTION':
+      'Ada pemeriksaan yang membutuhkan tindakan tim, seperti review, GPS ulang, atau pengecekan alamat.',
+    'verifications.statusExplanation.ADDRESS_CHANGED':
+      'Customer sedang mengubah atau mengajukan alamat baru. Periksa alamat sebelum menyetujuinya.',
+    'verifications.statusExplanation.LOCATION_VALID':
+      'Lokasi sudah cocok dan pemeriksaan telah selesai sebagai terverifikasi.',
+    'verifications.statusExplanation.REMINDER_LIMIT_REACHED':
+      'Batas pengingat sudah tercapai. Periksa hasil terakhir atau mulai siklus pemeriksaan baru.',
     'verifications.statusExplanation.CREATED': 'Sesi baru dibuat dan customer belum memulai pemeriksaan.',
     'verifications.statusExplanation.MESSAGE_SENT': 'Undangan sudah dikirim. Tunggu customer membuka link pemeriksaan.',
-    'verifications.statusExplanation.LINK_OPENED': 'Link sudah dibuka, tetapi proses konfirmasi customer belum selesai.',
-    'verifications.statusExplanation.CONSENTED': 'Customer sudah memberi izin lokasi. Sistem masih menunggu pengambilan GPS.',
+    'verifications.statusExplanation.LINK_OPENED':
+      'Link sudah dibuka, tetapi proses konfirmasi customer belum selesai.',
+    'verifications.statusExplanation.CONSENTED':
+      'Customer sudah memberi izin lokasi. Sistem masih menunggu pengambilan GPS.',
     'verifications.statusExplanation.GPS_CAPTURING': 'GPS sedang diambil. Tunggu sampai hasil lokasi tersedia.',
-    'verifications.statusExplanation.LOW_GPS_ACCURACY': 'Sinyal GPS kurang akurat. Minta customer berada di lokasi lalu ambil GPS ulang.',
-    'verifications.statusExplanation.LOCATION_MISMATCH': 'Lokasi belum cocok atau berada di luar batas. Periksa jarak, peta, dan alamat.',
-    'verifications.statusExplanation.WAITING_FOR_HOME': 'GPS belum cukup stabil atau customer belum terdeteksi berada di alamat.',
+    'verifications.statusExplanation.LOW_GPS_ACCURACY':
+      'Sinyal GPS kurang akurat. Minta customer berada di lokasi lalu ambil GPS ulang.',
+    'verifications.statusExplanation.LOCATION_MISMATCH':
+      'Lokasi belum cocok atau berada di luar batas. Periksa jarak, peta, dan alamat.',
+    'verifications.statusExplanation.WAITING_FOR_HOME':
+      'GPS belum cukup stabil atau customer belum terdeteksi berada di alamat.',
     'verifications.statusExplanation.ADDRESS_PROPOSED': 'Alamat baru diajukan customer dan menunggu pemeriksaan tim.',
-    'verifications.statusExplanation.ADDRESS_EDITING': 'Customer sedang mengubah alamat. Tunggu alamat baru selesai diajukan lalu periksa.',
-    'verifications.statusExplanation.CUSTOMER_DATA_MISMATCH': 'Data customer pada link berbeda. Cocokkan identitas dan alamat sebelum melanjutkan.',
-    'verifications.statusExplanation.REMINDER_REQUIRED': 'Pemeriksaan menunggu customer melanjutkan melalui pengingat berikutnya.',
-    'verifications.statusExplanation.EXPIRED': 'Link pemeriksaan sudah kedaluwarsa. Buat atau kirim ulang siklus pemeriksaan jika diperlukan.',
+    'verifications.statusExplanation.ADDRESS_EDITING':
+      'Customer sedang mengubah alamat. Tunggu alamat baru selesai diajukan lalu periksa.',
+    'verifications.statusExplanation.CUSTOMER_DATA_MISMATCH':
+      'Data customer pada link berbeda. Cocokkan identitas dan alamat sebelum melanjutkan.',
+    'verifications.statusExplanation.REMINDER_REQUIRED':
+      'Pemeriksaan menunggu customer melanjutkan melalui pengingat berikutnya.',
+    'verifications.statusExplanation.EXPIRED':
+      'Link pemeriksaan sudah kedaluwarsa. Buat atau kirim ulang siklus pemeriksaan jika diperlukan.',
     'verifications.activeFilter': 'Filter aktif',
     'verifications.clearFilter': 'Hapus filter',
     'verifications.status': 'Status pemeriksaan',
@@ -1772,7 +1844,8 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'dashboard.openChecks': 'Open checks',
     'dashboard.attentionTitle': 'What needs attention',
     'dashboard.attentionDescription': 'Start here to handle checks that are not finished yet.',
-    'dashboard.teamReviewDescription': 'The result could not be decided automatically and is waiting for a team decision.',
+    'dashboard.teamReviewDescription':
+      'The result could not be decided automatically and is waiting for a team decision.',
     'dashboard.locationSignal': 'Location signal',
     'dashboard.locationSignalDescription': 'The location is not accurate enough to process.',
     'dashboard.addressUpdates': 'Address updates',
@@ -1980,30 +2053,49 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
     'verifications.filterStatusHelp': 'Choose a check status to show the records you need.',
     'verifications.detailFilterHeading': 'Detailed status',
     'verifications.statusExplanationTitle': 'What this status means & next step',
-    'verifications.statusExplanation.ALL': 'Shows all checks. Choose a specific status when you want to focus on a particular task.',
-    'verifications.statusExplanation.WORKFLOW_NOT_STARTED': 'Shows sessions that have not started or have not been sent to the customer.',
-    'verifications.statusExplanation.WORKFLOW_INVITATION_SENT': 'Shows sessions where the invitation was sent but the link has not been opened.',
-    'verifications.statusExplanation.WORKFLOW_LINK_OPENED': 'Shows customers who opened the link but have not sent GPS yet.',
-    'verifications.statusExplanation.WORKFLOW_GPS_RECEIVED': 'Shows sessions with GPS received that are not finished yet.',
+    'verifications.statusExplanation.ALL':
+      'Shows all checks. Choose a specific status when you want to focus on a particular task.',
+    'verifications.statusExplanation.WORKFLOW_NOT_STARTED':
+      'Shows sessions that have not started or have not been sent to the customer.',
+    'verifications.statusExplanation.WORKFLOW_INVITATION_SENT':
+      'Shows sessions where the invitation was sent but the link has not been opened.',
+    'verifications.statusExplanation.WORKFLOW_LINK_OPENED':
+      'Shows customers who opened the link but have not sent GPS yet.',
+    'verifications.statusExplanation.WORKFLOW_GPS_RECEIVED':
+      'Shows sessions with GPS received that are not finished yet.',
     'verifications.statusExplanation.WORKFLOW_TEAM_ACTION': 'Shows sessions that need team follow-up.',
     'verifications.statusExplanation.WORKFLOW_MATCHED': 'Shows sessions whose location matches and is verified.',
-    'verifications.statusExplanation.WAITING_FOR_CUSTOMER': 'The customer has not completed the location process. Wait or send a reminder if needed.',
-    'verifications.statusExplanation.NEEDS_ATTENTION': 'These checks need team action, such as review, a new GPS capture, or address checking.',
-    'verifications.statusExplanation.ADDRESS_CHANGED': 'The customer is changing or proposing a new address. Review it before approving.',
+    'verifications.statusExplanation.WAITING_FOR_CUSTOMER':
+      'The customer has not completed the location process. Wait or send a reminder if needed.',
+    'verifications.statusExplanation.NEEDS_ATTENTION':
+      'These checks need team action, such as review, a new GPS capture, or address checking.',
+    'verifications.statusExplanation.ADDRESS_CHANGED':
+      'The customer is changing or proposing a new address. Review it before approving.',
     'verifications.statusExplanation.LOCATION_VALID': 'The location matches and the check is complete as verified.',
-    'verifications.statusExplanation.REMINDER_LIMIT_REACHED': 'The reminder limit has been reached. Review the latest result or start a new check cycle.',
+    'verifications.statusExplanation.REMINDER_LIMIT_REACHED':
+      'The reminder limit has been reached. Review the latest result or start a new check cycle.',
     'verifications.statusExplanation.CREATED': 'A new session was created and the customer has not started the check.',
-    'verifications.statusExplanation.MESSAGE_SENT': 'The invitation was sent. Wait for the customer to open the check link.',
+    'verifications.statusExplanation.MESSAGE_SENT':
+      'The invitation was sent. Wait for the customer to open the check link.',
     'verifications.statusExplanation.LINK_OPENED': 'The link was opened, but customer confirmation is not complete.',
-    'verifications.statusExplanation.CONSENTED': 'The customer gave location permission. The system is waiting for GPS capture.',
-    'verifications.statusExplanation.GPS_CAPTURING': 'GPS is being captured. Wait until the location result is available.',
-    'verifications.statusExplanation.LOW_GPS_ACCURACY': 'The GPS signal is not accurate enough. Ask the customer to stay at the address and retry.',
-    'verifications.statusExplanation.LOCATION_MISMATCH': 'The location does not match or is outside the limit. Check the distance, map, and address.',
-    'verifications.statusExplanation.WAITING_FOR_HOME': 'The GPS samples are not stable enough or the customer is not detected at the address.',
-    'verifications.statusExplanation.ADDRESS_PROPOSED': 'The customer proposed a new address and it is waiting for team review.',
-    'verifications.statusExplanation.ADDRESS_EDITING': 'The customer is editing the address. Wait for the new address, then review it.',
-    'verifications.statusExplanation.CUSTOMER_DATA_MISMATCH': 'The customer data in the link differs. Check the identity and address before continuing.',
-    'verifications.statusExplanation.REMINDER_REQUIRED': 'The check is waiting for the customer to continue through the next reminder.',
+    'verifications.statusExplanation.CONSENTED':
+      'The customer gave location permission. The system is waiting for GPS capture.',
+    'verifications.statusExplanation.GPS_CAPTURING':
+      'GPS is being captured. Wait until the location result is available.',
+    'verifications.statusExplanation.LOW_GPS_ACCURACY':
+      'The GPS signal is not accurate enough. Ask the customer to stay at the address and retry.',
+    'verifications.statusExplanation.LOCATION_MISMATCH':
+      'The location does not match or is outside the limit. Check the distance, map, and address.',
+    'verifications.statusExplanation.WAITING_FOR_HOME':
+      'The GPS samples are not stable enough or the customer is not detected at the address.',
+    'verifications.statusExplanation.ADDRESS_PROPOSED':
+      'The customer proposed a new address and it is waiting for team review.',
+    'verifications.statusExplanation.ADDRESS_EDITING':
+      'The customer is editing the address. Wait for the new address, then review it.',
+    'verifications.statusExplanation.CUSTOMER_DATA_MISMATCH':
+      'The customer data in the link differs. Check the identity and address before continuing.',
+    'verifications.statusExplanation.REMINDER_REQUIRED':
+      'The check is waiting for the customer to continue through the next reminder.',
     'verifications.statusExplanation.EXPIRED': 'The check link has expired. Create or resend a check cycle if needed.',
     'verifications.activeFilter': 'Active filter',
     'verifications.clearFilter': 'Clear filter',
@@ -2335,7 +2427,8 @@ const userFriendlyMessages: Record<Language, Record<string, string>> = {
       'When enabled: a location match meeting the configured threshold can be approved after the customer confirms the data.',
     'settings.approvalRulesManualInfo':
       'When off: results are checked by the team. Team review is also the safety fallback for results that do not qualify automatically.',
-    'settings.approvalRulesSafety': 'Safety rule: results below the selected threshold will never be approved automatically.',
+    'settings.approvalRulesSafety':
+      'Safety rule: results below the selected threshold will never be approved automatically.',
     'settings.enabled': 'On',
     'settings.disabled': 'Off',
     'settings.feature.manualReview': 'Additional team review',
@@ -2422,7 +2515,8 @@ export const deliveryWording: Record<Language, Record<string, string>> = {
     'campaigns.selectedRecipients': 'penerima',
     'campaigns.loadingTargets': 'Memuat pelanggan yang belum diperiksa...',
     'campaigns.chooseRecipients': 'Pilih penerima',
-    'campaigns.chooseRecipientsHelp': 'Pilih pelanggan dengan alamat belum lengkap, belum memiliki titik koordinat, atau hasil audit koordinat MATCHED/MISMATCH. Customer yang sudah diproses tidak ditampilkan.',
+    'campaigns.chooseRecipientsHelp':
+      'Pilih pelanggan dengan alamat belum lengkap, belum memiliki titik koordinat, atau hasil audit koordinat MATCHED/MISMATCH. Customer yang sudah diproses tidak ditampilkan.',
     'campaigns.messageSettings': 'Atur pengiriman',
     'campaigns.messageSettingsHelp': 'Tentukan nama pengiriman dan jumlah pesan maksimal per hari (1–{max}).',
     'campaigns.dailyLimit': 'Batas pesan per hari (maksimum {max} per hari)',
@@ -2518,7 +2612,8 @@ export const deliveryWording: Record<Language, Record<string, string>> = {
     'users.role.REVIEWER': 'Reviewer',
     'users.role.VIEWER': 'Viewer',
     'monitoring.title': 'Monitoring Blasting WhatsApp',
-    'monitoring.description': 'Pantau jumlah target, pengiriman, link yang dibuka, perubahan alamat, GPS, hasil validasi, dan reminder dari semua campaign.',
+    'monitoring.description':
+      'Pantau jumlah target, pengiriman, link yang dibuka, perubahan alamat, GPS, hasil validasi, dan reminder dari semua campaign.',
     'monitoring.refresh': 'Muat ulang',
     'monitoring.updated': 'Data diperbarui',
     'monitoring.loading': 'Memuat monitoring...',
@@ -2536,7 +2631,8 @@ export const deliveryWording: Record<Language, Record<string, string>> = {
     'monitoring.failed': 'Gagal',
     'monitoring.breakdownTitle': 'Rincian per campaign',
     'monitoring.breakdownDescription': 'Gunakan tabel ini untuk melihat progres setiap campaign secara menyeluruh.',
-    'monitoring.exportHelp': 'Gunakan XLSX untuk ringkasan dan beberapa sheet detail, atau CSV untuk data penerima lengkap.',
+    'monitoring.exportHelp':
+      'Gunakan XLSX untuk ringkasan dan beberapa sheet detail, atau CSV untuk data penerima lengkap.',
     'monitoring.search': 'Cari nama campaign...',
     'monitoring.allStatuses': 'Semua status',
     'monitoring.campaign': 'Campaign',
@@ -2628,7 +2724,8 @@ export const deliveryWording: Record<Language, Record<string, string>> = {
     'campaigns.selectedRecipients': 'recipients',
     'campaigns.loadingTargets': 'Loading customers who need a check...',
     'campaigns.chooseRecipients': 'Choose recipients',
-    'campaigns.chooseRecipientsHelp': 'Select customers with incomplete addresses, no reference coordinate, or a MATCHED/MISMATCH coordinate audit. Already processed customers are hidden.',
+    'campaigns.chooseRecipientsHelp':
+      'Select customers with incomplete addresses, no reference coordinate, or a MATCHED/MISMATCH coordinate audit. Already processed customers are hidden.',
     'campaigns.messageSettings': 'Set up delivery',
     'campaigns.messageSettingsHelp': 'Set a delivery name and the maximum messages to send per day (1–{max}).',
     'campaigns.dailyLimit': 'Messages per day (maximum {max} per day)',
@@ -2667,7 +2764,8 @@ export const deliveryWording: Record<Language, Record<string, string>> = {
     'campaigns.deliveryTitle': 'Delivery status per customer',
     'campaigns.itemsDescription': 'Recipients are processed in stages to keep delivery safe.',
     'campaigns.monitoringTitle': 'Campaign process monitoring',
-    'campaigns.monitoringDescription': 'Summary for all campaign recipients; it is not affected by customer list pagination.',
+    'campaigns.monitoringDescription':
+      'Summary for all campaign recipients; it is not affected by customer list pagination.',
     'campaigns.monitoringTarget': 'Total targets',
     'campaigns.monitoringPending': 'Pending',
     'campaigns.monitoringSent': 'Accepted by provider',
@@ -2747,7 +2845,8 @@ export const deliveryWording: Record<Language, Record<string, string>> = {
     'users.role.REVIEWER': 'Reviewer',
     'users.role.VIEWER': 'Viewer',
     'monitoring.title': 'WhatsApp Blast Monitoring',
-    'monitoring.description': 'Track targets, delivery, opened links, address changes, GPS, validation results, and reminders across all campaigns.',
+    'monitoring.description':
+      'Track targets, delivery, opened links, address changes, GPS, validation results, and reminders across all campaigns.',
     'monitoring.refresh': 'Refresh',
     'monitoring.updated': 'Updated',
     'monitoring.loading': 'Loading monitoring...',

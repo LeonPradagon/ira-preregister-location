@@ -23,6 +23,11 @@ describe('runtime configuration', () => {
     expect(config.GEOCODING_BASE_URL).toBeUndefined();
     expect(config.WHATSAPP_BASE_URL).toBeUndefined();
     expect(config.GEOCODING_PRIMARY).toBe('OSM');
+    expect(config.ENABLE_AUTO_TICKETING).toBe(false);
+  });
+
+  it('requires explicit opt-in for automatic ticket creation', () => {
+    expect(envSchema.parse({ ...required, ENABLE_AUTO_TICKETING: 'true' }).ENABLE_AUTO_TICKETING).toBe(true);
   });
 
   it('accepts only the supported geocoding primary providers', () => {

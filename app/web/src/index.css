@@ -4,22 +4,850 @@
 
 :root {
   color-scheme: light;
+  --coreui-body-bg: #f3f4f7;
+  --coreui-surface: #ffffff;
+  --coreui-sidebar: #3c4b64;
+  --coreui-sidebar-dark: #212631;
+  --coreui-border: #d8dbe0;
+  --coreui-muted: #768192;
+  --coreui-text: #2f353a;
+  --coreui-primary: #d71920;
+  --coreui-primary-dark: #b8171d;
+  --coreui-primary-soft: #fdebec;
 }
 
 html.dark {
   color-scheme: dark;
+  --coreui-body-bg: #181b1f;
+  --coreui-surface: #212631;
+  --coreui-border: #323a49;
+  --coreui-muted: #9da5b1;
+  --coreui-text: #e5e7eb;
+  --coreui-primary-soft: #421d22;
 }
 
-/* Customer verification is intentionally mobile-first and uses the IRA red
-   as the primary action color while retaining semantic colors for success and
-   warning states. */
-.customer-theme {
+body {
+  margin: 0;
+  background: var(--coreui-body-bg);
+  color: var(--coreui-text);
+  font-family: var(--cui-body-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+}
+
+.customer-theme,
+.admin-theme {
   --ira-red: #d71920;
   --ira-red-dark: #b8171d;
   --ira-red-soft: #fff1f2;
-  color: #172033;
+  --cui-primary: #d71920;
+  --cui-primary-rgb: 215, 25, 32;
+  --cui-link-color: #b8171d;
+  --cui-link-hover-color: #881337;
 }
 
+/* CoreUI visual language adapted to existing React/Tailwind components.
+   Bootstrap/CoreUI supplies base tokens; these scoped rules keep current
+   feature markup and React state intact while matching CoreUI's shell. */
+.admin-theme,
+.coreui-shell,
+.coreui-content {
+  background: var(--coreui-body-bg) !important;
+  color: var(--coreui-text);
+}
+
+.admin-theme {
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.admin-theme button {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.admin-theme button[class*="py-3"],
+.admin-theme button[class*="py-4"] {
+  padding-block: 0.5rem !important;
+}
+
+.admin-theme button[class*="px-6"],
+.admin-theme button[class*="px-8"] {
+  padding-inline: 1rem !important;
+}
+
+.admin-theme label {
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+}
+
+.admin-theme input,
+.admin-theme select,
+.admin-theme textarea {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.admin-theme table {
+  font-size: 0.8125rem;
+}
+
+html.dark .admin-theme .customer-refresh-button {
+  background: #2a303b !important;
+  border-color: #596579 !important;
+  color: #f1f5f9 !important;
+}
+
+html.dark .admin-theme .customer-refresh-button:hover:not(:disabled) {
+  background: #343d4d !important;
+  border-color: #718096 !important;
+}
+
+html.dark .admin-theme .monitoring-export-menu {
+  background: #212631 !important;
+  border-color: #4a5568 !important;
+  color: #e5e7eb !important;
+}
+
+html.dark .admin-theme .monitoring-export-menu button {
+  color: #e5e7eb !important;
+}
+
+html.dark .admin-theme .monitoring-export-menu button:hover {
+  background: #343d4d !important;
+  color: #fff !important;
+}
+
+html.dark .admin-theme .verification-back-button,
+html.dark .admin-theme .verification-resend-button {
+  background: #2a303b !important;
+  border-color: #596579 !important;
+  color: #e5e7eb !important;
+}
+
+html.dark .admin-theme .verification-back-button:hover,
+html.dark .admin-theme .verification-resend-button:hover:not(:disabled) {
+  background: #343d4d !important;
+  border-color: #718096 !important;
+  color: #fff !important;
+}
+
+html.dark .admin-theme .verification-resend-button:disabled {
+  background: #252b35 !important;
+  border-color: #3f4a5b !important;
+  color: #94a3b8 !important;
+  opacity: 0.7;
+}
+
+html.dark .admin-theme .verification-review-modal,
+html.dark .admin-theme .verification-review-modal-header {
+  background: #212631 !important;
+  border-color: #323a49 !important;
+  color: #e5e7eb !important;
+}
+
+html.dark .admin-theme .verification-review-icon {
+  background: #d71920 !important;
+  color: #fff !important;
+}
+
+html.dark .admin-theme .verification-review-cancel {
+  background: #2a303b !important;
+  border-color: #596579 !important;
+  color: #e5e7eb !important;
+}
+
+html.dark .admin-theme .verification-review-cancel:hover {
+  background: #343d4d !important;
+  border-color: #718096 !important;
+  color: #fff !important;
+}
+
+html.dark .admin-theme .customer-modal-actions {
+  background: #212631 !important;
+  border-color: #323a49 !important;
+}
+
+html.dark .admin-theme .customer-modal-cancel {
+  background: #2a303b !important;
+  border-color: #596579 !important;
+  color: #e5e7eb !important;
+}
+
+html.dark .admin-theme .customer-modal-cancel:hover {
+  background: #343d4d !important;
+  border-color: #718096 !important;
+  color: #fff !important;
+}
+
+.admin-theme .customer-modal-submit {
+  background: var(--coreui-primary) !important;
+  color: #fff !important;
+}
+
+.admin-theme .customer-modal-submit:hover:not(:disabled) {
+  background: var(--coreui-primary-dark) !important;
+}
+
+.coreui-modal-primary {
+  background: var(--coreui-primary) !important;
+  color: #fff !important;
+}
+
+.coreui-modal-primary:hover:not(:disabled) {
+  background: var(--coreui-primary-dark) !important;
+}
+
+.coreui-modal-primary:disabled {
+  opacity: 0.55;
+}
+
+.coreui-modal-secondary {
+  background: #fff !important;
+  color: #374151 !important;
+}
+
+html.dark .coreui-modal .coreui-modal-secondary {
+  background: #2a303b !important;
+  border-color: #596579 !important;
+  color: #e5e7eb !important;
+}
+
+html.dark .coreui-modal .coreui-modal-secondary:hover:not(:disabled) {
+  background: #343d4d !important;
+  border-color: #718096 !important;
+  color: #fff !important;
+}
+
+.coreui-modal {
+  background: var(--coreui-surface) !important;
+  border-color: var(--coreui-border);
+  color: var(--coreui-text);
+}
+
+.coreui-modal-header,
+.coreui-modal-footer {
+  background: var(--coreui-surface) !important;
+  border-color: var(--coreui-border) !important;
+  color: var(--coreui-text);
+}
+
+html.dark .coreui-modal {
+  color: #e5e7eb;
+}
+
+html.dark .coreui-modal [class*="text-slate-900"],
+html.dark .coreui-modal [class*="text-gray-900"] {
+  color: #f3f4f6 !important;
+}
+
+html.dark .coreui-modal [class*="text-slate-700"],
+html.dark .coreui-modal [class*="text-slate-600"],
+html.dark .coreui-modal [class*="text-gray-700"],
+html.dark .coreui-modal [class*="text-gray-600"] {
+  color: #d1d5db !important;
+}
+
+html.dark .coreui-modal [class*="border-slate-200"],
+html.dark .coreui-modal [class*="border-gray-200"],
+html.dark .coreui-modal [class*="border-gray-300"] {
+  border-color: #4b5563 !important;
+}
+
+.admin-theme .verification-review-submit {
+  background: var(--coreui-primary) !important;
+  color: #fff !important;
+}
+
+.admin-theme .verification-review-submit:hover:not(:disabled) {
+  background: var(--coreui-primary-dark) !important;
+}
+
+.admin-theme .campaign-checkbox {
+  width: 1rem !important;
+  height: 1rem !important;
+  flex: 0 0 1rem;
+  margin: 0;
+  accent-color: #4f46e5;
+  cursor: pointer;
+}
+
+html.dark .admin-theme .campaign-checkbox {
+  accent-color: #818cf8;
+}
+
+.campaign-recipient-row {
+  display: grid !important;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  column-gap: 0.75rem;
+  min-height: 4.5rem;
+  align-items: center;
+}
+
+.campaign-recipient-row > span {
+  min-width: 0;
+}
+
+html.dark .admin-theme .campaign-recipient-list {
+  border-color: #27344d !important;
+  background: rgb(15 23 42 / 34%) !important;
+}
+
+.campaign-selection-controls label {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.625rem;
+  white-space: nowrap;
+}
+
+.attention-grid > * {
+  min-width: 0;
+}
+
+@media (min-width: 1280px) {
+  .attention-grid {
+    grid-template-columns: repeat(5, minmax(0, 13.75rem));
+    justify-content: start;
+  }
+}
+
+.coreui-header {
+  position: fixed !important;
+  z-index: 1040 !important;
+  background: var(--coreui-surface) !important;
+  border-color: var(--coreui-border) !important;
+  box-shadow: 0 1px 3px rgb(44 56 74 / 12%);
+}
+
+.coreui-header-action,
+.coreui-profile-trigger {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html.dark .coreui-header .header-toggler {
+  color: #fff !important;
+  border-color: rgb(255 255 255 / 28%) !important;
+}
+
+.coreui-header-action {
+  padding: 0.5rem !important;
+}
+
+.coreui-profile-trigger {
+  padding: 0.25rem 0.5rem !important;
+}
+
+.coreui-avatar {
+  width: 2rem !important;
+  height: 2rem !important;
+  border-radius: 50% !important;
+}
+
+.coreui-menu {
+  display: block !important;
+  min-width: 10rem;
+  font-size: 0.8125rem !important;
+  padding: 0.35rem !important;
+  color: var(--coreui-text) !important;
+  background: var(--coreui-surface) !important;
+  border-color: var(--coreui-border) !important;
+  box-shadow: 0 0.5rem 1rem rgb(44 56 74 / 15%) !important;
+}
+
+.coreui-menu .dropdown-header {
+  padding: 0.45rem 0.65rem !important;
+  color: var(--coreui-muted) !important;
+}
+
+.coreui-menu .dropdown-item {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 2rem;
+  padding: 0.4rem 0.65rem !important;
+  font-size: 0.8125rem !important;
+  color: var(--coreui-text) !important;
+  border-radius: 0.25rem;
+}
+
+.coreui-menu .dropdown-item > div {
+  display: flex;
+  align-items: center;
+}
+
+.coreui-menu .dropdown-item:hover,
+.coreui-menu .dropdown-item:focus {
+  color: var(--coreui-text) !important;
+  background: var(--coreui-primary-soft) !important;
+}
+
+.coreui-sidebar {
+  background: var(--coreui-sidebar) !important;
+  border-color: rgb(255 255 255 / 12%) !important;
+  color: rgb(255 255 255 / 86%);
+}
+
+html.dark .coreui-sidebar {
+  background: var(--coreui-sidebar-dark) !important;
+}
+
+.coreui-sidebar > div > div[class*="border-b"] {
+  border-color: rgb(255 255 255 / 14%) !important;
+}
+
+.coreui-sidebar .text-gray-400,
+.coreui-sidebar .text-gray-500,
+.coreui-sidebar .text-gray-600,
+.coreui-sidebar .text-gray-700,
+.coreui-sidebar .dark\:text-gray-300,
+.coreui-sidebar .dark\:text-gray-400,
+.coreui-sidebar .dark\:text-gray-500 {
+  color: rgb(255 255 255 / 66%) !important;
+}
+
+.coreui-sidebar button[class*="hover:bg-red-50"]:hover,
+.coreui-sidebar button[class*="hover:bg-red-950"]:hover {
+  background: rgb(255 255 255 / 10%) !important;
+  color: #fff !important;
+}
+
+.coreui-sidebar .sidebar-nav .nav-group-toggle::after {
+  display: none !important;
+}
+
+.coreui-sidebar .sidebar-nav .nav-group-items .nav-icon {
+  margin-inline-start: 0 !important;
+}
+
+.coreui-sidebar .sidebar-nav .nav-group-items .nav-link > div {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.coreui-sidebar .sidebar-nav .nav-group-items .nav-link > div > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coreui-sidebar .sidebar-nav .nav-group-toggle {
+  min-height: 2.5rem;
+  padding-block: 0.55rem !important;
+  font-size: 0.75rem !important;
+  justify-content: flex-start !important;
+  text-align: left !important;
+}
+
+.coreui-sidebar .sidebar-nav .nav-group-items .nav-link {
+  min-height: 2.5rem;
+  padding-block: 0.55rem !important;
+  font-size: 0.875rem !important;
+  justify-content: flex-start !important;
+  text-align: left !important;
+}
+
+.coreui-sidebar .sidebar-nav .nav-group-items .nav-link > .coreui-nav-item-content {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.coreui-sidebar .sidebar-nav .nav-group-items {
+  margin-top: 0.25rem;
+  padding: 0.25rem 0.25rem 0.5rem 1rem !important;
+}
+
+.coreui-system-utilization {
+  display: block !important;
+  flex-shrink: 0;
+  border-color: rgb(255 255 255 / 14%) !important;
+}
+
+.coreui-system-utilization > div {
+  width: 100%;
+}
+
+.coreui-system-title {
+  margin: 0 0 1rem;
+  padding: 0 0.25rem;
+  color: rgb(255 255 255 / 52%);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+}
+
+.coreui-utilization-list {
+  display: grid;
+  gap: 0.9rem;
+  padding: 0 0.25rem;
+}
+
+.coreui-utilization-item {
+  min-width: 0;
+}
+
+.coreui-utilization-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+  color: rgb(255 255 255 / 90%);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  line-height: 1.25;
+}
+
+.coreui-utilization-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  color: rgb(255 255 255 / 72%);
+}
+
+.coreui-utilization-bar {
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 30%);
+}
+
+.coreui-utilization-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 240ms ease;
+}
+
+.coreui-utilization-cpu {
+  background: #a9a4ff;
+}
+
+.coreui-utilization-memory {
+  background: #ffd332;
+}
+
+.coreui-utilization-storage {
+  background: #ee3e83;
+}
+
+.coreui-utilization-detail {
+  margin-top: 0.35rem;
+  color: rgb(255 255 255 / 66%);
+  font-size: 0.6875rem;
+  line-height: 1.25;
+}
+
+.coreui-utilization-free {
+  color: rgb(255 255 255 / 48%);
+}
+
+.coreui-system-utilization [role="progressbar"] > div {
+  transition: width 240ms ease;
+}
+
+@media (min-width: 768px) {
+  .coreui-sidebar-collapsed {
+    width: 5rem !important;
+    padding-inline: 0.5rem !important;
+  }
+
+  .coreui-sidebar-collapsed .coreui-brand-button,
+  .coreui-sidebar-collapsed .coreui-group-toggle,
+  .coreui-sidebar-collapsed .coreui-nav-item {
+    justify-content: center !important;
+  }
+
+  .coreui-sidebar-collapsed .coreui-brand-copy,
+  .coreui-sidebar-collapsed .coreui-group-label,
+  .coreui-sidebar-collapsed .coreui-group-chevron,
+  .coreui-sidebar-collapsed .coreui-nav-label,
+  .coreui-sidebar-collapsed .coreui-nav-badge {
+    display: none !important;
+  }
+
+  .coreui-sidebar-collapsed .coreui-system-utilization {
+    display: none !important;
+  }
+
+  .coreui-sidebar-collapsed .coreui-group-toggle,
+  .coreui-sidebar-collapsed .coreui-nav-item {
+    padding-inline: 0.5rem !important;
+  }
+
+  .coreui-sidebar-collapsed .coreui-nav-item-content {
+    justify-content: center;
+  }
+
+  .coreui-sidebar-collapsed .nav-group-items {
+    display: none !important;
+  }
+}
+
+.coreui-sidebar button[class*="bg-[#d71920]"] {
+  background: var(--coreui-primary) !important;
+  box-shadow: inset 3px 0 0 rgb(255 255 255 / 70%), 0 2px 4px rgb(0 0 0 / 18%);
+}
+
+.coreui-sidebar button[class*="bg-[#d71920]"] svg,
+.coreui-sidebar button[class*="bg-[#b8171d]"] svg {
+  color: #fff !important;
+}
+
+.coreui-sidebar .text-\[\#b8171d\],
+.coreui-sidebar .text-\[\#d71920\] {
+  color: #fff !important;
+}
+
+.coreui-sidebar .border-red-200 {
+  border-color: rgb(255 255 255 / 30%) !important;
+}
+
+.coreui-sidebar .bg-gray-100,
+.coreui-sidebar .dark\:bg-gray-800 {
+  background: rgb(255 255 255 / 14%) !important;
+  color: #fff !important;
+}
+
+.coreui-login {
+  background: var(--coreui-surface) !important;
+  border-color: var(--coreui-border) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 3px 10px rgb(44 56 74 / 12%) !important;
+}
+
+.coreui-login > div[class*="border-b"],
+.coreui-login > div[class*="border-t"] {
+  border-color: var(--coreui-border) !important;
+  background: var(--coreui-surface) !important;
+}
+
+/* Admin cards: CoreUI cards are white, bordered, and lightly elevated. */
+.admin-theme .rounded-2xl.border-gray-200.bg-white,
+.admin-theme .rounded-2xl.border-gray-100.bg-white,
+.admin-theme .rounded-xl.border-gray-200.bg-white,
+.admin-theme .rounded-xl.border-gray-100.bg-white,
+.admin-theme .rounded-lg.border-gray-200.bg-white,
+.admin-theme .rounded-lg.border-gray-100.bg-white,
+.admin-theme .rounded-2xl.border-gray-200.bg-gray-50,
+.admin-theme .rounded-xl.border-gray-200.bg-gray-50,
+.admin-theme [class*="rounded-2xl"][class*="border-slate-"][class*="bg-white"],
+.admin-theme [class*="rounded-xl"][class*="border-slate-"][class*="bg-white"],
+.admin-theme [class*="rounded-2xl"][class*="border-slate-"][class*="bg-gradient"],
+.admin-theme [class*="rounded-xl"][class*="border-slate-"][class*="bg-gradient"] {
+  background: var(--coreui-surface) !important;
+  border-color: var(--coreui-border) !important;
+  box-shadow: 0 2px 5px rgb(44 56 74 / 9%) !important;
+}
+
+.admin-theme [class*="rounded-2xl"][class*="border"],
+.admin-theme [class*="rounded-xl"][class*="border"] {
+  border-radius: 0.375rem !important;
+}
+
+html.dark .admin-theme .rounded-2xl.border-gray-200.bg-white,
+html.dark .admin-theme .rounded-xl.border-gray-200.bg-white,
+html.dark .admin-theme [class*="rounded-2xl"][class*="border-slate-"][class*="bg-white"],
+html.dark .admin-theme [class*="rounded-xl"][class*="border-slate-"][class*="bg-white"] {
+  background: var(--coreui-surface) !important;
+  border-color: var(--coreui-border) !important;
+}
+
+.coreui-table {
+  background: var(--coreui-surface) !important;
+  border-color: var(--coreui-border) !important;
+  box-shadow: 0 2px 5px rgb(44 56 74 / 9%) !important;
+}
+
+.admin-theme table thead,
+.admin-theme table thead tr {
+  background: #f3f4f7;
+}
+
+html.dark .admin-theme table thead,
+html.dark .admin-theme table thead tr {
+  background: #2a303b;
+}
+
+.admin-theme table th {
+  color: #5c687a;
+  font-weight: 600;
+}
+
+html.dark .admin-theme table th {
+  color: #c8d0dc;
+}
+
+.admin-theme table td,
+.admin-theme table th {
+  border-color: var(--coreui-border);
+}
+
+/* Bootstrap-like controls without changing existing form behavior. */
+.admin-theme input,
+.admin-theme select,
+.admin-theme textarea,
+.customer-theme input,
+.customer-theme select,
+.customer-theme textarea {
+  border-color: #b1b7c1 !important;
+  background: var(--coreui-surface) !important;
+  box-shadow: none !important;
+  border-radius: 0.375rem;
+}
+
+/* Keep native select arrows inset and leave room so option text never crowds them. */
+.admin-theme select:not(.appearance-none),
+.customer-theme select:not(.appearance-none) {
+  appearance: none;
+  padding-right: 2.75rem !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.875rem center;
+  background-size: 1rem;
+}
+
+html.dark .admin-theme select:not(.appearance-none),
+html.dark .customer-theme select:not(.appearance-none) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23cbd5e1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* SweetAlert must sit above application dialogs (z-index 1100) and fixed headers. */
+.swal2-container {
+  z-index: 12000 !important;
+}
+
+html.dark .admin-theme input,
+html.dark .admin-theme select,
+html.dark .admin-theme textarea,
+html.dark .customer-theme input,
+html.dark .customer-theme select,
+html.dark .customer-theme textarea {
+  border-color: #4a5568 !important;
+}
+
+.admin-theme input:focus,
+.admin-theme select:focus,
+.admin-theme textarea:focus,
+.customer-theme input:focus,
+.customer-theme select:focus,
+.customer-theme textarea:focus {
+  border-color: var(--coreui-primary) !important;
+  box-shadow: 0 0 0 0.2rem rgb(215 25 32 / 18%) !important;
+}
+
+.admin-theme input:disabled,
+.admin-theme select:disabled,
+.admin-theme textarea:disabled,
+.customer-theme input:disabled,
+.customer-theme select:disabled,
+.customer-theme textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+  background: #e9ecef !important;
+}
+
+html.dark .admin-theme input:disabled,
+html.dark .admin-theme select:disabled,
+html.dark .admin-theme textarea:disabled,
+html.dark .customer-theme input:disabled,
+html.dark .customer-theme select:disabled,
+html.dark .customer-theme textarea:disabled {
+  background: #343b48 !important;
+}
+
+.admin-theme button[class*="rounded-lg"],
+.admin-theme button[class*="rounded-xl"] {
+  border-radius: 0.375rem !important;
+  box-shadow: none !important;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.admin-theme button[class*="rounded-full"] {
+  box-shadow: none !important;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.admin-theme button:focus-visible,
+.admin-theme input:focus-visible,
+.admin-theme select:focus-visible,
+.admin-theme textarea:focus-visible,
+.customer-theme button:focus-visible,
+.customer-theme input:focus-visible,
+.customer-theme select:focus-visible,
+.customer-theme textarea:focus-visible {
+  outline: 2px solid rgb(215 25 32 / 55%) !important;
+  outline-offset: 2px;
+}
+
+/* Existing dark/indigo actions remain brand-consistent with IRA red. */
+.admin-theme .bg-indigo-600,
+.admin-theme button.bg-slate-900,
+.admin-theme button.bg-gray-900,
+.admin-theme button.dark\:bg-white,
+.admin-theme button.dark\:bg-gray-100 {
+  background-color: var(--coreui-primary) !important;
+}
+
+.admin-theme .hover\:bg-indigo-700:hover,
+.admin-theme .hover\:bg-indigo-500:hover,
+.admin-theme button.hover\:bg-slate-700:hover,
+.admin-theme button.hover\:bg-gray-800:hover,
+.admin-theme button.dark\:hover\:bg-white:hover,
+.admin-theme button.dark\:hover\:bg-slate-200:hover {
+  background-color: var(--coreui-primary-dark) !important;
+}
+
+.admin-theme .bg-indigo-50,
+.admin-theme .bg-indigo-100 {
+  background-color: var(--coreui-primary-soft) !important;
+}
+
+.admin-theme .border-indigo-100,
+.admin-theme .border-indigo-200 {
+  border-color: #f1bfc2 !important;
+}
+
+.admin-theme .text-indigo-600,
+.admin-theme .text-indigo-700,
+.admin-theme .text-indigo-800,
+.admin-theme .text-indigo-900 {
+  color: var(--coreui-primary-dark) !important;
+}
+
+.admin-theme .dark\:text-indigo-300,
+.admin-theme .dark\:text-indigo-400 {
+  color: #f3a5aa !important;
+}
+
+.admin-theme button.bg-gray-900,
+.admin-theme button.bg-slate-900,
+.admin-theme button.dark\:bg-white,
+.admin-theme button.dark\:bg-gray-100 {
+  color: #fff !important;
+}
+
+/* Public customer verification uses the same CoreUI surfaces while keeping
+   its mobile-first layout and red identity. */
+.coreui-customer {
+  background: var(--coreui-body-bg) !important;
+}
+
+.coreui-customer-card {
+  background: var(--coreui-surface) !important;
+  border-color: var(--coreui-border) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 3px 10px rgb(44 56 74 / 12%) !important;
+}
+
+.coreui-customer-card > div[class*="border-b"],
+.coreui-customer-card > div[class*="border-t"] {
+  border-color: var(--coreui-border) !important;
+  background: var(--coreui-surface) !important;
+}
+
+/* Preserve customer-flow accessibility and IRA red action mapping. */
 .customer-theme button,
 .customer-theme input,
 .customer-theme select,
@@ -36,126 +864,61 @@ html.dark {
   min-height: 48px;
 }
 
-.customer-theme button:focus-visible,
-.customer-theme input:focus-visible,
-.customer-theme select:focus-visible,
-.customer-theme textarea:focus-visible {
-  outline: 3px solid rgb(215 25 32 / 25%);
-  outline-offset: 2px;
+.customer-theme .bg-blue-50 {
+  background-color: var(--ira-red-soft, #fff1f2) !important;
 }
 
-.customer-theme .bg-blue-50 {
-  background-color: var(--ira-red-soft) !important;
-}
 .customer-theme .bg-blue-100 {
   background-color: #ffe4e6 !important;
 }
+
 .customer-theme .bg-blue-600 {
-  background-color: var(--ira-red) !important;
+  background-color: var(--ira-red, var(--coreui-primary)) !important;
 }
+
 .customer-theme .border-blue-200 {
   border-color: #fecdd3 !important;
 }
+
 .customer-theme .text-blue-600 {
-  color: var(--ira-red) !important;
+  color: var(--ira-red, var(--coreui-primary)) !important;
 }
+
 .customer-theme .text-blue-700 {
-  color: var(--ira-red-dark) !important;
+  color: var(--ira-red-dark, var(--coreui-primary-dark)) !important;
 }
+
 .customer-theme .text-blue-800 {
   color: #881337 !important;
 }
+
 .customer-theme .text-blue-900 {
   color: #701a24 !important;
 }
+
 .customer-theme .text-blue-950 {
   color: #4c0519 !important;
 }
+
 .customer-theme .hover\:bg-blue-700:hover {
-  background-color: var(--ira-red-dark) !important;
-}
-
-/* The admin shell shares the IRA identity so every admin screen remains
-   consistent without recoloring status indicators and other semantic states. */
-.admin-theme {
-  --ira-red: #d71920;
-  --ira-red-dark: #b8171d;
-  --ira-red-soft: #fff1f2;
-}
-
-.admin-theme button,
-.admin-theme input,
-.admin-theme select,
-.admin-theme textarea {
-  touch-action: manipulation;
-}
-
-.admin-theme button:focus-visible,
-.admin-theme input:focus-visible,
-.admin-theme select:focus-visible,
-.admin-theme textarea:focus-visible {
-  outline: 3px solid rgb(215 25 32 / 25%);
-  outline-offset: 2px;
-}
-
-.admin-theme input:focus,
-.admin-theme select:focus,
-.admin-theme textarea:focus {
-  border-color: var(--ira-red) !important;
-  --tw-ring-color: rgb(215 25 32 / 25%) !important;
-}
-
-/* Keep page-level admin actions on the same IRA red palette. Indigo and dark
-   slate are legacy brand utilities in the child views; these scoped rules let
-   the shared shell re-theme them without changing customer/status colors. */
-.admin-theme .bg-indigo-600,
-.admin-theme button.bg-slate-900,
-.admin-theme button.bg-gray-900,
-.admin-theme button.dark\:bg-white,
-.admin-theme button.dark\:bg-gray-100 {
-  background-color: var(--ira-red) !important;
-}
-
-.admin-theme .hover\:bg-indigo-700:hover,
-.admin-theme .hover\:bg-indigo-500:hover,
-.admin-theme button.hover\:bg-slate-700:hover,
-.admin-theme button.hover\:bg-gray-800:hover,
-.admin-theme button.dark\:hover\:bg-white:hover,
-.admin-theme button.dark\:hover\:bg-slate-200:hover {
-  background-color: var(--ira-red-dark) !important;
-}
-
-.admin-theme .bg-indigo-50,
-.admin-theme .bg-indigo-100 {
-  background-color: var(--ira-red-soft) !important;
-}
-
-.admin-theme .border-indigo-100,
-.admin-theme .border-indigo-200 {
-  border-color: #fecdd3 !important;
-}
-
-.admin-theme .text-indigo-600,
-.admin-theme .text-indigo-700,
-.admin-theme .text-indigo-800,
-.admin-theme .text-indigo-900 {
-  color: var(--ira-red-dark) !important;
-}
-
-.admin-theme .dark\:text-indigo-300,
-.admin-theme .dark\:text-indigo-400 {
-  color: #fda4af !important;
-}
-
-.admin-theme button.bg-gray-900,
-.admin-theme button.bg-slate-900,
-.admin-theme button.dark\:bg-white,
-.admin-theme button.dark\:bg-gray-100 {
-  color: white !important;
+  background-color: var(--ira-red-dark, var(--coreui-primary-dark)) !important;
 }
 
 @media (max-width: 640px) {
   .admin-theme main {
     padding: 1rem;
+  }
+
+  .coreui-sidebar {
+    box-shadow: 0 3px 10px rgb(0 0 0 / 22%);
+  }
+}
+
+/* Existing shell uses Tailwind's md breakpoint (768px), while CoreUI's
+   mobile sidebar breakpoint is 992px. Keep React's existing tablet behavior
+   while retaining CoreUI sidebar visuals. */
+@media (min-width: 768px) {
+  .coreui-sidebar {
+    margin-inline-start: 0 !important;
   }
 }

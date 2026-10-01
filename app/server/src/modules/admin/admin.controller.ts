@@ -17,6 +17,7 @@ import {
 import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
+import { extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import {
@@ -49,12 +50,16 @@ const CustomerFileInterceptor = FileInterceptor('file', {
   storage: diskStorage({
     destination: tmpdir(),
     filename: (_request, file, callback) =>
-      callback(
-        null,
-        `ira_preregist-upload-${randomUUID()}${file.originalname.slice(file.originalname.lastIndexOf('.'))}`,
-      ),
+      callback(null, `ira_preregist-upload-${randomUUID()}${extname(file.originalname).toLowerCase()}`),
   }),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_request, file, callback) => {
+    if (!['.xlsx', '.csv'].includes(extname(file.originalname).toLowerCase())) {
+      callback(new BadRequestException('File harus berformat .xlsx atau .csv.'), false);
+      return;
+    }
+    callback(null, true);
+  },
+  limits: { fileSize: 50 * 1024 * 1024, files: 1, fields: 0, parts: 1, fieldNameSize: 100 },
 });
 
 const createVerificationSchema = z.object({ addressId: z.string().uuid() });
@@ -140,24 +145,21 @@ export class AdminController {
 
   @Post('exports/customers')
   @HttpCode(202)
-  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
-  createCustomerExport(
-    @CurrentAdmin() currentAdmin: RequestAdmin,
-    @Body() body: unknown,
-  ) {
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  createCustomerExport(@CurrentAdmin() currentAdmin: RequestAdmin, @Body() body: unknown) {
     const parsed = customerExportQuerySchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
     return this.adminExport.createJob(currentAdmin, parsed.data);
   }
 
   @Get('exports/customers/jobs/:id')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
+  @Roles('SUPER_ADMIN', 'ADMIN')
   getCustomerExport(@CurrentAdmin() currentAdmin: RequestAdmin, @Param('id') id: string) {
     return this.adminExport.getJob(currentAdmin, id);
   }
 
   @Get('exports/customers/jobs/:id/download')
-  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
+  @Roles('SUPER_ADMIN', 'ADMIN')
   async downloadCustomerExport(
     @CurrentAdmin() currentAdmin: RequestAdmin,
     @Param('id') id: string,
@@ -351,6 +353,12 @@ export class AdminController {
     const parsed = ticketingCandidateQuerySchema.safeParse(query);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
     return this.ticketing.listCandidates(parsed.data);
+  }
+
+  @Get('ticketing/mitra')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER')
+  ticketingMitra() {
+    return this.ticketing.listMitra();
   }
 
   @Get('ticketing/tickets/:customerId/provider-status')

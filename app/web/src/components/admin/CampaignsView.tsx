@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle2,
   Clock3,
+  Loader2,
   Megaphone,
   MessageCircle,
   Play,
@@ -226,10 +227,14 @@ export const CampaignsView: React.FC = () => {
   const [candidateLoading, setCandidateLoading] = useState(true);
   const [preview, setPreview] = useState<WhatsAppPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [campaignSortKey, setCampaignSortKey] = useState<'campaign' | 'target' | 'sent' | 'failed' | 'status'>('campaign');
-  const [campaignSortDirection, setCampaignSortDirection] = useState<TableSortDirection>('asc');
-  const [itemSortKey, setItemSortKey] = useState<'customer' | 'deliveryStatus' | 'retry' | 'providerMessage'>('customer');
-  const [itemSortDirection, setItemSortDirection] = useState<TableSortDirection>('asc');
+  const [campaignSortKey, setCampaignSortKey] = useState<
+    'recent' | 'campaign' | 'target' | 'sent' | 'failed' | 'status'
+  >('recent');
+  const [campaignSortDirection, setCampaignSortDirection] = useState<TableSortDirection>('desc');
+  const [itemSortKey, setItemSortKey] = useState<
+    'recent' | 'customer' | 'deliveryStatus' | 'retry' | 'providerMessage'
+  >('recent');
+  const [itemSortDirection, setItemSortDirection] = useState<TableSortDirection>('desc');
 
   const selectableCustomers = useMemo(
     () => candidateCustomers.filter((customer) => customer.status !== 'SUSPENDED' && !customer.whatsappOptOutAt),
@@ -238,37 +243,35 @@ export const CampaignsView: React.FC = () => {
   const allSelected =
     selectableCustomers.length > 0 && selectableCustomers.every((customer) => selected.includes(customer.id));
 
-  const sortedCampaigns = useMemo(
-    () =>
-      sortTableRows(
-        campaigns,
-        (campaign) => {
-          if (campaignSortKey === 'campaign') return campaign.name;
-          if (campaignSortKey === 'target') return campaign.targetCount;
-          if (campaignSortKey === 'sent') return campaign.sentCount;
-          if (campaignSortKey === 'failed') return campaign.failedCount;
-          return campaign.status;
-        },
-        campaignSortDirection,
-      ),
-    [campaignSortDirection, campaignSortKey, campaigns],
-  );
-  const sortedItems = useMemo(
-    () =>
-      sortTableRows(
-        items,
-        (row) => {
-          const item = row.item as Record<string, unknown>;
-          const customer = row.customer as Record<string, unknown>;
-          if (itemSortKey === 'customer') return customer.name;
-          if (itemSortKey === 'deliveryStatus') return item.status;
-          if (itemSortKey === 'retry') return Number(item.retryCount ?? 0);
-          return item.providerMessageId;
-        },
-        itemSortDirection,
-      ),
-    [itemSortDirection, itemSortKey, items],
-  );
+  const sortedCampaigns = useMemo(() => {
+    if (campaignSortKey === 'recent') return campaigns;
+    return sortTableRows(
+      campaigns,
+      (campaign) => {
+        if (campaignSortKey === 'campaign') return campaign.name;
+        if (campaignSortKey === 'target') return campaign.targetCount;
+        if (campaignSortKey === 'sent') return campaign.sentCount;
+        if (campaignSortKey === 'failed') return campaign.failedCount;
+        return campaign.status;
+      },
+      campaignSortDirection,
+    );
+  }, [campaignSortDirection, campaignSortKey, campaigns]);
+  const sortedItems = useMemo(() => {
+    if (itemSortKey === 'recent') return items;
+    return sortTableRows(
+      items,
+      (row) => {
+        const item = row.item as Record<string, unknown>;
+        const customer = row.customer as Record<string, unknown>;
+        if (itemSortKey === 'customer') return customer.name;
+        if (itemSortKey === 'deliveryStatus') return item.status;
+        if (itemSortKey === 'retry') return Number(item.retryCount ?? 0);
+        return item.providerMessageId;
+      },
+      itemSortDirection,
+    );
+  }, [itemSortDirection, itemSortKey, items]);
   const toggleCampaignSort = (nextKey: 'campaign' | 'target' | 'sent' | 'failed' | 'status') => {
     if (campaignSortKey === nextKey) setCampaignSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
     else {
@@ -290,6 +293,11 @@ export const CampaignsView: React.FC = () => {
   const selectionSummary = selectAllEligible
     ? t('campaigns.selectAllEligible')
     : `${selected.length.toLocaleString('en-US')} / ${dailySendLimit.toLocaleString('en-US')} ${t('campaigns.selectedRecipients')}`;
+  const selectedCampaign = campaigns.find((campaign) => campaign.id === selectedCampaignId);
+  const deliveryInProgress = selectedCampaign?.status === 'RUNNING';
+  const deliveryProgress = monitoring?.target
+    ? Math.min(100, Math.round(((monitoring.target - monitoring.pending) / monitoring.target) * 100))
+    : 0;
 
   const loadCampaigns = async () => {
     setLoading(true);
@@ -298,7 +306,7 @@ export const CampaignsView: React.FC = () => {
         page,
         pageSize,
         search: searchTerm,
-        sortBy: campaignSortKey,
+        sortBy: campaignSortKey === 'recent' ? undefined : campaignSortKey,
         sortDirection: campaignSortDirection,
         cursor: page === 1 ? undefined : campaignCursors[page],
       });
@@ -477,6 +485,7 @@ export const CampaignsView: React.FC = () => {
     try {
       await startCampaign(campaign.id);
       await loadCampaigns();
+      await showItems(campaign.id);
       await showActionSuccess(t('campaigns.sentSuccess'), t('campaigns.startSuccess'));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('crud.error'));
@@ -498,7 +507,7 @@ export const CampaignsView: React.FC = () => {
       const response = await api.campaignItems(campaignId, {
         page: nextPage,
         pageSize: nextPageSize,
-        sortBy: itemSortKey,
+        sortBy: itemSortKey === 'recent' ? undefined : itemSortKey,
         sortDirection: itemSortDirection,
         cursor: nextPage === 1 ? undefined : itemCursors[nextPage],
       });
@@ -518,15 +527,70 @@ export const CampaignsView: React.FC = () => {
     void showItems(selectedCampaignId, 1, itemPageSize);
   }, [itemSortKey, itemSortDirection]);
 
+  useEffect(() => {
+    if (!selectedCampaignId || !deliveryInProgress) return undefined;
+    let active = true;
+    const refreshDelivery = async () => {
+      try {
+        const [itemResponse, campaignResponse] = await Promise.all([
+          api.campaignItems(selectedCampaignId, {
+            page: itemPage,
+            pageSize: itemPageSize,
+            sortBy: itemSortKey === 'recent' ? undefined : itemSortKey,
+            sortDirection: itemSortDirection,
+            cursor: itemPage === 1 ? undefined : itemCursors[itemPage],
+          }),
+          api.campaigns({
+            page,
+            pageSize,
+            search: searchTerm,
+            sortBy: campaignSortKey === 'recent' ? undefined : campaignSortKey,
+            sortDirection: campaignSortDirection,
+            cursor: page === 1 ? undefined : campaignCursors[page],
+          }),
+        ]);
+        if (!active) return;
+        setMonitoring(itemResponse.monitoring);
+        setItems(itemResponse.items);
+        setItemTotal(itemResponse.total);
+        setCampaigns(campaignResponse.items.map(mapCampaign));
+        setTotal(campaignResponse.total);
+      } catch {
+        // Keep last known delivery progress visible if a refresh temporarily fails.
+      }
+    };
+    const timer = window.setInterval(() => void refreshDelivery(), 2500);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [
+    selectedCampaignId,
+    deliveryInProgress,
+    itemPage,
+    itemPageSize,
+    itemSortKey,
+    itemSortDirection,
+    itemCursors,
+    page,
+    pageSize,
+    searchTerm,
+    campaignSortKey,
+    campaignSortDirection,
+    campaignCursors,
+  ]);
+
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-indigo-50/60 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/30">
-        <div className="flex items-start gap-3">
-          <span className="rounded-xl bg-indigo-100 p-2 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="shrink-0 rounded-xl bg-indigo-100 p-2 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
             <Megaphone className="h-5 w-5" />
           </span>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">{t('campaigns.title')}</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
+              {t('campaigns.title')}
+            </h1>
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">
               {t('campaigns.description')}
             </p>
@@ -536,226 +600,244 @@ export const CampaignsView: React.FC = () => {
 
       {canCreateVerification && (
         <>
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-start gap-3">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-sm font-bold text-white">
-            1
-          </span>
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('campaigns.chooseRecipients')}</h2>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('campaigns.chooseRecipientsHelp')}</p>
-          </div>
-        </div>
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <div className="relative min-w-0 flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={customerSearchInput}
-              onChange={(event) => setCustomerSearchInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  applyCustomerSearch();
-                }
-              }}
-              className="w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-              placeholder={t('campaigns.searchCustomer')}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={applyCustomerSearch}
-            className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            {t('campaigns.findCustomer')}
-          </button>
-        </div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">
-            {t('campaigns.coverageFwa')}
-            <select
-              value={coverageFwaFilter}
-              onChange={(event) => {
-                setCoverageFwaFilter(event.target.value);
-                setCandidatePage(1);
-                setCandidateCursors({});
-              }}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-            >
-              <option value="ALL">{t('campaigns.coverageAll')}</option>
-              <option value="Coverage FWA ON Air & Integreted">{t('campaigns.coverageFwaCovered')}</option>
-              <option value="Not Coverage">{t('campaigns.coverageNotAvailable')}</option>
-            </select>
-          </label>
-          <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">
-            {t('campaigns.coverageFtth')}
-            <select
-              value={coverageFtthFilter}
-              onChange={(event) => {
-                setCoverageFtthFilter(event.target.value);
-                setCandidatePage(1);
-                setCandidateCursors({});
-              }}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-            >
-              <option value="ALL">{t('campaigns.coverageAll')}</option>
-              <option value="Coverage FTTH">{t('campaigns.coverageFtthCovered')}</option>
-              <option value="Not Coverage">{t('campaigns.coverageNotAvailable')}</option>
-            </select>
-          </label>
-        </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-4 text-xs font-medium text-slate-700 dark:text-slate-200">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                disabled={selectAllEligible || candidateLoading}
-                onChange={toggleAll}
-              />
-              {t('campaigns.selectPage')}
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={selectAllEligible}
-                onChange={(event) => toggleAllEligible(event.target.checked)}
-              />
-              {t('campaigns.selectAllEligible')}
-            </label>
-          </div>
-          <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
-            {selectionSummary}
-          </span>
-        </div>
-        <div className="mt-3 max-h-72 overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
-          {candidateLoading && (
-            <div className="flex min-h-40 items-center justify-center gap-3 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
-              <AppLoader size={36} label={t('campaigns.loadingTargets')} />
-              <span>{t('campaigns.loadingTargets')}</span>
+          <section className="campaign-step rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#d71920] text-sm font-bold text-white">
+                1
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold leading-tight text-slate-900 dark:text-white">
+                  {t('campaigns.chooseRecipients')}
+                </h2>
+                <p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                  {t('campaigns.chooseRecipientsHelp')}
+                </p>
+              </div>
             </div>
-          )}
-          {!candidateLoading &&
-            selectableCustomers.map((customer) => (
-              <label
-                key={customer.id}
-                className="flex items-center gap-3 border-b border-slate-100 px-4 py-3 text-sm last:border-0 dark:border-slate-800"
-              >
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <div className="relative min-w-0 flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
-                  type="checkbox"
-                  checked={selected.includes(customer.id)}
-                  disabled={selectAllEligible}
-                  onChange={() => toggleCustomer(customer.id)}
+                  value={customerSearchInput}
+                  onChange={(event) => setCustomerSearchInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      applyCustomerSearch();
+                    }
+                  }}
+                  className="w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                  placeholder={t('campaigns.searchCustomer')}
                 />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium text-slate-800 dark:text-slate-100">{customer.name}</span>
-                  <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
-                    {customer.externalId} · {customer.phoneE164}
-                  </span>
-                </span>
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              </div>
+              <button
+                type="button"
+                onClick={applyCustomerSearch}
+                className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                {t('campaigns.findCustomer')}
+              </button>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+                {t('campaigns.coverageFwa')}
+                <select
+                  value={coverageFwaFilter}
+                  onChange={(event) => {
+                    setCoverageFwaFilter(event.target.value);
+                    setCandidatePage(1);
+                    setCandidateCursors({});
+                  }}
+                  className="w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                >
+                  <option value="ALL">{t('campaigns.coverageAll')}</option>
+                  <option value="Coverage FWA ON Air & Integreted">{t('campaigns.coverageFwaCovered')}</option>
+                  <option value="Not Coverage">{t('campaigns.coverageNotAvailable')}</option>
+                </select>
               </label>
-            ))}
-          {!candidateLoading && !selectableCustomers.length && (
-            <p className="p-8 text-center text-sm text-amber-700 dark:text-amber-300">{t('campaigns.targetEmpty')}</p>
-          )}
-        </div>
-        <nav aria-label={t('table.navigation')} className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3 dark:border-slate-800">
-          <button
-            type="button"
-            disabled={candidateLoading || candidatePage === 1}
-            onClick={() => setCandidatePage((page) => page - 1)}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300"
-          >
-            {t('table.previous')}
-          </button>
-          <span className="text-xs text-slate-500">{candidatePage}</span>
-          <button
-            type="button"
-            disabled={candidateLoading || !candidateHasMore}
-            onClick={() => setCandidatePage((page) => page + 1)}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300"
-          >
-            {t('table.next')}
-          </button>
-        </nav>
-      </section>
+              <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+                {t('campaigns.coverageFtth')}
+                <select
+                  value={coverageFtthFilter}
+                  onChange={(event) => {
+                    setCoverageFtthFilter(event.target.value);
+                    setCandidatePage(1);
+                    setCandidateCursors({});
+                  }}
+                  className="w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                >
+                  <option value="ALL">{t('campaigns.coverageAll')}</option>
+                  <option value="Coverage FTTH">{t('campaigns.coverageFtthCovered')}</option>
+                  <option value="Not Coverage">{t('campaigns.coverageNotAvailable')}</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <div className="campaign-selection-controls flex flex-col gap-2 text-xs font-medium text-slate-700 dark:text-slate-200 sm:flex-row sm:flex-wrap sm:gap-4">
+                <label className="inline-flex min-w-0 items-center gap-2.5">
+                  <input
+                    className="campaign-checkbox"
+                    type="checkbox"
+                    checked={allSelected}
+                    disabled={selectAllEligible || candidateLoading}
+                    onChange={toggleAll}
+                  />
+                  <span className="leading-5">{t('campaigns.selectPage')}</span>
+                </label>
+                <label className="inline-flex min-w-0 items-center gap-2.5">
+                  <input
+                    className="campaign-checkbox"
+                    type="checkbox"
+                    checked={selectAllEligible}
+                    onChange={(event) => toggleAllEligible(event.target.checked)}
+                  />
+                  <span className="leading-5">{t('campaigns.selectAllEligible')}</span>
+                </label>
+              </div>
+              <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                {selectionSummary}
+              </span>
+            </div>
+            <div className="campaign-recipient-list mt-3 max-h-[24rem] overflow-auto rounded-xl border border-slate-200 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-950/30 lg:max-h-[31rem]">
+              {candidateLoading && (
+                <div className="flex min-h-40 items-center justify-center gap-3 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                  <AppLoader size={36} label={t('campaigns.loadingTargets')} />
+                  <span>{t('campaigns.loadingTargets')}</span>
+                </div>
+              )}
+              {!candidateLoading &&
+                selectableCustomers.map((customer) => (
+                  <label
+                    key={customer.id}
+                    className="campaign-recipient-row flex items-start gap-3 border-b border-slate-100 px-4 py-3 text-sm last:border-0 dark:border-slate-800"
+                  >
+                    <input
+                      className="campaign-checkbox mt-0.5"
+                      type="checkbox"
+                      checked={selected.includes(customer.id)}
+                      disabled={selectAllEligible}
+                      onChange={() => toggleCustomer(customer.id)}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium text-slate-800 dark:text-slate-100">
+                        {customer.name}
+                      </span>
+                      <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
+                        {customer.externalId} · {customer.phoneE164}
+                      </span>
+                    </span>
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                  </label>
+                ))}
+              {!candidateLoading && !selectableCustomers.length && (
+                <p className="p-8 text-center text-sm text-amber-700 dark:text-amber-300">
+                  {t('campaigns.targetEmpty')}
+                </p>
+              )}
+            </div>
+            <nav
+              aria-label={t('table.navigation')}
+              className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3 dark:border-slate-800"
+            >
+              <button
+                type="button"
+                disabled={candidateLoading || candidatePage === 1}
+                onClick={() => setCandidatePage((page) => page - 1)}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300"
+              >
+                {t('table.previous')}
+              </button>
+              <span className="text-xs text-slate-500">{candidatePage}</span>
+              <button
+                type="button"
+                disabled={candidateLoading || !candidateHasMore}
+                onClick={() => setCandidatePage((page) => page + 1)}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300"
+              >
+                {t('table.next')}
+              </button>
+            </nav>
+          </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-start gap-3">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-sm font-bold text-white">
-            2
-          </span>
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('campaigns.messageSettings')}</h2>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {t('campaigns.messageSettingsHelp', { max: dailySendLimitMax.toLocaleString('en-US') })}
-            </p>
-          </div>
-        </div>
-        <form onSubmit={(event) => void submit(event)} className="mt-4 space-y-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-xs font-medium text-slate-600 dark:text-slate-300 md:col-span-1">
-              {t('campaigns.name')}
-              <input
-                required
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-                placeholder={t('campaigns.namePlaceholder')}
-              />
-            </label>
-            <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-              {t('campaigns.dailyLimit', { max: dailySendLimitMax.toLocaleString('en-US') })}
-              <input
-                type="number"
-                min={1}
-                max={dailySendLimitMax}
-                step={1}
-                value={dailySendLimit}
-                onChange={(event) => {
-                  const nextLimit = Math.min(dailySendLimitMax, Math.max(1, Number(event.target.value) || 1));
-                  setDailySendLimit(nextLimit);
-                  setSelected((current) => current.slice(0, nextLimit));
-                }}
-                className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-                placeholder={t('campaigns.dailyLimitPlaceholder', { max: dailySendLimitMax.toLocaleString('en-US') })}
-              />
-            </label>
-          </div>
-          <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-            {t('campaigns.defaultWindow', {
-              rate: messageRate,
-              cooldown: sameNumberCooldown,
-              max: dailySendLimitMax.toLocaleString('en-US'),
-            })}
-          </p>
-          {message && (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-              {message}
-            </p>
-          )}
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              type="button"
-              disabled={previewLoading || candidateLoading || !selectableCustomers.length}
-              onClick={() => void simulateWhatsApp()}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
-            >
-              <MessageCircle className="h-4 w-4" />
-              {previewLoading ? t('campaigns.preparing') : t('campaigns.previewMessage')}
-            </button>
-            <button
-              type="submit"
-              disabled={busy || !name.trim() || (!selected.length && !selectAllEligible)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Send className="h-4 w-4" />
-              {busy ? t('campaigns.processing') : t('campaigns.createStart')}
-            </button>
-          </div>
-        </form>
-      </section>
+          <section className="campaign-step border-t border-slate-200 pt-6 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#d71920] text-sm font-bold text-white">
+                2
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                  {t('campaigns.messageSettings')}
+                </h2>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {t('campaigns.messageSettingsHelp', { max: dailySendLimitMax.toLocaleString('en-US') })}
+                </p>
+              </div>
+            </div>
+            <form onSubmit={(event) => void submit(event)} className="mt-4 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="min-w-0 text-xs font-medium leading-5 text-slate-600 dark:text-slate-300">
+                  {t('campaigns.name')}
+                  <input
+                    required
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    className="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                    placeholder={t('campaigns.namePlaceholder')}
+                  />
+                </label>
+                <label className="min-w-0 text-xs font-medium leading-5 text-slate-600 dark:text-slate-300">
+                  {t('campaigns.dailyLimit', { max: dailySendLimitMax.toLocaleString('en-US') })}
+                  <input
+                    type="number"
+                    min={1}
+                    max={dailySendLimitMax}
+                    step={1}
+                    value={dailySendLimit}
+                    onChange={(event) => {
+                      const nextLimit = Math.min(dailySendLimitMax, Math.max(1, Number(event.target.value) || 1));
+                      setDailySendLimit(nextLimit);
+                      setSelected((current) => current.slice(0, nextLimit));
+                    }}
+                    className="mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                    placeholder={t('campaigns.dailyLimitPlaceholder', {
+                      max: dailySendLimitMax.toLocaleString('en-US'),
+                    })}
+                  />
+                </label>
+              </div>
+              <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+                {t('campaigns.defaultWindow', {
+                  rate: messageRate,
+                  cooldown: sameNumberCooldown,
+                  max: dailySendLimitMax.toLocaleString('en-US'),
+                })}
+              </p>
+              {message && (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                  {message}
+                </p>
+              )}
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  disabled={previewLoading || candidateLoading || !selectableCustomers.length}
+                  onClick={() => void simulateWhatsApp()}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  {previewLoading ? t('campaigns.preparing') : t('campaigns.previewMessage')}
+                </button>
+                <button
+                  type="submit"
+                  disabled={busy || !name.trim() || (!selected.length && !selectAllEligible)}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Send className="h-4 w-4" />
+                  {busy ? t('campaigns.processing') : t('campaigns.createStart')}
+                </button>
+              </div>
+            </form>
+          </section>
         </>
       )}
 
@@ -807,19 +889,44 @@ export const CampaignsView: React.FC = () => {
         >
           <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
             <tr>
-              <SortableTableHeader active={campaignSortKey === 'campaign'} direction={campaignSortDirection} onClick={() => toggleCampaignSort('campaign')} className="px-4 py-3">
+              <SortableTableHeader
+                active={campaignSortKey === 'campaign'}
+                direction={campaignSortDirection}
+                onClick={() => toggleCampaignSort('campaign')}
+                className="px-4 py-3"
+              >
                 {t('table.campaign')}
               </SortableTableHeader>
-              <SortableTableHeader active={campaignSortKey === 'target'} direction={campaignSortDirection} onClick={() => toggleCampaignSort('target')} className="px-4 py-3">
+              <SortableTableHeader
+                active={campaignSortKey === 'target'}
+                direction={campaignSortDirection}
+                onClick={() => toggleCampaignSort('target')}
+                className="px-4 py-3"
+              >
                 {t('table.target')}
               </SortableTableHeader>
-              <SortableTableHeader active={campaignSortKey === 'sent'} direction={campaignSortDirection} onClick={() => toggleCampaignSort('sent')} className="px-4 py-3">
+              <SortableTableHeader
+                active={campaignSortKey === 'sent'}
+                direction={campaignSortDirection}
+                onClick={() => toggleCampaignSort('sent')}
+                className="px-4 py-3"
+              >
                 {t('table.sent')}
               </SortableTableHeader>
-              <SortableTableHeader active={campaignSortKey === 'failed'} direction={campaignSortDirection} onClick={() => toggleCampaignSort('failed')} className="px-4 py-3">
+              <SortableTableHeader
+                active={campaignSortKey === 'failed'}
+                direction={campaignSortDirection}
+                onClick={() => toggleCampaignSort('failed')}
+                className="px-4 py-3"
+              >
                 {t('table.failed')}
               </SortableTableHeader>
-              <SortableTableHeader active={campaignSortKey === 'status'} direction={campaignSortDirection} onClick={() => toggleCampaignSort('status')} className="px-4 py-3">
+              <SortableTableHeader
+                active={campaignSortKey === 'status'}
+                direction={campaignSortDirection}
+                onClick={() => toggleCampaignSort('status')}
+                className="px-4 py-3"
+              >
                 {t('table.status')}
               </SortableTableHeader>
               <th className="px-4 py-3">{t('table.action')}</th>
@@ -908,6 +1015,78 @@ export const CampaignsView: React.FC = () => {
             <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('campaigns.deliveryTitle')}</h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('campaigns.itemsDescription')}</p>
           </div>
+          {selectedCampaign && ['RUNNING', 'COMPLETED'].includes(selectedCampaign.status) && (
+            <div
+              aria-live="polite"
+              className={`border-b px-5 py-4 ${
+                deliveryInProgress
+                  ? 'border-indigo-200 bg-gradient-to-r from-indigo-50 to-white dark:border-indigo-900 dark:from-indigo-950/40 dark:to-slate-900'
+                  : 'border-emerald-200 bg-gradient-to-r from-emerald-50 to-white dark:border-emerald-900 dark:from-emerald-950/30 dark:to-slate-900'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <span
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                    deliveryInProgress
+                      ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/70 dark:text-indigo-300'
+                      : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/60 dark:text-emerald-300'
+                  }`}
+                >
+                  {deliveryInProgress ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-5 w-5" />
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                        {deliveryInProgress ? t('campaigns.deliveryRunning') : t('campaigns.deliveryFinished')}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{selectedCampaign.name}</p>
+                    </div>
+                    {monitoring && (
+                      <span
+                        className={`text-lg font-bold tabular-nums ${
+                          deliveryInProgress
+                            ? 'text-indigo-700 dark:text-indigo-300'
+                            : 'text-emerald-700 dark:text-emerald-300'
+                        }`}
+                      >
+                        {deliveryProgress}%
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+                    role="progressbar"
+                    aria-label={deliveryInProgress ? t('campaigns.deliveryRunning') : t('campaigns.deliveryFinished')}
+                    aria-valuenow={deliveryProgress}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  >
+                    <div
+                      className={`h-full rounded-full transition-[width] duration-500 ${
+                        deliveryInProgress ? 'bg-indigo-600 dark:bg-indigo-400' : 'bg-emerald-600 dark:bg-emerald-400'
+                      }`}
+                      style={{ width: `${deliveryProgress}%` }}
+                    />
+                  </div>
+                  {monitoring && (
+                    <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+                      {t('campaigns.deliveryCounts', {
+                        pending: monitoring.pending,
+                        sent: monitoring.sent + monitoring.delivered + monitoring.read,
+                        failed: monitoring.failed,
+                        target: monitoring.target,
+                      })}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           {monitoring && (
             <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t('campaigns.monitoringTitle')}</h3>
@@ -932,7 +1111,10 @@ export const CampaignsView: React.FC = () => {
                   {t('campaigns.monitoringRemindersTitle')}
                 </h4>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                  <MonitoringMetric label={t('campaigns.monitoringRemindersTotal')} value={monitoring.reminders.total} />
+                  <MonitoringMetric
+                    label={t('campaigns.monitoringRemindersTotal')}
+                    value={monitoring.reminders.total}
+                  />
                   <MonitoringMetric
                     label={t('campaigns.monitoringRemindersScheduled')}
                     value={monitoring.reminders.scheduled}
@@ -942,7 +1124,10 @@ export const CampaignsView: React.FC = () => {
                     label={t('campaigns.monitoringRemindersOpened')}
                     value={monitoring.reminders.opened}
                   />
-                  <MonitoringMetric label={t('campaigns.monitoringRemindersFailed')} value={monitoring.reminders.failed} />
+                  <MonitoringMetric
+                    label={t('campaigns.monitoringRemindersFailed')}
+                    value={monitoring.reminders.failed}
+                  />
                   <MonitoringMetric
                     label={t('campaigns.monitoringRemindersCancelled')}
                     value={monitoring.reminders.cancelled}
@@ -969,16 +1154,36 @@ export const CampaignsView: React.FC = () => {
           >
             <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
               <tr>
-                <SortableTableHeader active={itemSortKey === 'customer'} direction={itemSortDirection} onClick={() => toggleItemSort('customer')} className="px-4 py-3">
+                <SortableTableHeader
+                  active={itemSortKey === 'customer'}
+                  direction={itemSortDirection}
+                  onClick={() => toggleItemSort('customer')}
+                  className="px-4 py-3"
+                >
                   {t('table.customerName')}
                 </SortableTableHeader>
-                <SortableTableHeader active={itemSortKey === 'deliveryStatus'} direction={itemSortDirection} onClick={() => toggleItemSort('deliveryStatus')} className="px-4 py-3">
+                <SortableTableHeader
+                  active={itemSortKey === 'deliveryStatus'}
+                  direction={itemSortDirection}
+                  onClick={() => toggleItemSort('deliveryStatus')}
+                  className="px-4 py-3"
+                >
                   {t('table.deliveryStatus')}
                 </SortableTableHeader>
-                <SortableTableHeader active={itemSortKey === 'retry'} direction={itemSortDirection} onClick={() => toggleItemSort('retry')} className="px-4 py-3">
+                <SortableTableHeader
+                  active={itemSortKey === 'retry'}
+                  direction={itemSortDirection}
+                  onClick={() => toggleItemSort('retry')}
+                  className="px-4 py-3"
+                >
                   {t('table.retry')}
                 </SortableTableHeader>
-                <SortableTableHeader active={itemSortKey === 'providerMessage'} direction={itemSortDirection} onClick={() => toggleItemSort('providerMessage')} className="px-4 py-3">
+                <SortableTableHeader
+                  active={itemSortKey === 'providerMessage'}
+                  direction={itemSortDirection}
+                  onClick={() => toggleItemSort('providerMessage')}
+                  className="px-4 py-3"
+                >
                   {t('table.providerMessage')}
                 </SortableTableHeader>
               </tr>

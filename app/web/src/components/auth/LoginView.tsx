@@ -34,7 +34,7 @@ export const LoginView: React.FC = () => {
 
   return (
     <div className="admin-theme min-h-screen bg-[#fff5f5] dark:bg-gray-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden border border-red-100 dark:border-gray-800">
+      <div className="coreui-login w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden border border-red-100 dark:border-gray-800">
         {/* Top Branding */}
         <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white p-8 text-center border-b border-red-100 dark:border-gray-800">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-red-200 bg-[#d71920] p-1 shadow-sm dark:border-red-900/60">

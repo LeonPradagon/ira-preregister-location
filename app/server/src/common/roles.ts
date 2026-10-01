@@ -10,5 +10,6 @@ export const CAPABILITIES = {
   sendVerification: ['SUPER_ADMIN', 'ADMIN'],
   manualReview: ['SUPER_ADMIN', 'ADMIN', 'REVIEWER'],
   changeValidationConfig: ['SUPER_ADMIN'],
+  exportData: ['SUPER_ADMIN', 'ADMIN'],
   view: ['SUPER_ADMIN', 'ADMIN', 'REVIEWER', 'VIEWER'],
 } as const;

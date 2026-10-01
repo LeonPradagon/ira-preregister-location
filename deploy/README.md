@@ -14,7 +14,7 @@ Copy-Item deploy/.env.example deploy/.env
 docker compose --env-file deploy/.env -f docker-compose.prod.yaml up --build -d
 ```
 
-Template tersebut menetapkan `COMPOSE_ENV_FILE=./deploy/.env`, sehingga konfigurasi provider juga masuk ke container. Jika menggunakan file lain, set `COMPOSE_ENV_FILE` ke lokasi file itu; `--env-file` saja hanya mengatur substitusi Compose.
+Template tersebut menetapkan `COMPOSE_ENV_FILE=./deploy/.env`, sehingga konfigurasi provider juga masuk ke container. Isi `APP_DATABASE_PASSWORD` dengan secret acak berbeda dari password owner PostgreSQL. Migration akan membuat/memperbarui role aplikasi dengan hak DML saja; API/worker tidak menerima password owner atau password seed. Jika menggunakan file lain, set `COMPOSE_ENV_FILE` ke lokasi file itu; `--env-file` saja hanya mengatur substitusi Compose.
 
 Web Nginx meneruskan `/v1` langsung ke API pada network Docker. Untuk domain publik, reverse proxy HTTPS meneruskan request ke `WEB_PORT`, mempertahankan Host dan `X-Forwarded-Proto`. Set `WEB_ORIGIN` dan `BETTER_AUTH_URL` ke origin publik yang sama. `TRUST_PROXY` mengikuti jumlah proxy terpercaya di depan API. Port `API_PORT` tersedia untuk deployment yang membutuhkan domain API terpisah.
 
@@ -46,7 +46,7 @@ Simpan backup di luar host dan backup juga volume import yang masih memiliki pek
 Saat upgrade dari konfigurasi lama:
 
 1. Selesaikan antrean import/pengiriman dengan worker versi sebelumnya, lalu hentikan stack lama. Nama antrean baru memakai prefix `ira_preregist`; job Redis lama tidak dipindahkan otomatis.
-2. Pertahankan `COMPOSE_PROJECT_NAME`, `POSTGRES_DB`, `POSTGRES_USER`, password, dan volume yang sudah dipakai jika ingin menggunakan database yang sama. Penggantian default nama di repository tidak menjalankan rename database/role/volume yang sudah ada. Instalasi baru memakai `ira_preregist`.
+2. Pertahankan `COMPOSE_PROJECT_NAME`, `POSTGRES_DB`, `POSTGRES_USER`, kedua password database, `APP_DATABASE_USER`, dan volume yang sudah dipakai jika ingin menggunakan database yang sama. Penggantian default nama di repository tidak menjalankan rename database/role/volume yang sudah ada. Instalasi baru memakai `ira_preregist`.
 3. Jika ingin mengganti identitas database dan project lama, lakukan backup/restore secara terencana ke stack baru. Jangan menghapus volume lama sebelum data hasil restore diperiksa.
 4. Periksa nama/ID template Qontak: perubahan nama di kode tidak mengubah template provider yang sudah disetujui.
 5. Jalankan stack baru, cek `/v1/health`, login, dan uji satu import kecil sebelum melanjutkan campaign.
@@ -65,11 +65,11 @@ VITE_API_URL=https://api.example.com/v1
 
 ```bash
 docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yaml up --build -d
-docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yaml run --rm api node dist/db/seed.js --if-missing
+docker compose --env-file deploy/.env -f deploy/docker-compose.backend.yaml --profile bootstrap run --rm seed
 docker compose --env-file deploy/.env -f deploy/docker-compose.frontend.yaml up --build -d
 ```
 
-Split backend memiliki migration otomatis dan seed eksplisit. Split frontend menggunakan `app/web/nginx.conf` untuk static SPA; konfigurasi proxy satu origin hanya dipasang oleh stack lengkap. PostgreSQL/Redis split hanya bind ke loopback host. Atur CORS, HTTPS, dan domain sesuai kedua origin tersebut.
+Split backend memiliki migration otomatis dengan role database owner terpisah dari role aplikasi. Seed admin berjalan sebagai service bootstrap opsional. Split frontend menggunakan `app/web/nginx.conf` untuk static SPA; konfigurasi proxy satu origin hanya dipasang oleh stack lengkap. PostgreSQL/Redis split hanya bind ke loopback host. Atur CORS, HTTPS, dan domain sesuai kedua origin tersebut.
 
 Worker dipisah berdasarkan peran: maintenance, campaign, messaging, dan import. Mulai dengan kapasitas kecil, lalu atur replica setelah mengukur koneksi PostgreSQL dan beban Redis. Hitung total `jumlah proses × DATABASE_POOL_MAX`; kuota WhatsApp tetap global melalui Redis.
 

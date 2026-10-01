@@ -71,12 +71,12 @@ const main = async () => {
     seededEmails.push(adminConfig.email);
   }
 
-  console.info(JSON.stringify({ adminEmails: seededEmails, status: 'login-users-ready' }, null, 2));
+  console.info(JSON.stringify({ seededAdminCount: seededEmails.length, status: 'login-users-ready' }, null, 2));
 };
 
 main()
-  .catch((error) => {
-    console.error(error);
+  .catch(() => {
+    console.error('Admin bootstrap failed');
     process.exitCode = 1;
   })
   .finally(() => pool.end());

@@ -37,6 +37,8 @@ services:
       PORT: 3000
       TRUST_PROXY: ${TRUST_PROXY:-1}
       DATABASE_URL: postgresql://${POSTGRES_USER:-ira_preregist}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-ira_preregist}
+      APP_DATABASE_USER: ${APP_DATABASE_USER:-ira_preregist_app}
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD must be set}
       DATABASE_SSL: 'false'
       REDIS_URL: redis://redis:6379
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}
@@ -61,6 +63,9 @@ services:
       FWA_COVERAGE_TIMEOUT_MS: ${FWA_COVERAGE_TIMEOUT_MS:-10000}
       FWA_COVERAGE_BATCH_SIZE: ${FWA_COVERAGE_BATCH_SIZE:-100}
       ENABLE_TICKETING: ${ENABLE_TICKETING:-false}
+      ENABLE_AUTO_TICKETING: ${ENABLE_AUTO_TICKETING:-false}
+      TICKETING_AUTO_MATCH_MAX_METERS: ${TICKETING_AUTO_MATCH_MAX_METERS:-50}
+      TICKETING_RECOMMENDATION_MAX_METERS: ${TICKETING_RECOMMENDATION_MAX_METERS:-300}
       TICKETING_API_URL: ${TICKETING_API_URL:-}
       TICKETING_API_KEY: ${TICKETING_API_KEY:-}
       TICKETING_PLATFORM: ${TICKETING_PLATFORM:-IRA-PREREGIST}
@@ -115,9 +120,6 @@ services:
       CAMPAIGN_DEFAULT_SEND_WINDOW_DAYS: ${CAMPAIGN_DEFAULT_SEND_WINDOW_DAYS:-0}
       CAMPAIGN_MATERIALIZATION_BATCH_SIZE: ${CAMPAIGN_MATERIALIZATION_BATCH_SIZE:-1000}
       CAMPAIGN_QUEUE_SCAN_LIMIT: ${CAMPAIGN_QUEUE_SCAN_LIMIT:-100}
-      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:?SEED_ADMIN_EMAIL must be set}
-      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?SEED_ADMIN_PASSWORD must be set}
-      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Production Super Admin}
     command:
       - sh
       - -c
@@ -130,11 +132,33 @@ services:
       postgres:
         condition: service_healthy
 
+  seed:
+    build:
+      context: ..
+      dockerfile: app/server/Dockerfile
+    environment:
+      <<: *server_environment
+      DATABASE_URL: postgresql://${APP_DATABASE_USER:-ira_preregist_app}:${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-ira_preregist}
+      APP_DATABASE_PASSWORD: ''
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:?SEED_ADMIN_EMAIL must be set}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?SEED_ADMIN_PASSWORD must be set}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Production Super Admin}
+    command: ['node', 'dist/db/seed.js', '--if-missing']
+    profiles: ['bootstrap']
+    restart: 'no'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   api:
     build:
       context: ..
       dockerfile: app/server/Dockerfile
-    environment: *server_environment
+    environment: &runtime_environment
+      <<: *server_environment
+      DATABASE_URL: postgresql://${APP_DATABASE_USER:-ira_preregist_app}:${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-ira_preregist}
+      APP_DATABASE_PASSWORD: ''
+      SEED_ADMIN_PASSWORD: ''
     expose:
       - '3000'
     volumes:
@@ -178,7 +202,7 @@ services:
       context: ..
       dockerfile: app/server/Dockerfile
     environment:
-      <<: *server_environment
+      <<: *runtime_environment
       WORKER_ROLE: maintenance
     command: ['node', 'dist/worker.js']
     volumes:
@@ -198,7 +222,7 @@ services:
       context: ..
       dockerfile: app/server/Dockerfile
     environment:
-      <<: *server_environment
+      <<: *runtime_environment
       WORKER_ROLE: campaign
     command: ['node', 'dist/worker.js']
     volumes:
@@ -217,7 +241,7 @@ services:
       context: ..
       dockerfile: app/server/Dockerfile
     environment:
-      <<: *server_environment
+      <<: *runtime_environment
       WORKER_ROLE: messaging
     command: ['node', 'dist/worker.js']
     volumes:
@@ -236,7 +260,7 @@ services:
       context: ..
       dockerfile: app/server/Dockerfile
     environment:
-      <<: *server_environment
+      <<: *runtime_environment
       WORKER_ROLE: coverage
     command: ['node', 'dist/worker.js']
     volumes:
@@ -255,7 +279,7 @@ services:
       context: ..
       dockerfile: app/server/Dockerfile
     environment:
-      <<: *server_environment
+      <<: *runtime_environment
       WORKER_ROLE: import
     command: ['node', 'dist/worker.js']
     volumes:

@@ -51,9 +51,13 @@ const DEFAULT_VALIDATION_CONFIG: ValidationConfig = {
   WHATSAPP_DAILY_SEND_LIMIT: 1000,
   WHATSAPP_RATE_LIMIT_PER_SECOND: 1,
   WHATSAPP_MIN_INTERVAL_MINUTES: 60,
+  TICKETING_AUTO_MATCH_MAX_METERS: 50,
+  TICKETING_RECOMMENDATION_MAX_METERS: 300,
   ENABLE_CUSTOMER_OTP: false,
   ENABLE_IRA_COVERAGE: false,
+  ENABLE_AUTO_COVERAGE: false,
   ENABLE_TICKETING: false,
+  ENABLE_AUTO_TICKETING: false,
   ENABLE_MANUAL_REVIEW: true,
   ENABLE_AUTO_APPROVAL: false,
   ENABLE_ADDRESS_EDIT: true,
@@ -291,7 +295,9 @@ export function mapApiCustomer(raw: Record<string, unknown>): Customer {
     coverageStatus: raw.coverageStatus ? String(raw.coverageStatus) : undefined,
     coverageFwaStatus: raw.coverageFwaStatus ? String(raw.coverageFwaStatus) : undefined,
     coverageFtthStatus: raw.coverageFtthStatus ? String(raw.coverageFtthStatus) : undefined,
-    latestCoverageStatus: raw.latestCoverageStatus ? String(raw.latestCoverageStatus) as Customer['latestCoverageStatus'] : null,
+    latestCoverageStatus: raw.latestCoverageStatus
+      ? (String(raw.latestCoverageStatus) as Customer['latestCoverageStatus'])
+      : null,
     latestCoverageCheckedAt: raw.latestCoverageCheckedAt ? String(raw.latestCoverageCheckedAt) : null,
     sourceMetadata:
       raw.sourceMetadata && typeof raw.sourceMetadata === 'object'
@@ -469,7 +475,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         if (rawVerifications)
           setVerificationSessions((previous) =>
-            mergeCachedRecords(previous, rawVerifications.items.map((raw) => mapApiSession(raw.session))),
+            mergeCachedRecords(
+              previous,
+              rawVerifications.items.map((raw) => mapApiSession(raw.session)),
+            ),
           );
         if (rawReminders)
           setReminders((previous) => mergeCachedRecords(previous, rawReminders.items as unknown as Reminder[]));

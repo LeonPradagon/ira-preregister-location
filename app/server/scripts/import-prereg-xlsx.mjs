@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import ExcelJS from 'exceljs';
-import JSZip from 'jszip';
+import { loadSafeXlsxArchive } from './xlsx-archive-safety.mjs';
 import pg from 'pg';
 import { houseNumberFromAddress, streetFromAddress } from './address-parser.mjs';
 
@@ -53,6 +53,7 @@ const headerAliases = {
 };
 
 const requiredHeaders = ['id', 'full_name', 'effective_phone_number'];
+const MAX_IMPORT_ROWS = 250_000;
 const canonicalHeader = (value) =>
   text(value)
     .replace(/^\uFEFF/, '')
@@ -122,7 +123,7 @@ const postalCodeFromAddress = (address) => address.match(/\b(\d{5})\b/)?.[1] ?? 
 const parseBoolean = (value) => ['1', 'true', 'yes', 'y'].includes(text(value).toLowerCase());
 
 const repairWorkbookXml = async (buffer) => {
-  const zip = await JSZip.loadAsync(buffer);
+  const zip = await loadSafeXlsxArchive(buffer);
   const xmlFiles = Object.keys(zip.files).filter((name) => name.endsWith('.xml'));
   for (const name of xmlFiles) {
     const file = zip.file(name);
@@ -247,6 +248,7 @@ const parseDataRow = (
   const sourceCreatedAt = values.created_at ? new Date(values.created_at) : null;
   if (sourceCreatedAt && Number.isNaN(sourceCreatedAt.getTime()))
     throw new Error(`Row ${rowNumber}: invalid created_at`);
+  if (stats.rows >= MAX_IMPORT_ROWS) throw new Error(`Import melebihi batas ${MAX_IMPORT_ROWS.toLocaleString()} baris.`);
   stats.rows += 1;
   return {
     sourceId: values.id,
@@ -419,6 +421,7 @@ const streamXlsxRowsWithFallback = async function* (stats) {
 const readRows = async () => {
   const stats = createStats();
   if (sourcePath.toLowerCase().endsWith('.csv')) return { rows: streamCsvRows(stats), stats };
+  await loadSafeXlsxArchive(await readFile(sourcePath));
   return { rows: streamXlsxRowsWithFallback(stats), stats };
 };
 

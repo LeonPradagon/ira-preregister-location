@@ -1,6 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { providerHttpClient } from '../../../src/common/http/provider-http.client.js';
 import { OsmGeocodingAdapter } from '../../../src/integrations/geocoding/osm-geocoding.adapter.js';
+
+const originalRedisUrl = process.env.REDIS_URL;
+
+beforeEach(() => {
+  // Keep adapter tests independent from a running dev Redis cache.
+  process.env.REDIS_URL = 'redis://127.0.0.1:6399';
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -8,6 +15,8 @@ afterEach(() => {
   delete process.env.OSM_NOMINATIM_USER_AGENT;
   delete process.env.GEOCODING_QUEUE_TIMEOUT_MS;
   delete process.env.GEOCODING_RATE_LIMIT_PER_SECOND;
+  if (originalRedisUrl) process.env.REDIS_URL = originalRedisUrl;
+  else delete process.env.REDIS_URL;
 });
 
 describe('OSM Nominatim geocoding adapter', () => {

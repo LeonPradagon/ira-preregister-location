@@ -195,6 +195,18 @@ describe('API contracts', () => {
     }
   });
 
+  it('validates dynamic ticketing automation and distance rules', () => {
+    expect(
+      validationConfigSchema.safeParse({
+        ENABLE_AUTO_TICKETING: true,
+        TICKETING_AUTO_MATCH_MAX_METERS: 75,
+        TICKETING_RECOMMENDATION_MAX_METERS: 300,
+      }).success,
+    ).toBe(true);
+    expect(validationConfigSchema.safeParse({ TICKETING_AUTO_MATCH_MAX_METERS: 301 }).success).toBe(false);
+    expect(validationConfigSchema.safeParse({ TICKETING_RECOMMENDATION_MAX_METERS: 1001 }).success).toBe(false);
+  });
+
   it('accepts one reminder time and lets the server schedule the remaining reminders', () => {
     const valid = reminderSchema.safeParse({
       scheduledAt: '2026-09-02T05:00:00.000Z',

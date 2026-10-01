@@ -18,3 +18,10 @@ export const coordinateAuditEnqueueLimit = (
   const outstanding = outstandingStates.reduce((total, state) => total + Number(counts[state] ?? 0), 0);
   return Math.max(0, normalizedBuffer - outstanding);
 };
+
+export const shouldRetryFailedCoordinateAudit = (
+  state: string,
+  finishedAt: number | undefined,
+  now: number,
+  retryDelayMs: number,
+): boolean => state === 'failed' && finishedAt != null && now - finishedAt >= retryDelayMs;

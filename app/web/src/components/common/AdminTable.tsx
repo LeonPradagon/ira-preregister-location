@@ -93,7 +93,7 @@ export const AdminTable: React.FC<AdminTableProps> = ({
   );
   if (embedded) return <div className="overflow-x-auto">{table}</div>;
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
+    <div className="coreui-table overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900">
       <div className="overflow-x-auto">{table}</div>
       {footer}
     </div>
