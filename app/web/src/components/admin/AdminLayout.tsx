@@ -506,28 +506,21 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             </nav>
           </div>
           <div className="sidebar-footer coreui-system-utilization mt-3 border-t border-white/15 pt-3">
-            <h2 className="coreui-system-title">SYSTEM UTILIZATION</h2>
+            <h2 className="coreui-system-title">DEVICE METRICS</h2>
             <div className="coreui-utilization-list">
               <div className="coreui-utilization-item">
                 <div className="coreui-utilization-label">
                   <Cpu className="coreui-utilization-icon" />
-                  CPU USAGE
-                </div>
-                <div className="coreui-utilization-bar" role="progressbar" aria-label="CPU usage">
-                  <div
-                    className="coreui-utilization-fill coreui-utilization-cpu"
-                    style={{ width: systemMetrics.cpuCores ? '28%' : '0%' }}
-                  />
+                  CPU CORES
                 </div>
                 <div className="coreui-utilization-detail">
-                  Browser runtime.{' '}
-                  {systemMetrics.cpuCores ? `${systemMetrics.cpuCores} cores` : 'Core count unavailable'}
+                  {systemMetrics.cpuCores ? `${systemMetrics.cpuCores} logical cores detected` : 'Unavailable in browser'}
                 </div>
               </div>
               <div className="coreui-utilization-item">
                 <div className="coreui-utilization-label">
                   <MemoryStick className="coreui-utilization-icon" />
-                  MEMORY USAGE
+                  BROWSER MEMORY
                 </div>
                 <div
                   className="coreui-utilization-bar"
@@ -543,17 +536,23 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                   />
                 </div>
                 <div className="coreui-utilization-detail">
-                  {formatCompactBytes(systemMetrics.memoryUsed)}/{formatCompactBytes(systemMetrics.memoryTotal)}
-                  <span className="coreui-utilization-free">
-                    {' '}
-                    · Sisa {formatCompactBytes(remainingBytes(systemMetrics.memoryTotal, systemMetrics.memoryUsed))}
-                  </span>
+                  {systemMetrics.memoryUsed !== null && systemMetrics.memoryTotal !== null ? (
+                    <>
+                      {formatCompactBytes(systemMetrics.memoryUsed)}/{formatCompactBytes(systemMetrics.memoryTotal)}
+                      <span className="coreui-utilization-free">
+                        {' '}
+                        · Sisa {formatCompactBytes(remainingBytes(systemMetrics.memoryTotal, systemMetrics.memoryUsed))}
+                      </span>
+                    </>
+                  ) : (
+                    'Unavailable in this browser'
+                  )}
                 </div>
               </div>
               <div className="coreui-utilization-item">
                 <div className="coreui-utilization-label">
                   <HardDrive className="coreui-utilization-icon" />
-                  SSD USAGE
+                  SITE STORAGE
                 </div>
                 <div
                   className="coreui-utilization-bar"
@@ -569,11 +568,17 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                   />
                 </div>
                 <div className="coreui-utilization-detail">
-                  {formatCompactBytes(systemMetrics.storageUsed)}/{formatCompactBytes(systemMetrics.storageTotal)}
-                  <span className="coreui-utilization-free">
-                    {' '}
-                    · Sisa {formatCompactBytes(remainingBytes(systemMetrics.storageTotal, systemMetrics.storageUsed))}
-                  </span>
+                  {systemMetrics.storageUsed !== null && systemMetrics.storageTotal !== null ? (
+                    <>
+                      {formatCompactBytes(systemMetrics.storageUsed)}/{formatCompactBytes(systemMetrics.storageTotal)}
+                      <span className="coreui-utilization-free">
+                        {' '}
+                        · Sisa {formatCompactBytes(remainingBytes(systemMetrics.storageTotal, systemMetrics.storageUsed))}
+                      </span>
+                    </>
+                  ) : (
+                    'Unavailable in this browser'
+                  )}
                 </div>
               </div>
             </div>

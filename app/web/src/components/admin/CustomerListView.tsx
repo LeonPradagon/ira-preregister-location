@@ -73,40 +73,53 @@ const COORDINATE_AUDIT_STATUS_LABEL: Record<CoordinateAuditStatus, string> = {
 };
 
 const COORDINATE_AUDIT_CARDS: Array<{
-  status: CoordinateAuditStatus;
+  status: CoordinateAuditStatus | 'NOT_QUEUED';
+  label: string;
   icon: LucideIcon;
   className: string;
   iconClassName: string;
 }> = [
   {
     status: 'PENDING',
+    label: 'customers.coordinateAuditWaiting',
     icon: Clock,
     className: 'border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900',
     iconClassName: 'text-slate-600 dark:text-slate-300',
   },
   {
     status: 'MATCHED',
+    label: 'customers.coordinateAuditMatched',
     icon: CheckCircle2,
     className: 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20',
     iconClassName: 'text-emerald-700 dark:text-emerald-300',
   },
   {
     status: 'MISMATCH',
+    label: 'customers.coordinateAuditMismatch',
     icon: XCircle,
     className: 'border-rose-200 bg-rose-50/60 dark:border-rose-900 dark:bg-rose-950/20',
     iconClassName: 'text-rose-700 dark:text-rose-300',
   },
   {
     status: 'UNCERTAIN',
+    label: 'customers.coordinateAuditUncertain',
     icon: AlertTriangle,
     className: 'border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20',
     iconClassName: 'text-amber-700 dark:text-amber-300',
   },
   {
     status: 'INVALID',
+    label: 'customers.coordinateAuditInvalid',
     icon: Ban,
     className: 'border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/20',
     iconClassName: 'text-violet-700 dark:text-violet-300',
+  },
+  {
+    status: 'NOT_QUEUED',
+    label: 'customers.coordinateAuditNotQueued',
+    icon: Ban,
+    className: 'border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900',
+    iconClassName: 'text-slate-600 dark:text-slate-300',
   },
 ];
 
@@ -846,7 +859,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 >
                   <div className={`flex min-w-0 items-start gap-2 text-xs font-medium ${card.iconClassName}`}>
                     <Icon className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span className="min-w-0 leading-4">{t(COORDINATE_AUDIT_STATUS_LABEL[card.status])}</span>
+                    <span className="min-w-0 leading-4">{t(card.label)}</span>
                   </div>
                   <p className={`mt-auto pt-2 text-xl font-bold ${card.iconClassName}`}>
                     {Number(coordinateAuditCounts[card.status] ?? 0).toLocaleString('en-US')}

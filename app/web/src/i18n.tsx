@@ -7,7 +7,9 @@ type TranslationKey = string;
 const messages: Record<Language, Record<TranslationKey, string>> = {
   id: {
     'customers.addressIncomplete': 'Alamat belum lengkap — perlu dilengkapi/review tim',
-    'customers.coordinateAuditPending': 'Audit koordinat sedang diproses',
+    'customers.coordinateAuditPending': 'Belum diaudit',
+    'customers.coordinateAuditWaiting': 'Menunggu audit',
+    'customers.coordinateAuditNotQueued': 'Tidak masuk antrean audit',
     'customers.coordinateAuditMatched': 'Koordinat sesuai alamat',
     'customers.coordinateAuditUncertain': 'Koordinat perlu diperiksa',
     'customers.coordinateAuditMismatch': 'Koordinat tidak sesuai alamat',
@@ -359,7 +361,9 @@ const messages: Record<Language, Record<TranslationKey, string>> = {
   },
   en: {
     'customers.addressIncomplete': 'Address incomplete — needs completion/team review',
-    'customers.coordinateAuditPending': 'Coordinate audit is processing',
+    'customers.coordinateAuditPending': 'Not audited',
+    'customers.coordinateAuditWaiting': 'Waiting for audit',
+    'customers.coordinateAuditNotQueued': 'Not queued for audit',
     'customers.coordinateAuditMatched': 'Coordinates match the address',
     'customers.coordinateAuditUncertain': 'Coordinates need review',
     'customers.coordinateAuditMismatch': 'Coordinates do not match the address',

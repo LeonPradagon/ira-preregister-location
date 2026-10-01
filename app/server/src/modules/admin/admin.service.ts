@@ -379,8 +379,17 @@ export class AdminService {
             .from(reminders)
             .groupBy(reminders.reminderNumber),
           db
-            .select({ status: customerAddresses.coordinateAuditStatus, total: sql<number>`count(*)` })
+            .select({
+              status: customerAddresses.coordinateAuditStatus,
+              total: sql<number>`count(*)`,
+              eligiblePending: sql<number>`count(*) filter (
+                where ${customerAddresses.coordinateAuditStatus} = 'PENDING'
+                  and ${customers.status} <> 'VERIFIED'
+                  and ${customerAddresses.referenceLocation} is not null
+              )`,
+            })
             .from(customerAddresses)
+            .innerJoin(customers, eq(customers.id, customerAddresses.customerId))
             .where(and(eq(customerAddresses.isActive, true), eq(customerAddresses.referenceSource, 'PREREG_IMPORT')))
             .groupBy(customerAddresses.coordinateAuditStatus),
           db.execute(sql`
@@ -440,8 +449,17 @@ export class AdminService {
         const byNumber = Object.fromEntries(
           reminderNumberRows.map((row) => [String(row.reminderNumber), toNumber(row.total)]),
         );
+        const pendingAuditRow = coordinateAuditStatusRows.find((row) => row.status === 'PENDING');
+        const eligiblePendingAudits = toNumber(pendingAuditRow?.eligiblePending);
         const coordinateAuditStatusCounts = Object.fromEntries(
-          coordinateAuditStatusRows.map((row) => [row.status, toNumber(row.total)]),
+          coordinateAuditStatusRows.map((row) => [
+            row.status,
+            row.status === 'PENDING' ? eligiblePendingAudits : toNumber(row.total),
+          ]),
+        );
+        coordinateAuditStatusCounts.NOT_QUEUED = Math.max(
+          toNumber(pendingAuditRow?.total) - eligiblePendingAudits,
+          0,
         );
         const cancelledByReason = Object.fromEntries(
           reminderCancellationRows.map((row) => [row.reason ?? 'UNKNOWN', toNumber(row.total)]),
