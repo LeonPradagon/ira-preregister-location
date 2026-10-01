@@ -73,7 +73,7 @@ const COORDINATE_AUDIT_STATUS_LABEL: Record<CoordinateAuditStatus, string> = {
 };
 
 const COORDINATE_AUDIT_CARDS: Array<{
-  status: CoordinateAuditStatus | 'NOT_QUEUED';
+  status: CoordinateAuditStatus;
   label: string;
   icon: LucideIcon;
   className: string;
@@ -113,13 +113,6 @@ const COORDINATE_AUDIT_CARDS: Array<{
     icon: Ban,
     className: 'border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/20',
     iconClassName: 'text-violet-700 dark:text-violet-300',
-  },
-  {
-    status: 'NOT_QUEUED',
-    label: 'customers.coordinateAuditNotQueued',
-    icon: Ban,
-    className: 'border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900',
-    iconClassName: 'text-slate-600 dark:text-slate-300',
   },
 ];
 
