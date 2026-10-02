@@ -21,7 +21,6 @@ import {
 import { VerificationDetailData, useApp } from '../../context/AppContext';
 import { ReviewDecision } from '../../types';
 import { formatAppDate, formatAppDateTime, formatAppTime } from '../../lib/dateTime';
-import { VerificationMap } from '../maps/VerificationMap';
 import {
   calculateGeodesicDistanceMeters,
   formatAddressForDisplay,
@@ -34,6 +33,10 @@ import { AdminTable } from '../common/AdminTable';
 import { useTranslation } from '../../i18n';
 import { confirmAction } from '../../lib/swal';
 import { AppLoader } from '../common/AppLoader';
+
+const VerificationMap = React.lazy(() =>
+  import('../maps/VerificationMap').then((module) => ({ default: module.VerificationMap })),
+);
 import { withTimeout } from '../../lib/async';
 import {
   getDefaultManualReviewReason,
@@ -356,7 +359,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
     <div className="space-y-3">
       {/* Top Header with Back Navigation & Action Buttons */}
       <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <button
             type="button"
             onClick={onBack}
@@ -365,7 +368,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-base font-semibold text-gray-900 dark:text-white tracking-tight">
                 Verifikasi: {customer.name}
@@ -384,7 +387,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap lg:flex-nowrap lg:shrink-0">
           {/* A new cycle is separate from ordinary resend: the exhausted
               session remains available as history. */}
           {cycleExhausted ? (
@@ -406,7 +409,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
               title={
                 !canSendVerification ? 'Role ini tidak dapat mengirim ulang undangan' : 'Kirim ulang undangan WhatsApp'
               }
-              className="verification-resend-button px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+              className="verification-resend-button whitespace-nowrap px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
             >
               <Send className="w-3.5 h-3.5 text-gray-600 dark:text-gray-400" />
               <span>Kirim Ulang Undangan</span>
@@ -418,7 +421,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
             <button
               type="button"
               onClick={openManualReview}
-              className="px-3.5 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg text-xs font-medium shadow-xs flex items-center gap-1.5 transition-all"
+              className="whitespace-nowrap px-3.5 py-1.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white text-white rounded-lg text-xs font-medium shadow-xs flex items-center gap-1.5 transition-all"
             >
               <ShieldCheck className="w-4 h-4" />
               <span>{manualReviewDecisions.includes('APPROVE') ? 'Approval manual' : 'Tindakan manual'}</span>
@@ -583,8 +586,8 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
               </div>
             </summary>
 
-            <div className="grid gap-px bg-slate-200 dark:bg-slate-800 md:grid-cols-3">
-              <div className="bg-white p-4 dark:bg-slate-900">
+            <div className="grid gap-px bg-[var(--coreui-border)] md:grid-cols-3">
+              <div className="bg-[var(--coreui-surface)] p-4">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Alamat saat ini
@@ -601,7 +604,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                 </p>
               </div>
 
-              <div className="bg-white p-4 dark:bg-slate-900">
+              <div className="bg-[var(--coreui-surface)] p-4">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Perubahan alamat terakhir
@@ -626,7 +629,7 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                 )}
               </div>
 
-              <div className="bg-white p-4 dark:bg-slate-900">
+              <div className="bg-[var(--coreui-surface)] p-4">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Lokasi perangkat
@@ -716,9 +719,11 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
             </div>
 
             <details className="group">
-              <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-600 marker:hidden [&::-webkit-details-marker]:hidden dark:bg-gray-800/60 dark:text-gray-300">
-                <span>{sessionReminders.length > 0 ? 'Tampilkan detail pengingat' : 'Belum ada pengingat terjadwal'}</span>
-                <ChevronDown className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-180" />
+              <summary className="cursor-pointer list-none rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-600 marker:hidden [&::-webkit-details-marker]:hidden dark:bg-gray-800/60 dark:text-gray-300">
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  {sessionReminders.length > 0 ? 'Tampilkan detail pengingat' : 'Belum ada pengingat terjadwal'}
+                  <ChevronDown className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180" />
+                </span>
               </summary>
               <div className="mt-2">
                 {sessionReminders.length > 0 ? (
@@ -781,9 +786,11 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
               <span>Riwayat Capture GPS ({sessionCaptures.length})</span>
             </div>
             <details className="group">
-              <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-600 marker:hidden [&::-webkit-details-marker]:hidden dark:bg-gray-800/60 dark:text-gray-300">
-                <span>{sessionCaptures.length > 0 ? 'Tampilkan detail percobaan' : 'Belum ada percobaan GPS'}</span>
-                <ChevronDown className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-180" />
+              <summary className="cursor-pointer list-none rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-600 marker:hidden [&::-webkit-details-marker]:hidden dark:bg-gray-800/60 dark:text-gray-300">
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  {sessionCaptures.length > 0 ? 'Tampilkan detail percobaan' : 'Belum ada percobaan GPS'}
+                  <ChevronDown className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180" />
+                </span>
               </summary>
               <div className="mt-2">
                 {sessionCaptures.length > 0 ? (
@@ -999,19 +1006,23 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
               </div>
             )}
 
-            {/* Interactive Leaflet Map (PRD Section 11.3 & AC-11) */}
+            {/* Interactive MapLibre map (PRD Section 11.3 & AC-11) */}
             <div className="pt-2">
-              <VerificationMap
-                referenceLocation={refLoc}
-                referenceLabel={formatAddressForDisplay(address.rawAddress)}
-                referencePrecision={address.referencePrecision}
-                capturedLocation={capturedLoc}
-                capturedLabel={`Customer: ${customer.name}`}
-                homeRadiusMeters={validationConfig.HOME_RADIUS_METERS}
-                distanceMeters={distanceToCurrentReference}
-                isMatch={locationMatched}
-                heightClass="h-[280px] sm:h-[320px]"
-              />
+              <React.Suspense
+                fallback={<div className="h-[280px] animate-pulse rounded-xl bg-gray-100 sm:h-[320px] dark:bg-gray-800" />}
+              >
+                <VerificationMap
+                  referenceLocation={refLoc}
+                  referenceLabel={formatAddressForDisplay(address.rawAddress)}
+                  referencePrecision={address.referencePrecision}
+                  capturedLocation={capturedLoc}
+                  capturedLabel={`Customer: ${customer.name}`}
+                  homeRadiusMeters={validationConfig.HOME_RADIUS_METERS}
+                  distanceMeters={distanceToCurrentReference}
+                  isMatch={locationMatched}
+                  heightClass="h-[280px] sm:h-[320px]"
+                />
+              </React.Suspense>
             </div>
           </div>
 
