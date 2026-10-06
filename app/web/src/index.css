@@ -914,11 +914,19 @@ html.dark .customer-theme textarea:disabled {
   }
 }
 
-/* Existing shell uses Tailwind's md breakpoint (768px), while CoreUI's
-   mobile sidebar breakpoint is 992px. Keep React's existing tablet behavior
-   while retaining CoreUI sidebar visuals. */
-@media (min-width: 768px) {
-  .coreui-sidebar {
-    margin-inline-start: 0 !important;
+/* React controls sidebar visibility with responsive utility classes. Prevent
+   CoreUI's mobile slide-off-screen margin from hiding an open sidebar. */
+.coreui-sidebar {
+  margin-inline-start: 0 !important;
+}
+
+@media (max-width: 767.98px) {
+  .coreui-sidebar.hidden {
+    display: none !important;
+  }
+
+  .coreui-sidebar:not(.hidden) {
+    top: 4rem !important;
+    bottom: 0 !important;
   }
 }

@@ -22,6 +22,7 @@ import {
   UserCog,
   Users,
   Wifi,
+  X,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../i18n';
@@ -244,8 +245,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             onClick={() => setMobileNavOpen((open) => !open)}
             className="header-toggler inline-flex items-center justify-center rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 md:hidden"
             aria-label={mobileNavOpen ? 'Tutup menu navigasi' : 'Buka menu navigasi'}
+            aria-expanded={mobileNavOpen}
+            aria-controls="admin-sidebar-navigation"
           >
-            <Menu className="h-4 w-4" />
+            {mobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
           <button
             type="button"
@@ -408,6 +411,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
       <div className={`flex flex-1 flex-col pt-16 md:flex-row ${sidebarCollapsed ? 'md:pl-20' : 'md:pl-64'}`}>
         {/* Sidebar Navigation */}
         <aside
+          id="admin-sidebar-navigation"
           className={`sidebar sidebar-dark sidebar-fixed coreui-sidebar ${sidebarCollapsed && !mobileNavOpen ? 'coreui-sidebar-collapsed' : ''} ${mobileNavOpen ? 'fixed inset-x-0 top-16 z-40 flex max-h-[calc(100vh-4rem)]' : 'hidden md:flex'} w-full flex-shrink-0 flex-col justify-between border-r border-red-100 bg-white p-3 dark:border-gray-800 dark:bg-gray-900 md:fixed md:bottom-0 md:left-0 md:top-0 md:z-40 ${sidebarCollapsed ? 'md:w-20' : 'md:w-64'} md:overflow-y-auto`}
         >
           <div className="flex min-h-0 flex-1 flex-col">
