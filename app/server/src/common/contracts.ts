@@ -101,6 +101,11 @@ export const addressChangeSchema = z.object({
   landmark: addressTextSchema(1000).optional(),
 });
 
+export const customerCorrectionSchema = addressChangeSchema.extend({
+  name: z.string().trim().min(2).max(255),
+  phone: z.string().trim().min(8).max(32).regex(/^\+?[0-9\s()-]+$/),
+});
+
 export const addressLookupSchema = addressChangeSchema.extend({
   postalCode: addressTextSchema(16).optional(),
   street: addressTextSchema(255).optional(),

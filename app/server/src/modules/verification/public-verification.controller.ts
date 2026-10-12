@@ -4,6 +4,7 @@ import {
   addressLookupSchema,
   addressStatusSchema,
   confirmationSchema,
+  customerCorrectionSchema,
   locationSamplesSchema,
   reminderSchema,
 } from '../../common/contracts.js';
@@ -28,6 +29,13 @@ export class PublicVerificationController {
     const parsed = confirmationSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
     return this.verification.confirm(token, parsed.data.confirmed);
+  }
+
+  @Post(':token/customer-correction')
+  async customerCorrection(@Param('token') token: string, @Body() body: unknown) {
+    const parsed = customerCorrectionSchema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.flatten());
+    return this.verification.submitCustomerCorrection(token, parsed.data);
   }
 
   @Post(':token/consent')

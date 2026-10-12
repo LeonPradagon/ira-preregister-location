@@ -360,6 +360,35 @@ export class VerificationService {
     return { status: confirmed ? 'CONSENTED' : 'CUSTOMER_DATA_MISMATCH' };
   }
 
+  async submitCustomerCorrection(
+    token: string,
+    input: AddressChangeInput & { name: string; phone: string },
+  ) {
+    const row = await this.findByToken(token);
+    if (row.session.verificationStatus !== 'CUSTOMER_DATA_MISMATCH')
+      throw new DomainError('Customer data mismatch must be confirmed first', 409);
+    await this.addressStatus(token, false);
+    const proposedAddress = await this.changeAddress(token, input);
+    const timestamp = now();
+    await db.insert(auditLogs).values({
+      actorUserId: 'customer-token',
+      actorName: 'Customer',
+      action: 'CUSTOMER_CORRECTION_SUBMITTED',
+      entityType: 'VERIFICATION_SESSION',
+      entityId: row.session.id,
+      after: {
+        name: input.name,
+        phone: input.phone,
+        address: input,
+        proposedAddressId: proposedAddress.id,
+        reviewStatus: 'PENDING',
+      },
+      reason: 'Customer submitted corrected contact and address details for admin review',
+      timestamp,
+    });
+    return { status: 'ADDRESS_PROPOSED', addressId: proposedAddress.id };
+  }
+
   async consent(token: string) {
     const row = await this.findByToken(token);
     const config = await this.validationConfig.get();

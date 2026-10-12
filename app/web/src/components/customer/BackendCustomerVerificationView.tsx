@@ -355,6 +355,8 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
   const [addressForm, setAddressForm] = useState<AddressForm>({});
   const [editingAddress, setEditingAddress] = useState(false);
   const [showAddressChangeConfirmation, setShowAddressChangeConfirmation] = useState(false);
+  const [showCustomerCorrectionForm, setShowCustomerCorrectionForm] = useState(false);
+  const [correctionForm, setCorrectionForm] = useState({ name: '', phone: '' });
   const [addressSubmitting, setAddressSubmitting] = useState(false);
   const [addressFieldErrors, setAddressFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -804,6 +806,57 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
 
   const requestAddressChange = () => setShowAddressChangeConfirmation(true);
 
+  const submitCustomerCorrection = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const missingFields = getMissingAddressFields(addressForm);
+    if (missingFields.length) {
+      setAddressFieldErrors(Object.fromEntries(missingFields.map((field) => [field, t('customer.addressFieldRequired')])));
+      setError(t('customer.addressFieldsMissing', { fields: missingFields.map((field) => t(`customer.addressField${field[0].toUpperCase()}${field.slice(1)}`)).join(', ') }));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const selectedSubdistrict = regionOptions.subdistrict.find((option) => option.name.toLowerCase() === addressForm.subdistrict?.trim().toLowerCase());
+      const postalCode = addressForm.postalCode?.trim() || selectedSubdistrict?.postalCode?.trim() || '';
+      if (simulation) {
+        updateSimulationSession({ status: 'ADDRESS_PROPOSED' });
+      } else {
+        await api.submitCustomerCorrection(token, {
+          ...addressForm,
+          postalCode,
+          houseNumber: addressForm.houseNumber || '',
+          rt: addressForm.rt || '',
+          rw: addressForm.rw || '',
+          building: addressForm.building || '',
+          block: addressForm.block || '',
+          unit: addressForm.unit || '',
+          addressDetail: addressForm.addressDetail || '',
+          landmark: addressForm.landmark || '',
+          ...correctionForm,
+        });
+        await refresh();
+        setContext((current) =>
+          current
+            ? {
+                ...current,
+                customer: {
+                  ...current.customer,
+                  name: correctionForm.name.trim(),
+                  phoneE164: correctionForm.phone.trim(),
+                },
+              }
+            : current,
+        );
+      }
+      setShowCustomerCorrectionForm(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('customer.requestFailed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const clearAddressFieldError = (field: string) => {
     setAddressFieldErrors((current) => {
       if (!current[field]) return current;
@@ -1043,6 +1096,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     }`;
     const input = isLongText ? (
       <textarea
+        autoComplete={showCustomerCorrectionForm ? 'new-password' : undefined}
         required={false}
         rows={3}
         value={addressForm[field] || ''}
@@ -1056,6 +1110,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
       />
     ) : (
       <input
+        autoComplete={showCustomerCorrectionForm ? 'new-password' : undefined}
         required={!isOptional}
         pattern={field === 'postalCode' ? '[0-9]{5}' : undefined}
         value={addressForm[field] || ''}
@@ -1079,6 +1134,7 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
     const regionInput = regionLevel ? (
       <>
         <select
+          autoComplete={showCustomerCorrectionForm ? 'off' : undefined}
           required
           value={selectedOption?.code || ''}
           disabled={
@@ -1362,8 +1418,9 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                   )}
                 </div>
               )}
-              {!cycleExhausted && showConfirmation && (
+              {!cycleExhausted && (showConfirmation || showCustomerCorrectionForm || status === 'CUSTOMER_DATA_MISMATCH') && (
                 <div className="space-y-3">
+                  {showConfirmation && !showCustomerCorrectionForm && <>
                   <p className="text-base font-medium leading-relaxed text-slate-700">{t('customer.confirmData')}</p>
                   <button
                     disabled={busy}
@@ -1382,22 +1439,36 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                   </button>
                   <button
                     disabled={busy}
-                    onClick={() =>
-                      void run(() =>
-                        simulation
-                          ? Promise.resolve(
-                              updateSimulationSession({
-                                status: 'CUSTOMER_DATA_MISMATCH',
-                                customerConfirmationStatus: 'MISMATCH',
-                              }),
-                            )
-                          : api.confirm(token, false),
-                      )
-                    }
+                    onClick={async () => {
+                      if (simulation) {
+                        updateSimulationSession({ status: 'CUSTOMER_DATA_MISMATCH', customerConfirmationStatus: 'MISMATCH' });
+                      } else {
+                        const succeeded = await run(() => api.confirm(token, false));
+                        if (!succeeded) return;
+                      }
+                      setCorrectionForm({ name: '', phone: '' });
+                      setAddressForm({});
+                      setShowCustomerCorrectionForm(true);
+                    }}
                     className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 disabled:opacity-50"
                   >
                     {t('customer.notMyData')}
                   </button>
+                  </>}
+                  {(showCustomerCorrectionForm || status === 'CUSTOMER_DATA_MISMATCH') && (
+                    <form noValidate autoComplete="off" onSubmit={(event) => void submitCustomerCorrection(event)} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left">
+                      <div>
+                        <h2 className="text-base font-semibold text-slate-900">Perbarui data Anda</h2>
+                        <p className="mt-1 text-xs leading-relaxed text-slate-600">Isi ulang semua data. Pengajuan ditinjau admin; data lama tidak langsung diubah.</p>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <label className="block text-xs font-medium text-slate-700">Nama lengkap<input autoComplete="new-password" name="correction-customer-name" required minLength={2} maxLength={255} value={correctionForm.name} onChange={(event) => setCorrectionForm({ ...correctionForm, name: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" /></label>
+                        <label className="block text-xs font-medium text-slate-700">Nomor HP<input autoComplete="new-password" name="correction-customer-phone" required minLength={8} maxLength={32} type="tel" value={correctionForm.phone} onChange={(event) => setCorrectionForm({ ...correctionForm, phone: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2" /></label>
+                        {fields.map((field) => <div key={field} className="min-w-0">{renderAddressField(field)}</div>)}
+                      </div>
+                      <button type="submit" disabled={busy} className="w-full rounded-lg bg-blue-600 px-3 py-3 text-xs font-semibold text-white disabled:opacity-50">{busy ? t('customer.submittingAddress') : 'Kirim untuk ditinjau'}</button>
+                    </form>
+                  )}
                 </div>
               )}
               {!cycleExhausted && status === 'CONSENTED' && (
@@ -1653,13 +1724,6 @@ export const BackendCustomerVerificationView: React.FC<Props> = ({ token, simula
                     )}
                   </div>
                 )}
-              {!cycleExhausted && status === 'CUSTOMER_DATA_MISMATCH' && (
-                <ResultPanel
-                  icon={<XCircle className="h-7 w-7 text-rose-600" />}
-                  title={t('customer.dataNeedsUpdate')}
-                  text={t('customer.contactSupport')}
-                />
-              )}
               {!cycleExhausted && status === 'ADDRESS_PROPOSED' && (
                 <div className="space-y-3">
                   <ResultPanel

@@ -534,6 +534,11 @@ const publicVerificationApi = {
       method: 'POST',
       body: JSON.stringify({ confirmed }),
     }),
+  submitCustomerCorrection: (token: string, correction: Record<string, string>) =>
+    request<{ status: string; addressId: string }>(`/public/verifications/${encodeURIComponent(token)}/customer-correction`, {
+      method: 'POST',
+      body: JSON.stringify(correction),
+    }),
   consent: (token: string) =>
     request<{ status: string }>(`/public/verifications/${encodeURIComponent(token)}/consent`, { method: 'POST' }),
   submitLocation: async (token: string, samples: unknown[]) => {
