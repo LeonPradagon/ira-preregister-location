@@ -703,28 +703,8 @@ const adminApi = {
     }),
   getCustomerExportJob: (jobId: string) =>
     request<CustomerExportJob>(`/admin/exports/customers/jobs/${encodeURIComponent(jobId)}`),
-  downloadCustomerExport: async (
-    jobId: string,
-    query: { resource: 'customers' | 'addresses'; format: 'xlsx' | 'csv' },
-  ) => {
-    const response = await apiClient.get<ArrayBuffer>(
-      `/admin/exports/customers/jobs/${encodeURIComponent(jobId)}/download`,
-      {
-        responseType: 'arraybuffer',
-        timeout: EXPORT_DOWNLOAD_TIMEOUT_MS,
-      },
-    );
-    const disposition = response.headers['content-disposition'];
-    const contentType = String(response.headers['content-type'] || 'application/octet-stream');
-    const fallbackFileName = contentType.includes('zip')
-      ? `ira_${query.resource}_export.zip`
-      : `ira_${query.resource}_part_001.${query.format}`;
-    const fileName =
-      typeof disposition === 'string'
-        ? disposition.match(/filename="([^"]+)"/)?.[1] || fallbackFileName
-        : fallbackFileName;
-    return { blob: new Blob([response.data], { type: contentType }), fileName };
-  },
+  customerExportDownloadUrl: (jobId: string) =>
+    `${API_BASE_URL}/admin/exports/customers/jobs/${encodeURIComponent(jobId)}/download`,
   customer: (id: string) => request<Record<string, unknown>>(`/admin/customers/${encodeURIComponent(id)}`),
   createCustomer: (body: unknown) =>
     request<Record<string, unknown>>('/admin/customers', { method: 'POST', body: JSON.stringify(body) }),

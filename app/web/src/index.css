@@ -101,6 +101,17 @@ html.dark .admin-theme .customer-refresh-button:hover:not(:disabled) {
   border-color: #718096 !important;
 }
 
+html.dark .admin-theme .customer-delete-button {
+  background: #2a303b !important;
+  border-color: #7f1d1d !important;
+  color: #fda4af !important;
+}
+
+html.dark .admin-theme .customer-delete-button:hover:not(:disabled) {
+  background: #4c1d2a !important;
+  border-color: #be123c !important;
+}
+
 html.dark .admin-theme .monitoring-export-menu {
   background: #212631 !important;
   border-color: #4a5568 !important;

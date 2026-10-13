@@ -3,6 +3,7 @@ import JSZip from 'jszip';
 import { Injectable, NotFoundException, OnModuleDestroy } from '@nestjs/common';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { once } from 'node:events';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -18,7 +19,10 @@ import { campaignEligibleAddressSql, incompleteAddressSql } from '../validation/
 import { campaignRecipientReservationStatuses } from '../campaigns/campaign-target.policy.js';
 import { safeCsvCell } from './csv-cell.js';
 
-export const EXPORT_MAX_DATA_ROWS = 50_000;
+// Keep each workbook/CSV part small so one export cannot hold an oversized
+// page and workbook in worker memory. Large exports are delivered as ZIP parts.
+export const EXPORT_CSV_BATCH_ROWS = 5_000;
+export const EXPORT_XLSX_PART_ROWS = 50_000;
 
 export const EXPORT_HEADERS = [
   'id',
@@ -513,34 +517,48 @@ export class AdminExportService implements OnModuleDestroy {
     try {
       let part = 1;
       let cursor: { updatedAt: Date; id: string } | null = null;
+      const csvName = `ira_${query.resource}_export.csv`;
+      const csvPath = join(temporaryDirectory, csvName);
+      const csvOutput = query.format === 'csv' ? createWriteStream(csvPath) : null;
+      if (csvOutput) {
+        csvOutput.write(this.createCsv([], true));
+      }
+      const batchRows = query.format === 'csv' ? EXPORT_CSV_BATCH_ROWS : EXPORT_XLSX_PART_ROWS;
 
       while (true) {
         const result: { rows: ExportRow[]; cursor: { updatedAt: Date; id: string } | null } =
           query.resource === 'addresses'
-            ? await this.fetchAddressRows(query, cursor)
-            : await this.fetchCustomerRows(query, cursor);
+            ? await this.fetchAddressRows(query, cursor, batchRows)
+            : await this.fetchCustomerRows(query, cursor, batchRows);
         if (!result.rows.length) break;
         totalRows += result.rows.length;
 
-        const suffix = String(part).padStart(3, '0');
-        const extension = query.format;
-        const name = `ira_${query.resource}_part_${suffix}.${extension}`;
-        const body =
-          query.format === 'xlsx' ? await this.createXlsx(result.rows) : this.createCsv(result.rows);
-        const path = join(temporaryDirectory, name);
-        await writeFile(path, body);
-        files.push({ name, path });
-        await options.onProgress?.(totalRows, files.length);
+        if (csvOutput) {
+          if (!csvOutput.write(this.createCsv(result.rows, false))) await once(csvOutput, 'drain');
+          await options.onProgress?.(totalRows, 1);
+        } else {
+          const suffix = String(part).padStart(3, '0');
+          const name = `ira_${query.resource}_part_${suffix}.xlsx`;
+          const path = join(temporaryDirectory, name);
+          await writeFile(path, await this.createXlsx(result.rows));
+          files.push({ name, path });
+          await options.onProgress?.(totalRows, files.length);
+          part += 1;
+        }
         cursor = result.cursor;
-        part += 1;
-        if (result.rows.length < EXPORT_MAX_DATA_ROWS) break;
+        if (result.rows.length < batchRows) break;
+      }
+
+      if (csvOutput) {
+        csvOutput.end();
+        await once(csvOutput, 'finish');
+        files.push({ name: csvName, path: csvPath });
       }
 
       if (!files.length) {
-        const name = `ira_${query.resource}_part_001.${query.format}`;
-        const body = query.format === 'xlsx' ? await this.createXlsx([]) : this.createCsv([]);
+        const name = `ira_${query.resource}_part_001.xlsx`;
         const path = join(temporaryDirectory, name);
-        await writeFile(path, body);
+        await writeFile(path, await this.createXlsx([]));
         files.push({ name, path });
       }
 
@@ -577,6 +595,16 @@ export class AdminExportService implements OnModuleDestroy {
       });
 
       if (files.length === 1) {
+        if (query.format === 'csv') {
+          return {
+            stream: createReadStream(files[0].path),
+            contentType: contentTypes.csv,
+            fileName: files[0].name,
+            cleanup,
+            totalRows,
+            partCount: 1,
+          };
+        }
         const body = await readFile(files[0].path);
         await cleanup();
         return { body, contentType: contentTypes[query.format], fileName: files[0].name, totalRows, partCount: files.length };
@@ -601,6 +629,7 @@ export class AdminExportService implements OnModuleDestroy {
   private async fetchCustomerRows(
     query: CustomerExportQueryInput,
     cursor: { updatedAt: Date; id: string } | null,
+    batchRows: number,
   ): Promise<{ rows: ExportRow[]; cursor: { updatedAt: Date; id: string } | null }> {
     const filters = buildCustomerFilters(query);
     const customerRows = await db
@@ -608,7 +637,7 @@ export class AdminExportService implements OnModuleDestroy {
       .from(customers)
       .where(and(...filters, cursorForCustomer(cursor)))
       .orderBy(desc(customers.updatedAt), desc(customers.id))
-      .limit(EXPORT_MAX_DATA_ROWS);
+      .limit(batchRows);
     if (!customerRows.length) return { rows: [], cursor: null };
 
     const addressRows = await db
@@ -643,6 +672,7 @@ export class AdminExportService implements OnModuleDestroy {
   private async fetchAddressRows(
     query: CustomerExportQueryInput,
     cursor: { updatedAt: Date; id: string } | null,
+    batchRows: number,
   ): Promise<{ rows: ExportRow[]; cursor: { updatedAt: Date; id: string } | null }> {
     const rows = await db
       .select({
@@ -661,7 +691,7 @@ export class AdminExportService implements OnModuleDestroy {
         ),
       )
       .orderBy(desc(customerAddresses.updatedAt), desc(customerAddresses.id))
-      .limit(EXPORT_MAX_DATA_ROWS);
+      .limit(batchRows);
     if (!rows.length) return { rows: [], cursor: null };
     return {
       rows: rows.map((row) =>
@@ -678,14 +708,14 @@ export class AdminExportService implements OnModuleDestroy {
     };
   }
 
-  private createCsv(rows: ExportRow[]): Buffer {
+  private createCsv(rows: ExportRow[], includeHeader = true): Buffer {
     const csvCell = (value: ExportValue, column: number): string => {
       if (value == null) return '';
       if (typeof value === 'boolean') return value ? '1' : '0';
       if (column === 6 || column === 7) return typeof value === 'number' ? value.toFixed(7) : String(value);
       return String(value);
     };
-    const lines = [EXPORT_HEADERS.join(',')];
+    const lines = includeHeader ? [EXPORT_HEADERS.join(',')] : [];
     for (const row of rows) lines.push(row.map((value, index) => safeCsvCell(csvCell(value, index + 1))).join(','));
     return Buffer.from(`\uFEFF${lines.join('\r\n')}\r\n`, 'utf8');
   }

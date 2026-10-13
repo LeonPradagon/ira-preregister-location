@@ -22,6 +22,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { fwaCoverageLabel, networkAvailabilityLabel } from '../../lib/networkAvailability';
 import { api } from '../../lib/apiClient';
+import type { CustomerExportJob } from '../../lib/apiClient';
 import { CoordinateAuditStatus, Customer, CustomerStatus, WhatsappStatus } from '../../types';
 import { hasCapability } from '../../lib/accessControl';
 import {
@@ -204,6 +205,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
+  const [exportProgress, setExportProgress] = useState<CustomerExportJob | null>(null);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
   // New Customer Form State
@@ -473,27 +475,27 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
         coverageFtthStatus: coverageFtthFilter === 'ALL' ? undefined : coverageFtthFilter,
       });
       let currentJob = job;
+      setExportProgress(currentJob);
       const deadline = Date.now() + 30 * 60 * 1000;
       while (currentJob.status === 'QUEUED' || currentJob.status === 'PROCESSING') {
         if (Date.now() >= deadline) throw new Error(t('customers.exportTimeout'));
         await new Promise((resolve) => window.setTimeout(resolve, 2000));
         currentJob = await api.getCustomerExportJob(job.jobId);
+        setExportProgress(currentJob);
       }
       if (currentJob.status !== 'COMPLETED') {
         throw new Error(currentJob.errorSummary || t('customers.exportError'));
       }
-      const result = await api.downloadCustomerExport(job.jobId, { resource, format });
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(result.blob);
-      link.download = result.fileName;
+      link.href = api.customerExportDownloadUrl(job.jobId);
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     } catch (error: unknown) {
       setLoadError(error instanceof Error ? error.message : t('customers.exportError'));
     } finally {
       setExporting(null);
+      setExportProgress(null);
     }
   };
 
@@ -722,6 +724,21 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                 <span>{exporting ? '...' : t('customers.export')}</span>
                 <ChevronDown className="h-3.5 w-3.5 shrink-0" />
               </button>
+              {exportProgress && (
+                <div className="mt-2 min-w-44 text-[11px] text-gray-600 dark:text-gray-300" role="status" aria-live="polite">
+                  <div>
+                    {exportProgress.status === 'QUEUED'
+                      ? t('customers.exportQueued')
+                      : t('customers.exportProgress', {
+                          rows: exportProgress.processedRows.toLocaleString(),
+                          parts: exportProgress.partCount,
+                        })}
+                  </div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                    <div className="h-full w-1/3 animate-pulse rounded-full bg-indigo-500" />
+                  </div>
+                </div>
+              )}
               {isExportMenuOpen && !exporting && (
                 <div className="absolute right-0 z-20 mt-1.5 min-w-44 rounded-lg border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
                   <button
@@ -1326,7 +1343,7 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ onSelectCust
                         disabled={!canManageCustomers}
                         title={t('customers.permanentDelete')}
                         aria-label={t('customers.permanentDelete')}
-                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-700 transition-colors hover:bg-rose-50 disabled:opacity-40 dark:border-rose-800 dark:bg-gray-800 dark:text-rose-300 dark:hover:bg-rose-950/30"
+                        className="customer-delete-button inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-700 transition-colors hover:bg-rose-50 disabled:opacity-40 dark:border-rose-800 dark:bg-gray-800 dark:text-rose-300 dark:hover:bg-rose-950/30"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
