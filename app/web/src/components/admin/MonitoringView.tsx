@@ -539,7 +539,7 @@ export const MonitoringView: React.FC = () => {
       </section>
 
       {selectedCampaign && (
-        <section className="overflow-hidden rounded-2xl border border-indigo-200 bg-white shadow-sm dark:border-indigo-900/70 dark:bg-slate-900">
+        <section className="monitoring-recipient-panel overflow-hidden rounded-2xl border border-indigo-200 bg-white shadow-sm dark:border-indigo-900/70 dark:bg-slate-900">
           <div className="flex flex-col gap-3 border-b border-indigo-100 p-4 dark:border-indigo-900/60 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-sm font-bold text-slate-900 dark:text-white">

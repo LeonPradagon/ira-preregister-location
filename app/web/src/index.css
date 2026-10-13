@@ -649,7 +649,8 @@ html.dark .coreui-sidebar {
 html.dark .admin-theme .rounded-2xl.border-gray-200.bg-white,
 html.dark .admin-theme .rounded-xl.border-gray-200.bg-white,
 html.dark .admin-theme [class*="rounded-2xl"][class*="border-slate-"][class*="bg-white"],
-html.dark .admin-theme [class*="rounded-xl"][class*="border-slate-"][class*="bg-white"] {
+html.dark .admin-theme [class*="rounded-xl"][class*="border-slate-"][class*="bg-white"],
+html.dark .admin-theme .monitoring-recipient-panel {
   background: var(--coreui-surface) !important;
   border-color: var(--coreui-border) !important;
 }

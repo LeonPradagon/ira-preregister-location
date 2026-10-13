@@ -518,7 +518,6 @@ export class CampaignService {
         customer_external_id: row.customer.externalId,
         customer_name: row.customer.name,
         phone_number: row.customer.phoneE164,
-        customer_status: campaignExportStatusLabels[row.customer.status] ?? row.customer.status,
         coverage_fwa: row.customer.coverageFwaStatus,
         coverage_ftth: row.customer.coverageFtthStatus,
         delivery_status: campaignExportStatusLabels[row.item.status] ?? row.item.status,
@@ -533,6 +532,14 @@ export class CampaignService {
         delivery_error: row.item.lastError,
         session_id: row.session.id,
         session_status: campaignExportStatusLabels[row.session.verificationStatus] ?? row.session.verificationStatus,
+        location_match_status:
+          row.session.verificationStatus === 'LOCATION_VALID'
+            ? 'Sesuai'
+            : row.session.verificationStatus === 'LOCATION_MISMATCH'
+              ? 'Tidak sesuai'
+              : row.session.verificationStatus === 'MANUAL_REVIEW'
+                ? 'Perlu pemeriksaan'
+                : 'Belum dipastikan',
         customer_confirmation_status:
           campaignExportStatusLabels[row.session.customerConfirmationStatus] ?? row.session.customerConfirmationStatus,
         link_opened_at: exportDate(row.session.openedAt),
