@@ -233,7 +233,7 @@ export const ValidationSettingsView: React.FC = () => {
                 <input
                   type="number"
                   min="5"
-                  max="100"
+                  max="1000"
                   disabled={!canEditSettings}
                   value={formData.GPS_MAX_ACCURACY_METERS}
                   onChange={(e) => handleChangeNumber('GPS_MAX_ACCURACY_METERS', parseInt(e.target.value) || 30)}

@@ -201,6 +201,15 @@ const sampleSpreadMeters = (samples: GpsSample[]): number => {
   return Math.round(maximum * 10) / 10;
 };
 
+const selectRepresentativeSample = (samples: GpsSample[]): GpsSample =>
+  samples.reduce((best, candidate) => {
+    const candidateDistance = samples.reduce((sum, other) => sum + distanceMeters(candidate, other), 0);
+    const bestDistance = samples.reduce((sum, other) => sum + distanceMeters(best, other), 0);
+    return candidateDistance < bestDistance || (candidateDistance === bestDistance && candidate.accuracyMeters < best.accuracyMeters)
+      ? candidate
+      : best;
+  });
+
 export function decideValidation(
   samples: GpsSample[],
   address: AddressEvidence,
@@ -208,7 +217,10 @@ export function decideValidation(
   config: ValidationConfig,
 ): ValidationDecision {
   if (samples.length < 3 || samples.length > 5) throw new Error('GPS capture must contain 3 to 5 samples');
-  const bestSample = [...samples].sort((a, b) => a.accuracyMeters - b.accuracyMeters)[0];
+  // Choose the sample most central to the capture set. A single GPS fix that
+  // reports implausibly high precision must not move the displayed/validated
+  // customer point far away from the other readings.
+  const bestSample = selectRepresentativeSample(samples);
   const reasonCodes: string[] = [];
   const spreadMeters = sampleSpreadMeters(samples);
   const hasReferenceLocation = address.referenceLatitude != null && address.referenceLongitude != null;

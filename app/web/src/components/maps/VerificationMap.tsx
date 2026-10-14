@@ -110,6 +110,7 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<MapLibreMap | null>(null);
   const [mapError, setMapError] = useState(false);
+  const hasPreciseReference = ['EXACT_MASTER', 'ROOFTOP', 'HOUSE'].includes(referencePrecision);
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -152,7 +153,7 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
       if (disposed) return;
 
       const features: Feature<Geometry, OverlayProperties>[] = [];
-      if (referenceLocation) {
+      if (referenceLocation && hasPreciseReference) {
         features.push({
           type: 'Feature',
           properties: { kind: 'home-radius', color: '#6366f1', fillColor: '#818cf8', fillOpacity: 0.12, width: 1.5 },
@@ -386,10 +387,14 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
             </span>
           </div>
         )}
-        {referenceLocation ? (
+        {referenceLocation && hasPreciseReference ? (
           <div className="flex items-center gap-2 border-t border-gray-100 pt-1 text-[11px] text-gray-500 dark:border-gray-800 dark:text-gray-400">
             <span className="h-2.5 w-2.5 rounded-full border border-gray-400 bg-gray-100 dark:border-gray-600 dark:bg-gray-800" />
-            <span>Toleransi Rumah: &le; {homeRadiusMeters}m</span>
+            <span>Radius Rumah: &le; {homeRadiusMeters}m</span>
+          </div>
+        ) : referenceLocation ? (
+          <div className="border-t border-gray-100 pt-1 text-[11px] text-amber-700 dark:border-gray-800 dark:text-amber-400">
+            Titik referensi tingkat jalan; jarak hanya indikatif.
           </div>
         ) : (
           <div className="border-t border-gray-100 pt-1 text-[11px] text-amber-600 dark:border-gray-800 dark:text-amber-400">

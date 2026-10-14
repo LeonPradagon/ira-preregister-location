@@ -32,7 +32,13 @@ export function evaluateBestGpsSample(samples: GpsSample[]): {
   if (samples.length < 3 || samples.length > 5) throw new Error('GPS capture must contain between 3 and 5 samples');
   if (samples.some((sample) => !isValidCoordinate(sample)))
     throw new Error('GPS sample contains an invalid latitude, longitude, or accuracy');
-  const bestSample = [...samples].sort((a, b) => a.accuracyMeters - b.accuracyMeters)[0];
+  const bestSample = samples.reduce((best, candidate) => {
+    const candidateDistance = samples.reduce((sum, other) => sum + calculateGeodesicDistanceMeters(candidate, other), 0);
+    const bestDistance = samples.reduce((sum, other) => sum + calculateGeodesicDistanceMeters(best, other), 0);
+    return candidateDistance < bestDistance || (candidateDistance === bestDistance && candidate.accuracyMeters < best.accuracyMeters)
+      ? candidate
+      : best;
+  });
   const averageAccuracy =
     Math.round((samples.reduce((total, sample) => total + sample.accuracyMeters, 0) / samples.length) * 10) / 10;
   let maximumSpread = 0;

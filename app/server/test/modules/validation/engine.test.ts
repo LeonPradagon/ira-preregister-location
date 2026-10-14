@@ -147,6 +147,18 @@ describe('server validation engine', () => {
     expect(decision.reasonCodes).toContain('WAITING_FOR_HOME');
   });
 
+  it('uses the representative GPS fix instead of an isolated high-precision outlier', () => {
+    const samples = [
+      sample(-6.884, 107.613, 12),
+      sample(-6.88401, 107.61301, 10, 1),
+      sample(-6.89, 107.62, 1, 2),
+    ];
+    const decision = decideValidation(samples, address, reverseGeocode, config);
+    expect(decision.bestSample).not.toBe(samples[2]);
+    expect(Math.abs(decision.bestSample.latitude - samples[0].latitude)).toBeLessThan(0.001);
+    expect(decision.result).toBe('WAITING_FOR_HOME');
+  });
+
   it('reports low GPS accuracy separately even when the address matches 100%', () => {
     const decision = decideValidation(
       [sample(-6.884, 107.613, 60), sample(-6.88401, 107.61301, 65, 1), sample(-6.88399, 107.61299, 70, 2)],
