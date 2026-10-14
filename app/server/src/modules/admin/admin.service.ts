@@ -762,9 +762,7 @@ export class AdminService {
       )`);
     }
     const where = and(...filters);
-    const cachedCount = query.campaignAvailable
-      ? { total: 0, countAsOf: new Date().toISOString() }
-      : await this.readCache.count(
+    const cachedCount = await this.readCache.count(
           'customers',
           {
             search: query.search,

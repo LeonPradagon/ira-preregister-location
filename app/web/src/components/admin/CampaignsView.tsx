@@ -224,6 +224,7 @@ export const CampaignsView: React.FC = () => {
   const [candidatePage, setCandidatePage] = useState(1);
   const candidatePageSize = 25;
   const [candidateHasMore, setCandidateHasMore] = useState(false);
+  const [candidateTotal, setCandidateTotal] = useState(0);
   const [candidateLoading, setCandidateLoading] = useState(true);
   const [preview, setPreview] = useState<WhatsAppPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -350,6 +351,7 @@ export const CampaignsView: React.FC = () => {
         setCandidateCursors((previous) => ({ ...previous, [candidatePage + 1]: response.nextCursor! }));
       setCandidateCustomers(response.items.map(mapApiCustomer));
       setCandidateHasMore(response.hasMore);
+      setCandidateTotal(response.total);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : t('campaigns.targetError'));
     } finally {
@@ -694,9 +696,14 @@ export const CampaignsView: React.FC = () => {
                   <span className="leading-5">{t('campaigns.selectAllEligible')}</span>
                 </label>
               </div>
-              <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-                {selectionSummary}
-              </span>
+              <div className="flex flex-col items-start gap-1 sm:items-end">
+                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  {t('campaigns.availableCandidates', { count: candidateTotal.toLocaleString('en-US') })}
+                </span>
+                <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                  {selectionSummary}
+                </span>
+              </div>
             </div>
             <div className="campaign-recipient-list mt-3 max-h-[24rem] overflow-auto rounded-xl border border-slate-200 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-950/30 lg:max-h-[31rem]">
               {candidateLoading && (
