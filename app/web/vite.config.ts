@@ -13,7 +13,7 @@ export default defineConfig({
     // Development tunnels may use a different hostname on each run.
     allowedHosts: true,
     proxy: {
-      '/v1': { target: 'http://localhost:3001', changeOrigin: true },
+      '/v1': { target: 'http://localhost:3000', changeOrigin: true },
       '/basemap': {
         target: 'https://tiles.openfreemap.org',
         changeOrigin: true,

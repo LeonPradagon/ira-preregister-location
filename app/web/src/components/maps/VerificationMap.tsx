@@ -232,6 +232,11 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
         const markerElement = document.createElement('div');
         markerElement.setAttribute('aria-label', kind === 'reference' ? 'Titik referensi A' : 'Titik GPS B');
         markerElement.style.cssText =
+          'width:44px;height:44px;display:flex;align-items:center;justify-content:center;overflow:visible;';
+        // Keep MapLibre's outer marker positioning intact. Its anchor point
+        // must remain the center of the badge, which is also the accuracy-circle center.
+        const markerContent = document.createElement('div');
+        markerContent.style.cssText =
           'position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center;overflow:visible;';
         const markerColor = kind === 'reference' ? '#111827' : isMatch ? '#059669' : '#e11d48';
         const markerText = kind === 'reference' ? 'A' : 'B';
@@ -243,7 +248,8 @@ export const VerificationMap: React.FC<VerificationMapProps> = ({
         labelElement.textContent = markerLabel;
         labelElement.style.cssText =
           'position:absolute;top:35px;left:50%;transform:translateX(-50%);white-space:nowrap;border-radius:4px;background:#111827;padding:2px 6px;color:#fff;font:500 10px/14px system-ui,sans-serif;box-shadow:0 1px 3px #0005;';
-        markerElement.append(badge, labelElement);
+        markerContent.append(badge, labelElement);
+        markerElement.append(markerContent);
 
         const popup = new maplibregl.Popup({ offset: 18, maxWidth: '280px' }).setDOMContent(
           createCoordinatePopup(title, titleClassName, label, coordinate, extra),
