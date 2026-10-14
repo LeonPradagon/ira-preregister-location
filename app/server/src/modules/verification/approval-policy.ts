@@ -47,6 +47,7 @@ export function shouldAutoApprove(input: AutoApprovalPolicyInput): boolean {
 
 export interface CoordinateMatchInput {
   geocodingAvailable: boolean;
+  coreAdministrativeEvidenceAvailable?: boolean;
   referencePrecision: string;
   houseNumberMatch?: boolean;
   reverseGeocodePrecision?: string;
@@ -64,12 +65,10 @@ export interface CoordinateMatchInput {
 /**
  * A precise master coordinate can establish a location match when the
  * administrative hierarchy agrees and the point is inside the configured
- * radius. A reverse-geocoder result that is explicitly road-only without a
- * house number is not enough to auto-approve; sparse results at area/city
- * precision can use the trusted coordinate fallback. A house-number
- * discrepancy is tolerated when that trusted coordinate evidence is present,
- * because reverse-geocoders frequently return a neighboring or interpolated
- * number.
+ * radius. A road-only reverse-geocoder label is approximate and does not
+ * override a trusted coordinate match. A house-number discrepancy is
+ * tolerated when that trusted coordinate evidence is present, because
+ * reverse-geocoders frequently return a neighboring or interpolated number.
  */
 export function getCoordinateMatchScore(input: CoordinateMatchInput): number {
   const preciseReference = ['EXACT_MASTER', 'ROOFTOP', 'HOUSE'].includes(input.referencePrecision);
@@ -77,9 +76,12 @@ export function getCoordinateMatchScore(input: CoordinateMatchInput): number {
   const insideHomeRadius =
     input.distanceFromReferenceMeters != null && input.distanceFromReferenceMeters <= input.homeRadiusMeters;
   const administrativeHierarchyMatches =
-    input.provinceMatch && input.cityMatch && input.districtMatch && input.subdistrictMatch;
-  const roadOnlyResult = input.reverseGeocodePrecision === 'STREET' && input.houseNumberMatch !== true;
-  return preciseReference && usableGps && insideHomeRadius && administrativeHierarchyMatches && !roadOnlyResult ? 1 : 0;
+    (!input.geocodingAvailable || input.coreAdministrativeEvidenceAvailable !== false) &&
+    input.provinceMatch &&
+    input.cityMatch &&
+    input.districtMatch &&
+    input.subdistrictMatch;
+  return preciseReference && usableGps && insideHomeRadius && administrativeHierarchyMatches ? 1 : 0;
 }
 
 const canAutoApproveEngineResult = (result: string, reasonCodes: string[]): boolean =>

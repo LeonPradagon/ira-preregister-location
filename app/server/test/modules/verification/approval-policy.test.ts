@@ -118,7 +118,7 @@ describe('automatic approval policy', () => {
     ).toBe(1);
   });
 
-  it('does not auto-match a point that reverse-geocoding identifies only as a road', () => {
+  it('trusts a precise in-radius GPS point over a road-only reverse-geocode label', () => {
     expect(
       getCoordinateMatchScore({
         geocodingAvailable: true,
@@ -135,7 +135,7 @@ describe('automatic approval policy', () => {
         gpsMaxAccuracyMeters: 30,
         sampleSpreadMeters: 20,
       }),
-    ).toBe(0);
+    ).toBe(1);
   });
 
   it('allows a sparse non-road geocode result to use the trusted coordinate fallback', () => {
@@ -156,6 +156,27 @@ describe('automatic approval policy', () => {
         sampleSpreadMeters: 20,
       }),
     ).toBe(1);
+  });
+
+  it('does not auto-match when a geocoder response lacks province or city evidence', () => {
+    expect(
+      getCoordinateMatchScore({
+        geocodingAvailable: true,
+        coreAdministrativeEvidenceAvailable: false,
+        referencePrecision: 'HOUSE',
+        houseNumberMatch: undefined,
+        reverseGeocodePrecision: 'AREA',
+        provinceMatch: true,
+        cityMatch: true,
+        districtMatch: true,
+        subdistrictMatch: true,
+        distanceFromReferenceMeters: 5.3,
+        homeRadiusMeters: 300,
+        gpsAccuracyMeters: 8,
+        gpsMaxAccuracyMeters: 30,
+        sampleSpreadMeters: 20,
+      }),
+    ).toBe(0);
   });
 
   it('tolerates a reverse-geocoded house number mismatch with trusted coordinates', () => {

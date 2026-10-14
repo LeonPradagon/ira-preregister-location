@@ -123,14 +123,16 @@ const LocationMatchDetails: React.FC<{
   const reverseGeocode = validation?.reverseGeocode;
 
   const reverseGeocodeUnavailable = validation?.reasonCodes.includes('GEOCODING_UNAVAILABLE') ?? false;
-  const statusLabel = (matched: boolean | undefined) =>
+  const statusLabel = (matched: boolean | undefined, detected?: string) =>
     !validation
       ? t('customer.locationMatchPending')
-      : reverseGeocodeUnavailable
+      : reverseGeocodeUnavailable || !detected?.trim()
       ? t('customer.locationMatchNotAvailable')
       : matched
         ? t('customer.locationMatch')
         : t('customer.locationNotMatch');
+  const adminMatchValue = (detected: string | undefined, matched: boolean | undefined) =>
+    detected?.trim() ? matched : undefined;
   const overallResult = !validation
     ? t('customer.locationMatchPending')
     : reverseGeocodeUnavailable
@@ -151,29 +153,29 @@ const LocationMatchDetails: React.FC<{
       label: t('customer.locationMatchProvince'),
       registered: address.province,
       detected: reverseGeocode?.province,
-      result: statusLabel(validation?.provinceMatch),
-      matched: validation?.provinceMatch,
+      result: statusLabel(validation?.provinceMatch, reverseGeocode?.province),
+      matched: adminMatchValue(reverseGeocode?.province, validation?.provinceMatch),
     },
     {
       label: t('customer.locationMatchCity'),
       registered: address.city,
       detected: reverseGeocode?.city,
-      result: statusLabel(validation?.cityMatch),
-      matched: validation?.cityMatch,
+      result: statusLabel(validation?.cityMatch, reverseGeocode?.city),
+      matched: adminMatchValue(reverseGeocode?.city, validation?.cityMatch),
     },
     {
       label: t('customer.locationMatchDistrict'),
       registered: address.district,
       detected: reverseGeocode?.district,
-      result: statusLabel(validation?.districtMatch),
-      matched: validation?.districtMatch,
+      result: statusLabel(validation?.districtMatch, reverseGeocode?.district),
+      matched: adminMatchValue(reverseGeocode?.district, validation?.districtMatch),
     },
     {
       label: t('customer.locationMatchSubdistrict'),
       registered: address.subdistrict,
       detected: reverseGeocode?.subdistrict,
-      result: statusLabel(validation?.subdistrictMatch),
-      matched: validation?.subdistrictMatch,
+      result: statusLabel(validation?.subdistrictMatch, reverseGeocode?.subdistrict),
+      matched: adminMatchValue(reverseGeocode?.subdistrict, validation?.subdistrictMatch),
     },
     {
       label: t('customer.locationMatchStreet'),

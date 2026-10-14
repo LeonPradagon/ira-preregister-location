@@ -228,13 +228,20 @@ export function decideValidation(
   // The geocoding adapter normalizes provider-specific administrative levels
   // before this point. Keep each comparison on its canonical level so a
   // shifted value cannot be reported as a false Match in the admin detail.
-  const provinceMatch = administrativeMatch(address.province, [reverseGeocode.province]);
-  const cityMatch = administrativeMatch(address.city, [reverseGeocode.city]);
-  const districtMatch = administrativeMatch(address.district, [reverseGeocode.district]);
-  const subdistrictMatch = administrativeMatch(address.subdistrict, [reverseGeocode.subdistrict]);
+  const provinceAvailable = Boolean(reverseGeocode.province?.trim());
+  const cityAvailable = Boolean(reverseGeocode.city?.trim());
+  const provinceMatch = !provinceAvailable || administrativeMatch(address.province, [reverseGeocode.province]);
+  const cityMatch = !cityAvailable || administrativeMatch(address.city, [reverseGeocode.city]);
+  // Missing reverse-geocoder fields are unknown evidence, not a mismatch.
+  // Persist them as non-conflicting while the UI still displays "Tidak tersedia".
+  const districtMatch =
+    !reverseGeocode.district?.trim() || administrativeMatch(address.district, [reverseGeocode.district]);
+  const subdistrictMatch =
+    !reverseGeocode.subdistrict?.trim() || administrativeMatch(address.subdistrict, [reverseGeocode.subdistrict]);
   const streetScore = tokenScore(address.street, reverseGeocode.street);
   const streetSoftMatchThreshold = Math.min(config.streetMatchThreshold, config.streetSoftMatchThreshold ?? 0.7);
   const administrativeLevelsMatch = provinceMatch && cityMatch && districtMatch && subdistrictMatch;
+  const hasCoreAdministrativeEvidence = provinceAvailable && cityAvailable;
   const reverseStreetAvailable = Boolean(reverseGeocode.street?.trim());
   // Reverse-geocoders often omit the road name in Indonesian residential areas.
   // A missing street is unknown evidence, not a mismatch; an explicitly
@@ -249,7 +256,8 @@ export function decideValidation(
       ? normalizeAddress(registeredHouseNumber) === normalizeAddress(detectedHouseNumber)
       : undefined;
   const addressIncomplete = isAddressIncomplete(address);
-  const addressNeedsManualReview = addressIncomplete || !hasReferenceLocation || !precisionOk;
+  const addressNeedsManualReview =
+    addressIncomplete || !hasReferenceLocation || !precisionOk || !hasCoreAdministrativeEvidence;
   // Keep the displayed address score aligned with the fields that gate a
   // match. Unknown house numbers receive their full optional weight, while
   // every administrative level remains visible in the score.
@@ -265,6 +273,7 @@ export function decideValidation(
     ) / 100;
   const addressMatchPasses =
     !addressIncomplete &&
+    hasCoreAdministrativeEvidence &&
     administrativeLevelsMatch &&
     (!reverseStreetAvailable || streetScore >= config.streetMatchThreshold) &&
     addressScore >= config.addressScoreThreshold;
@@ -289,10 +298,10 @@ export function decideValidation(
   if (spreadMeters > 100) reasonCodes.push('GPS_SAMPLE_INCONSISTENT');
   if (!hasReferenceLocation) reasonCodes.push('REFERENCE_LOCATION_MISSING');
   if (!precisionOk) reasonCodes.push('REFERENCE_LOCATION_NOT_PRECISE');
-  if (!provinceMatch) reasonCodes.push('PROVINCE_MISMATCH');
-  if (!cityMatch) reasonCodes.push('CITY_MISMATCH');
-  if (!districtMatch) reasonCodes.push('DISTRICT_MISMATCH');
-  if (!subdistrictMatch) reasonCodes.push('SUBDISTRICT_MISMATCH');
+  if (provinceAvailable && !provinceMatch) reasonCodes.push('PROVINCE_MISMATCH');
+  if (cityAvailable && !cityMatch) reasonCodes.push('CITY_MISMATCH');
+  if (reverseGeocode.district?.trim() && !districtMatch) reasonCodes.push('DISTRICT_MISMATCH');
+  if (reverseGeocode.subdistrict?.trim() && !subdistrictMatch) reasonCodes.push('SUBDISTRICT_MISMATCH');
   if (!reverseStreetAvailable) reasonCodes.push('STREET_NOT_AVAILABLE');
   else if (streetScore < streetSoftMatchThreshold) reasonCodes.push('STREET_MISMATCH');
   else if (streetScore < config.streetMatchThreshold) reasonCodes.push('STREET_VARIATION');

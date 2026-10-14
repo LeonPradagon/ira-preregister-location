@@ -184,14 +184,22 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
     location ? `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}` : 'Belum tersedia';
   const reverseGeocodeUnavailable = lastVal?.reasonCodes.includes('GEOCODING_UNAVAILABLE') ?? false;
   const locationMatched = isLocationMatched(session.verificationStatus, lastVal?.result);
-  const administrativeCheckResult = (matches: boolean | undefined) =>
+  const administrativeCheckResult = (matches: boolean | undefined, value?: string) =>
     lastVal == null
       ? 'Belum ada hasil'
-      : reverseGeocodeUnavailable
+      : reverseGeocodeUnavailable || !value?.trim()
         ? 'Tidak tersedia'
         : matches
           ? 'Match'
           : 'Tidak cocok';
+  const administrativeCheckClass = (matches: boolean | undefined, value?: string) =>
+    lastVal == null
+      ? 'text-gray-500 dark:text-gray-400'
+      : reverseGeocodeUnavailable || !value?.trim()
+        ? 'text-gray-500 dark:text-gray-400'
+        : matches
+          ? 'text-emerald-700 dark:text-emerald-400'
+          : 'text-rose-700 dark:text-rose-400';
   const distanceToCurrentReference =
     refLoc && capturedLoc
       ? calculateGeodesicDistanceMeters(capturedLoc, refLoc)
@@ -1123,9 +1131,9 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                   <td className="px-3.5 py-2">{address.province}</td>
                   <td className="px-3.5 py-2">{reverseGeocode?.province || 'Tidak tersedia'}</td>
                   <td
-                    className={`px-3.5 py-2 text-right font-semibold ${lastVal?.provinceMatch && !reverseGeocodeUnavailable ? 'text-emerald-700 dark:text-emerald-400' : reverseGeocodeUnavailable ? 'text-gray-500 dark:text-gray-400' : 'text-rose-700 dark:text-rose-400'}`}
+                    className={`px-3.5 py-2 text-right font-semibold ${administrativeCheckClass(lastVal?.provinceMatch, reverseGeocode?.province)}`}
                   >
-                    {administrativeCheckResult(lastVal?.provinceMatch)}
+                    {administrativeCheckResult(lastVal?.provinceMatch, reverseGeocode?.province)}
                   </td>
                 </tr>
                 <tr>
@@ -1133,9 +1141,9 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                   <td className="px-3.5 py-2">{address.city}</td>
                   <td className="px-3.5 py-2">{reverseGeocode?.city || 'Tidak tersedia'}</td>
                   <td
-                    className={`px-3.5 py-2 text-right font-semibold ${lastVal?.cityMatch && !reverseGeocodeUnavailable ? 'text-emerald-700 dark:text-emerald-400' : reverseGeocodeUnavailable ? 'text-gray-500 dark:text-gray-400' : 'text-rose-700 dark:text-rose-400'}`}
+                    className={`px-3.5 py-2 text-right font-semibold ${administrativeCheckClass(lastVal?.cityMatch, reverseGeocode?.city)}`}
                   >
-                    {administrativeCheckResult(lastVal?.cityMatch)}
+                    {administrativeCheckResult(lastVal?.cityMatch, reverseGeocode?.city)}
                   </td>
                 </tr>
                 <tr>
@@ -1143,9 +1151,9 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                   <td className="px-3.5 py-2">{address.district}</td>
                   <td className="px-3.5 py-2">{reverseGeocode?.district || 'Tidak tersedia'}</td>
                   <td
-                    className={`px-3.5 py-2 text-right font-semibold ${lastVal?.districtMatch && !reverseGeocodeUnavailable ? 'text-emerald-700 dark:text-emerald-400' : reverseGeocodeUnavailable ? 'text-gray-500 dark:text-gray-400' : 'text-rose-700 dark:text-rose-400'}`}
+                    className={`px-3.5 py-2 text-right font-semibold ${administrativeCheckClass(lastVal?.districtMatch, reverseGeocode?.district)}`}
                   >
-                    {administrativeCheckResult(lastVal?.districtMatch)}
+                    {administrativeCheckResult(lastVal?.districtMatch, reverseGeocode?.district)}
                   </td>
                 </tr>
                 <tr>
@@ -1153,9 +1161,9 @@ export const VerificationDetailView: React.FC<VerificationDetailViewProps> = ({ 
                   <td className="px-3.5 py-2">{address.subdistrict}</td>
                   <td className="px-3.5 py-2">{reverseGeocode?.subdistrict || 'Tidak tersedia'}</td>
                   <td
-                    className={`px-3.5 py-2 text-right font-semibold ${lastVal?.subdistrictMatch && !reverseGeocodeUnavailable ? 'text-emerald-700 dark:text-emerald-400' : reverseGeocodeUnavailable ? 'text-gray-500 dark:text-gray-400' : 'text-rose-700 dark:text-rose-400'}`}
+                    className={`px-3.5 py-2 text-right font-semibold ${administrativeCheckClass(lastVal?.subdistrictMatch, reverseGeocode?.subdistrict)}`}
                   >
-                    {administrativeCheckResult(lastVal?.subdistrictMatch)}
+                    {administrativeCheckResult(lastVal?.subdistrictMatch, reverseGeocode?.subdistrict)}
                   </td>
                 </tr>
                 <tr>

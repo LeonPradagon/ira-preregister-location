@@ -338,6 +338,36 @@ describe('server validation engine', () => {
     expect(decision.reasonCodes).not.toContain('HOME_RADIUS_EXCEEDED');
   });
 
+  it('does not penalize missing district and subdistrict from reverse geocoding', () => {
+    const decision = decideValidation(
+      [sample(-6.884, 107.613), sample(-6.88401, 107.61301, 12, 1), sample(-6.88399, 107.61299, 14, 2)],
+      address,
+      { ...reverseGeocode, district: '', subdistrict: '' },
+      config,
+    );
+
+    expect(decision.districtMatch).toBe(true);
+    expect(decision.subdistrictMatch).toBe(true);
+    expect(decision.addressScore).toBe(1);
+    expect(decision.result).toBe('LOCATION_VALID');
+    expect(decision.reasonCodes).not.toContain('DISTRICT_MISMATCH');
+    expect(decision.reasonCodes).not.toContain('SUBDISTRICT_MISMATCH');
+  });
+
+  it('keeps missing province or city in manual review rather than calling it a mismatch', () => {
+    const decision = decideValidation(
+      [sample(-6.884, 107.613), sample(-6.88401, 107.61301, 12, 1), sample(-6.88399, 107.61299, 14, 2)],
+      address,
+      { ...reverseGeocode, province: '', city: '', district: '', subdistrict: '' },
+      config,
+    );
+
+    expect(decision.result).toBe('MANUAL_REVIEW');
+    expect(decision.reasonCodes).not.toContain('PROVINCE_MISMATCH');
+    expect(decision.reasonCodes).not.toContain('CITY_MISMATCH');
+    expect(decision.reasonCodes).toContain('MANUAL_REVIEW_REQUIRED');
+  });
+
   it('reports weak GPS separately before reviewing an unreferenced address', () => {
     const decision = decideValidation(
       [sample(-6.2, 106.784, 35), sample(-6.20001, 106.78401, 36, 1), sample(-6.19999, 106.78399, 37, 2)],

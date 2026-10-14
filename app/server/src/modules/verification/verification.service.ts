@@ -489,6 +489,7 @@ export class VerificationService {
     );
     const coordinateMatchScore = getCoordinateMatchScore({
       geocodingAvailable,
+      coreAdministrativeEvidenceAvailable: Boolean(geocode.province?.trim() && geocode.city?.trim()),
       referencePrecision: decision.referencePrecision,
       houseNumberMatch: decision.houseNumberMatch,
       reverseGeocodePrecision: geocode.precision,
@@ -502,10 +503,10 @@ export class VerificationService {
       gpsMaxAccuracyMeters: config.GPS_MAX_ACCURACY_METERS,
       sampleSpreadMeters: decision.sampleSpreadMeters,
     });
-    // A reverse-geocoder result that only identifies a road is not proof that
-    // the customer is at the house. Keep it in manual review unless a house
-    // number was actually confirmed, including when the registered house
-    // number is optional and absent.
+    // A road-only reverse-geocoder result is weak address evidence. Initially
+    // hold it for review; the trusted coordinate fallback below may override
+    // that hold only when precise reference, GPS accuracy, radius, and core
+    // administrative evidence all agree.
     if (geocode.precision === 'STREET' && decision.houseNumberMatch !== true) {
       decision.result = 'MANUAL_REVIEW';
       decision.reasonCodes = [
