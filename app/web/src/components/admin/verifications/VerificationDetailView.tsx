@@ -18,32 +18,32 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { VerificationDetailData, useApp } from '../../context/AppContext';
-import { ReviewDecision } from '../../types';
-import { formatAppDate, formatAppDateTime, formatAppTime } from '../../lib/dateTime';
+import { VerificationDetailData, useApp } from '../../../context/AppContext';
+import { ReviewDecision } from '../../../types';
+import { formatAppDate, formatAppDateTime, formatAppTime } from '../../../lib/dateTime';
 import {
   calculateGeodesicDistanceMeters,
   formatAddressForDisplay,
   isIncompleteAddress,
-} from '../../lib/validationEngine';
-import { isLocationMatched, userFriendlyStatus } from '../../lib/statusLabels';
-import { getManualReviewCaseKeys } from '../../lib/manualReviewCases';
-import { hasCapability } from '../../lib/accessControl';
-import { AdminTable } from '../common/AdminTable';
-import { useTranslation } from '../../i18n';
-import { confirmAction } from '../../lib/swal';
-import { AppLoader } from '../common/AppLoader';
+} from '../../../lib/verification/validationEngine';
+import { isLocationMatched, userFriendlyStatus } from '../../../lib/statusLabels';
+import { getManualReviewCaseKeys } from '../../../lib/admin/manualReviewCases';
+import { hasCapability } from '../../../lib/admin/accessControl';
+import { AdminTable } from '../../common/AdminTable';
+import { useTranslation } from '../../../i18n';
+import { confirmAction } from '../../../lib/swal';
+import { AppLoader } from '../../common/AppLoader';
 
 const VerificationMap = React.lazy(() =>
-  import('../maps/VerificationMap').then((module) => ({ default: module.VerificationMap })),
+  import('../../maps/VerificationMap').then((module) => ({ default: module.VerificationMap })),
 );
-import { withTimeout } from '../../lib/async';
+import { withTimeout } from '../../../lib/async';
 import {
   getDefaultManualReviewReason,
   getManualReviewDecisions,
   getManualReviewReasonOptions,
   isManualActionAvailable,
-} from '../../lib/manualReviewAvailability';
+} from '../../../lib/admin/manualReviewAvailability';
 
 const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) =>
   props.className?.includes('animate-spin') ? <AppLoader size={18} label="Loading" /> : <RefreshCwIcon {...props} />;

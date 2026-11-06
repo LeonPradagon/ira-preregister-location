@@ -5,7 +5,7 @@ import {
   getManualReviewReasonOptions,
   isManualActionAvailable,
   isManualReviewAvailable,
-} from '../../src/lib/manualReviewAvailability';
+} from '../../src/lib/admin/manualReviewAvailability';
 
 describe('manual review availability', () => {
   it.each([

@@ -1,4 +1,4 @@
-import { AdminRole } from '../types';
+import { AdminRole } from '../../types';
 
 export type AdminCapability =
   | 'manageUsers'

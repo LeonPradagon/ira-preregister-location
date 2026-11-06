@@ -15,8 +15,8 @@ import {
 } from 'lucide-react';
 import { useTranslation } from '../../i18n';
 import { useApp } from '../../context/AppContext';
-import { adminQueryOptions, monitoringQueryOptions } from '../../lib/adminQueries';
-import { api, type AdminMonitoringCampaign } from '../../lib/apiClient';
+import { adminQueryOptions, monitoringQueryOptions } from '../../lib/api/adminQueries';
+import { api, type AdminMonitoringCampaign } from '../../lib/api/apiClient';
 import { formatAppDateTime } from '../../lib/dateTime';
 import { AppLoader } from '../common/AppLoader';
 import {

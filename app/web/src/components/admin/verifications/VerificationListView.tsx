@@ -18,13 +18,13 @@ import {
   ShieldCheck,
   XCircle,
 } from 'lucide-react';
-import { mapApiAddress, mapApiCustomer, mapApiSession, useApp } from '../../context/AppContext';
-import { api } from '../../lib/apiClient';
-import { Customer, CustomerAddress, VerificationSession } from '../../types';
-import { formatAppDateTime } from '../../lib/dateTime';
-import { formatAddressForDisplay } from '../../lib/validationEngine';
-import { isLocationMatched, userFriendlyReason, userFriendlyStatus } from '../../lib/statusLabels';
-import { getManualReviewCaseKeys } from '../../lib/manualReviewCases';
+import { mapApiAddress, mapApiCustomer, mapApiSession, useApp } from '../../../context/AppContext';
+import { api } from '../../../lib/api/apiClient';
+import { Customer, CustomerAddress, VerificationSession } from '../../../types';
+import { formatAppDateTime } from '../../../lib/dateTime';
+import { formatAddressForDisplay } from '../../../lib/verification/validationEngine';
+import { isLocationMatched, userFriendlyReason, userFriendlyStatus } from '../../../lib/statusLabels';
+import { getManualReviewCaseKeys } from '../../../lib/admin/manualReviewCases';
 import {
   AdminTable,
   SortableTableHeader,
@@ -32,9 +32,9 @@ import {
   TablePagination,
   TablePageSize,
   TableSortDirection,
-} from '../common/AdminTable';
-import { useTranslation } from '../../i18n';
-import { AppLoader } from '../common/AppLoader';
+} from '../../common/AdminTable';
+import { useTranslation } from '../../../i18n';
+import { AppLoader } from '../../common/AppLoader';
 
 const RefreshCw: React.FC<React.ComponentProps<typeof RefreshCwIcon>> = (props) =>
   props.className?.includes('animate-spin') ? <AppLoader size={18} label="Loading" /> : <RefreshCwIcon {...props} />;

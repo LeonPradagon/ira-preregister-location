@@ -1,14 +1,14 @@
 import React from 'react';
 import { ArrowLeft, Compass, ExternalLink, Home, Wifi } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
-import { useTranslation } from '../../i18n';
-import { hasCapability } from '../../lib/accessControl';
-import { buildGoogleMapsDeepLink, formatAddressForDisplay, isIncompleteAddress } from '../../lib/validationEngine';
-import { userFriendlyStatus } from '../../lib/statusLabels';
-import { confirmAction } from '../../lib/swal';
-import { CoordinateAuditStatus } from '../../types';
-import { formatAppDate, formatAppDateTime } from '../../lib/dateTime';
-import { fwaCoverageLabel, networkAvailabilityLabel } from '../../lib/networkAvailability';
+import { useApp } from '../../../context/AppContext';
+import { useTranslation } from '../../../i18n';
+import { hasCapability } from '../../../lib/admin/accessControl';
+import { buildGoogleMapsDeepLink, formatAddressForDisplay, isIncompleteAddress } from '../../../lib/verification/validationEngine';
+import { userFriendlyStatus } from '../../../lib/statusLabels';
+import { confirmAction } from '../../../lib/swal';
+import { CoordinateAuditStatus } from '../../../types';
+import { formatAppDate, formatAppDateTime } from '../../../lib/dateTime';
+import { fwaCoverageLabel, networkAvailabilityLabel } from '../../../lib/admin/networkAvailability';
 
 interface CustomerDetailViewProps {
   customerId: string;

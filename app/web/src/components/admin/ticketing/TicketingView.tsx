@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, ChevronDown, Circle, Loader2, RefreshCw, Search, Ticket, XCircle } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
-import { api, type TicketingCandidateApi, type TicketingMitraApi } from '../../lib/apiClient';
-import { showActionError, showActionSuccess } from '../../lib/swal';
-import { TablePagination, type TablePageSize } from '../common/AdminTable';
+import { useApp } from '../../../context/AppContext';
+import { api, type TicketingCandidateApi, type TicketingMitraApi } from '../../../lib/api/apiClient';
+import { showActionError, showActionSuccess } from '../../../lib/swal';
+import { TablePagination, type TablePageSize } from '../../common/AdminTable';
 
 const normalizeMitraName = (name: string) => name.trim().toLocaleLowerCase();
 const mitraEntriesForName = (name: string, mitraOptions: TicketingMitraApi[]) => {

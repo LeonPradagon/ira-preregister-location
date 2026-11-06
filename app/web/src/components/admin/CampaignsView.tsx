@@ -12,8 +12,8 @@ import {
   Smartphone,
 } from 'lucide-react';
 import { mapApiCustomer, useApp } from '../../context/AppContext';
-import { api, type CampaignMonitoringSummary } from '../../lib/apiClient';
-import { hasCapability } from '../../lib/accessControl';
+import { api, type CampaignMonitoringSummary } from '../../lib/api/apiClient';
+import { hasCapability } from '../../lib/admin/accessControl';
 import { Customer, VerificationCampaign } from '../../types';
 import {
   AdminTable,

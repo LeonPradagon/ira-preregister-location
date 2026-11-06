@@ -14,7 +14,7 @@ import {
   WifiOff,
   XCircle,
 } from 'lucide-react';
-import { ApiClientError, api } from '../../lib/apiClient';
+import { ApiClientError, api } from '../../lib/api/apiClient';
 import { AuditLog } from '../../types';
 import { AppLoader } from '../common/AppLoader';
 import { TablePagination, TablePageSize } from '../common/AdminTable';

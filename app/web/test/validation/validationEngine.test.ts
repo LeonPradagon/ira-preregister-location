@@ -7,7 +7,7 @@ import {
   formatAddressForDisplay,
   isIncompleteAddress,
   isValidCoordinate,
-} from '../../src/lib/validationEngine';
+} from '../../src/lib/verification/validationEngine';
 
 const samples = [
   { latitude: -6.233812, longitude: 106.809599, accuracyMeters: 12, capturedAt: '2026-08-29T04:25:00Z' },

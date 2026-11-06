@@ -6,7 +6,7 @@ import {
   PublicValidationResult,
   PublicVerificationContextApi,
   ServerValidationDecision,
-} from '../../lib/apiClient';
+} from '../../lib/api/apiClient';
 import { useTranslation } from '../../i18n';
 import { AppLoader } from '../common/AppLoader';
 import {
@@ -14,8 +14,8 @@ import {
   calculateGeodesicDistanceMeters,
   evaluateBestGpsSample,
   formatAddressForDisplay,
-} from '../../lib/validationEngine';
-import type { AddressDisplayField } from '../../lib/validationEngine';
+} from '../../lib/verification/validationEngine';
+import type { AddressDisplayField } from '../../lib/verification/validationEngine';
 import { findRegionOption, regionOptionValue } from '../../lib/regionSelection';
 import { formatAppDateTime, parseAppDateTimeLocalValue, toAppDateTimeLocalValue } from '../../lib/dateTime';
 import {
@@ -30,9 +30,9 @@ import {
   shouldShowReminderPending,
   shouldShowReminderPickerOnLink,
   shouldShowReminderResume,
-} from '../../lib/customerVerificationFlow';
+} from '../../lib/verification/customerVerificationFlow';
 import { confirmAction } from '../../lib/swal';
-import { collectGpsSamples } from '../../lib/gpsCapture';
+import { collectGpsSamples } from '../../lib/verification/gpsCapture';
 
 interface Props {
   token: string;

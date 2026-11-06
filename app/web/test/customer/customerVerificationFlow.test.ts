@@ -10,7 +10,7 @@ import {
   shouldShowReminderPending,
   shouldShowReminderPickerOnLink,
   shouldShowReminderResume,
-} from '../../src/lib/customerVerificationFlow';
+} from '../../src/lib/verification/customerVerificationFlow';
 
 describe('customer verification confirmation flow', () => {
   it('identifies only the missing required address fields', () => {

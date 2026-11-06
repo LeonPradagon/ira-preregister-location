@@ -19,12 +19,12 @@ import {
   XCircle,
   type LucideIcon,
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
-import { fwaCoverageLabel, networkAvailabilityLabel } from '../../lib/networkAvailability';
-import { api } from '../../lib/apiClient';
-import type { CustomerExportJob } from '../../lib/apiClient';
-import { CoordinateAuditStatus, Customer, CustomerStatus, WhatsappStatus } from '../../types';
-import { hasCapability } from '../../lib/accessControl';
+import { useApp } from '../../../context/AppContext';
+import { fwaCoverageLabel, networkAvailabilityLabel } from '../../../lib/admin/networkAvailability';
+import { api } from '../../../lib/api/apiClient';
+import type { CustomerExportJob } from '../../../lib/api/apiClient';
+import { CoordinateAuditStatus, Customer, CustomerStatus, WhatsappStatus } from '../../../types';
+import { hasCapability } from '../../../lib/admin/accessControl';
 import {
   AdminTable,
   SortableTableHeader,
@@ -32,13 +32,13 @@ import {
   TablePagination,
   TablePageSize,
   TableSortDirection,
-} from '../common/AdminTable';
+} from '../../common/AdminTable';
 import { CustomerImportModal } from './CustomerImportModal';
-import { useTranslation } from '../../i18n';
-import { formatAddressForDisplay, isIncompleteAddress } from '../../lib/validationEngine';
-import { findRegionOption, regionOptionValue, RegionOption } from '../../lib/regionSelection';
-import { confirmAction, showActionSuccess } from '../../lib/swal';
-import { AppLoader } from '../common/AppLoader';
+import { useTranslation } from '../../../i18n';
+import { formatAddressForDisplay, isIncompleteAddress } from '../../../lib/verification/validationEngine';
+import { findRegionOption, regionOptionValue, RegionOption } from '../../../lib/regionSelection';
+import { confirmAction, showActionSuccess } from '../../../lib/swal';
+import { AppLoader } from '../../common/AppLoader';
 
 interface CustomerListViewProps {
   onSelectCustomer: (customerId: string, alreadyLoaded?: boolean) => void;

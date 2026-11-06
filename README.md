@@ -99,7 +99,7 @@ npm test              # Test frontend dan backend
 npm run build         # Build kedua aplikasi
 ```
 
-Kode UI berada di `app/web/src/components`, state/API di `context` dan `lib`. Backend memisahkan controller/service per modul di `app/server/src/modules`, provider di `integrations`, konfigurasi di `config`, dan database di `db`. Nama antrean BullMQ disatukan di `app/server/src/common/queue-names.ts` agar producer dan worker konsisten.
+Kode UI berada di `app/web/src/components`. Komponen admin terkait pelanggan, verifikasi/coverage, dan ticketing dikelompokkan di `components/admin/customers`, `components/admin/verifications`, dan `components/admin/ticketing`. State aplikasi berada di `context`; akses HTTP dan query cache berada di `lib/api`, aturan admin di `lib/admin`, dan alur verifikasi/GPS di `lib/verification`. Helper lintas fitur tetap berada di root `lib`. Gunakan import langsung ke file pemiliknya. Backend memisahkan controller/service per modul di `app/server/src/modules`, provider di `integrations`, konfigurasi di `config`, dan database di `db`. Nama antrean BullMQ disatukan di `app/server/src/common/queue-names.ts` agar producer dan worker konsisten.
 
 Migration SQL bernomor dijalankan berurutan dan dicatat di `app_migrations`. Baseline aplikasi adalah `0000_core.sql`; metadata Drizzle tetap dipertahankan untuk `npm run db:generate`. Setelah generate, periksa SQL dan urutan nomor sebelum deploy. Jangan mengedit migration yang sudah diterapkan. Migration wilayah dan kode pos sudah dibundel sehingga instalasi tidak perlu mengunduh data wilayah.
 

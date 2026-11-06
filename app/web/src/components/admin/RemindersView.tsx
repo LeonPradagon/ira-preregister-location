@@ -14,7 +14,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { mapApiCustomer, mapApiSession, useApp } from '../../context/AppContext';
-import { api } from '../../lib/apiClient';
+import { api } from '../../lib/api/apiClient';
 import { formatAppDateTime } from '../../lib/dateTime';
 import { Customer, Reminder, ReminderSource, ReminderStatus, VerificationSession } from '../../types';
 import {

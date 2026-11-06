@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, apiClient, isUsableServerValidationDecision } from '../../src/lib/apiClient';
+import { api, apiClient, isUsableServerValidationDecision } from '../../src/lib/api/apiClient';
 import { deliveryWording } from '../../src/i18n';
 
 describe('API client', () => {

@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ChevronDown, Loader2, MapPin, RefreshCw, Search, UserRound, Wifi } from 'lucide-react';
-import { api } from '../../lib/apiClient';
-import type { CoverageBatchApi } from '../../lib/apiClient';
-import type { CoverageCandidate, CoverageCandidateStatus } from '../../types';
-import { useTranslation } from '../../i18n';
-import { AppLoader } from '../common/AppLoader';
-import { TablePagination, TablePageSize } from '../common/AdminTable';
+import { api } from '../../../lib/api/apiClient';
+import type { CoverageBatchApi } from '../../../lib/api/apiClient';
+import type { CoverageCandidate, CoverageCandidateStatus } from '../../../types';
+import { useTranslation } from '../../../i18n';
+import { AppLoader } from '../../common/AppLoader';
+import { TablePagination, TablePageSize } from '../../common/AdminTable';
 
 const statusOptions: Array<CoverageCandidateStatus | 'ALL'> = [
   'ALL',

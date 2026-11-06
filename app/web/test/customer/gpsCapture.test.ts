@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { collectGpsSamples } from '../../src/lib/gpsCapture';
+import { collectGpsSamples } from '../../src/lib/verification/gpsCapture';
 
 describe('customer GPS capture', () => {
   afterEach(() => {

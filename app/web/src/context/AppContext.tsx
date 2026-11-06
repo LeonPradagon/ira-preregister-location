@@ -20,9 +20,9 @@ import {
   VerificationSession,
   WhatsappStatus,
 } from '../types';
-import { assertCapability } from '../lib/accessControl';
-import { AdminDashboardApi, api } from '../lib/apiClient';
-import { adminQueryKey, dashboardQueryOptions } from '../lib/adminQueries';
+import { assertCapability } from '../lib/admin/accessControl';
+import { AdminDashboardApi, api } from '../lib/api/apiClient';
+import { adminQueryKey, dashboardQueryOptions } from '../lib/api/adminQueries';
 
 type NewCustomerAddress = Omit<
   CustomerAddress,

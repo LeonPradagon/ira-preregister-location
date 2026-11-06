@@ -1,4 +1,4 @@
-import type { ReviewDecision } from '../types';
+import type { ReviewDecision } from '../../types';
 
 const manualReviewStatuses = new Set([
   'MANUAL_REVIEW',

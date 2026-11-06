@@ -1,4 +1,4 @@
-import { Coordinate, GpsSample } from '../types';
+import { Coordinate, GpsSample } from '../../types';
 
 export function calculateGeodesicDistanceMeters(coord1: Coordinate, coord2: Coordinate): number {
   const earthRadius = 6371000;

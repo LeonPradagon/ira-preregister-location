@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Activity, Code, Radio, RefreshCw, Zap } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../i18n';
-import { api } from '../../lib/apiClient';
+import { api } from '../../lib/api/apiClient';
 import { AppLoader } from '../common/AppLoader';
 import { IntegrationOutboxEvent } from '../../types';
 import { TablePagination, TablePageSize } from '../common/AdminTable';

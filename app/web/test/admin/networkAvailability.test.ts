@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fwaCoverageLabel, networkAvailabilityLabel } from '../../src/lib/networkAvailability';
+import { fwaCoverageLabel, networkAvailabilityLabel } from '../../src/lib/admin/networkAvailability';
 
 describe('networkAvailabilityLabel', () => {
   it('uses the latest FWA check before stale imported network status', () => {

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Circle, GitBranch, Loader2, RefreshCw, Search, Wifi, XCircle } from 'lucide-react';
-import { api, type TicketingCandidateApi } from '../../lib/apiClient';
-import { TablePagination, type TablePageSize } from '../common/AdminTable';
+import { api, type TicketingCandidateApi } from '../../../lib/api/apiClient';
+import { TablePagination, type TablePageSize } from '../../common/AdminTable';
 
 type ProviderStatusResult = Awaited<ReturnType<typeof api.ticketingProviderStatus>>;
 type StatusCheckState = {

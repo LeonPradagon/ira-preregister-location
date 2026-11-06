@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { api } from '../../src/lib/apiClient';
-import { adminQueryKey, dashboardQueryOptions } from '../../src/lib/adminQueries';
-import { createAppQueryClient } from '../../src/lib/queryClient';
+import { api } from '../../src/lib/api/apiClient';
+import { adminQueryKey, dashboardQueryOptions } from '../../src/lib/api/adminQueries';
+import { createAppQueryClient } from '../../src/lib/api/queryClient';
 
 describe('admin query cache', () => {
   it('deduplicates simultaneous dashboard requests and refetches after invalidation', async () => {

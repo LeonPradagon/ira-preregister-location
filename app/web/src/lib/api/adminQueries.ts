@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import type { AdminUser } from '../types';
+import type { AdminUser } from '../../types';
 import { api } from './apiClient';
 
 type QueryAdmin = Pick<AdminUser, 'id' | 'role'> | null;

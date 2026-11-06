@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { AlertCircle, CheckCircle2, FileSpreadsheet, Upload, X } from 'lucide-react';
-import { CustomerImportApiResult, api } from '../../lib/apiClient';
-import { confirmAction, showActionSuccess } from '../../lib/swal';
-import { AppLoader } from '../common/AppLoader';
+import { CustomerImportApiResult, api } from '../../../lib/api/apiClient';
+import { confirmAction, showActionSuccess } from '../../../lib/swal';
+import { AppLoader } from '../../common/AppLoader';
 
 interface CustomerImportModalProps {
   onClose: () => void;

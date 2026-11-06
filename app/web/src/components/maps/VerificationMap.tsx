@@ -6,7 +6,7 @@ import type { Feature, FeatureCollection, Geometry } from 'geojson';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { ExternalLink, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { Coordinate } from '../../types';
-import { buildGoogleMapsDeepLink } from '../../lib/validationEngine';
+import { buildGoogleMapsDeepLink } from '../../lib/verification/validationEngine';
 
 interface VerificationMapProps {
   referenceLocation?: Coordinate | null;

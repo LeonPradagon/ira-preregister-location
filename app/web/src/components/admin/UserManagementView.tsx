@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, KeyRound, Lock, Plus, RefreshCw, Search, ShieldCheck, UserCog, UserX } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useTranslation } from '../../i18n';
-import { AdminManagedUser, api } from '../../lib/apiClient';
+import { AdminManagedUser, api } from '../../lib/api/apiClient';
 import { confirmAction, showActionError, showActionSuccess } from '../../lib/swal';
 import { SortableTableHeader, sortTableRows, TableSortDirection } from '../common/AdminTable';
 

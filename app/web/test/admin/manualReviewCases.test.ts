@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getManualReviewCaseKeys } from '../../src/lib/manualReviewCases';
+import { getManualReviewCaseKeys } from '../../src/lib/admin/manualReviewCases';
 
 describe('getManualReviewCaseKeys', () => {
   it('explains a weak GPS signal and inconsistent samples', () => {
